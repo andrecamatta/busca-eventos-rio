@@ -1,5 +1,6 @@
 """Agente de validação individual inteligente de eventos com LLM."""
 
+import asyncio
 import json
 import logging
 import re
@@ -53,24 +54,47 @@ class ValidationAgent:
         rejected_events = []
         validation_warnings = []
 
-        for i, event in enumerate(events):
-            logger.info(f"Validando evento {i+1}/{len(events)}: {event.get('titulo', 'Sem título')}")
+        # Criar tasks para validar todos os eventos em paralelo
+        logger.info(f"Iniciando validação paralela de {len(events)} eventos...")
+        validation_tasks = [
+            self.validate_event_individually(event)
+            for event in events
+        ]
 
-            validation_result = await self.validate_event_individually(event)
+        # Executar todas as validações em paralelo
+        validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
 
-            if validation_result["approved"]:
+        # Processar resultados
+        for i, (event, result) in enumerate(zip(events, validation_results)):
+            event_title = event.get('titulo', 'Sem título')
+
+            # Tratar exceções que possam ter ocorrido
+            if isinstance(result, Exception):
+                logger.error(
+                    f"Erro ao validar evento {i+1}/{len(events)} ({event_title}): {result}"
+                )
+                rejected_events.append({
+                    **event,
+                    "motivo_rejeicao": f"Erro na validação: {str(result)}",
+                    "confidence": 0,
+                })
+                continue
+
+            # Processar resultado normal
+            if result["approved"]:
                 validated_events.append(event)
-                if validation_result.get("warnings"):
-                    validation_warnings.extend(validation_result["warnings"])
+                if result.get("warnings"):
+                    validation_warnings.extend(result["warnings"])
+                logger.info(f"✓ Evento {i+1}/{len(events)} aprovado: {event_title}")
             else:
                 rejected_events.append({
                     **event,
-                    "motivo_rejeicao": validation_result["reason"],
-                    "confidence": validation_result.get("confidence", 0),
+                    "motivo_rejeicao": result["reason"],
+                    "confidence": result.get("confidence", 0),
                 })
                 logger.warning(
-                    f"Evento rejeitado: {event.get('titulo', 'Sem título')} - "
-                    f"Motivo: {validation_result['reason']}"
+                    f"✗ Evento {i+1}/{len(events)} rejeitado: {event_title} - "
+                    f"Motivo: {result['reason']}"
                 )
 
         logger.info(
