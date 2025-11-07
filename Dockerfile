@@ -60,7 +60,7 @@ COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
 COPY --from=builder /app /app
 
 # Instalar browsers do Playwright (chromium suficiente para maioria dos casos)
-RUN playwright install chromium --with-deps
+RUN $VIRTUAL_ENV/bin/playwright install chromium --with-deps
 
 # Criar diretórios necessários
 RUN mkdir -p /app/output/latest
