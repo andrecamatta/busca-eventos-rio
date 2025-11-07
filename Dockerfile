@@ -9,10 +9,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Criar virtual environment e instalar dependências
-ENV VIRTUAL_ENV=/opt/venv
-RUN uv venv $VIRTUAL_ENV && \
-    . $VIRTUAL_ENV/bin/activate && \
-    uv sync --no-dev
+# uv cria automaticamente em .venv
+RUN uv sync --no-dev
 
 # Copiar código da aplicação
 COPY . .
@@ -47,20 +45,17 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Configurar virtual environment no PATH
-ENV VIRTUAL_ENV=/opt/venv
+# Configurar virtual environment no PATH (uv cria em .venv por padrão)
+ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 WORKDIR /app
 
-# Copiar virtual environment do builder
-COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
-
-# Copiar código da aplicação
+# Copiar virtual environment e código do builder
 COPY --from=builder /app /app
 
 # Instalar browsers do Playwright (chromium suficiente para maioria dos casos)
-RUN $VIRTUAL_ENV/bin/playwright install chromium --with-deps
+RUN /app/.venv/bin/playwright install chromium --with-deps
 
 # Criar diretórios necessários
 RUN mkdir -p /app/output/latest
