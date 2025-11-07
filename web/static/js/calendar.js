@@ -7,6 +7,11 @@ let currentFilters = {
     venue: ''
 };
 
+// Detectar dispositivo móvel
+function isMobileDevice() {
+    return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
     initCalendar();
@@ -18,14 +23,17 @@ document.addEventListener('DOMContentLoaded', function() {
 // Inicializar FullCalendar
 function initCalendar() {
     const calendarEl = document.getElementById('calendar');
+    const isMobile = isMobileDevice();
 
     calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
+        // Forçar modo lista em mobile, calendário em desktop
+        initialView: isMobile ? 'listWeek' : 'dayGridMonth',
         locale: 'pt-br',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
-            right: 'dayGridMonth,dayGridWeek,listWeek'
+            // Em mobile, apenas lista; em desktop, todas as opções
+            right: isMobile ? '' : 'dayGridMonth,dayGridWeek,listWeek'
         },
         buttonText: {
             today: 'Hoje',
