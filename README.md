@@ -1,13 +1,26 @@
-# 🎭 Busca Eventos Rio - Sistema Multi-Agente
+# 🎭 Busca Eventos Rio - Sistema Multi-Agente + Calendário Web
 
-Sistema inteligente de busca de eventos culturais no Rio de Janeiro usando **Agno** (framework multi-agente) + **OpenRouter** (múltiplos LLMs).
+Sistema inteligente de busca e visualização de eventos culturais no Rio de Janeiro usando **Agno** (framework multi-agente) + **OpenRouter** (múltiplos LLMs) + **FastAPI** (calendário web interativo).
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python)](https://www.python.org/)
+[![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=flat&logo=railway)](https://railway.app)
 
 ## 🎯 Funcionalidades
 
-Busca automatizada de eventos nas seguintes categorias:
-- 🎺 **Shows de jazz**
+### 📅 Calendário Web Interativo (NOVO!)
+- **Grade mensal** estilo Google Calendar com FullCalendar.js
+- **Filtros avançados** por categoria e venue
+- **Compartilhamento WhatsApp** integrado
+- **Atualização automática** diária às 6h
+- **Design responsivo** com Bootstrap 5
+- **API RESTful** com 6 endpoints
+
+### 🤖 Busca Automatizada
+Busca inteligente em 20 venues e categorias:
+- 🎺 **Jazz** - Blue Note Rio e venues especializados
 - 😂 **Teatro comédia** (exceto infantil)
-- 🏛️ **Locais especiais**: Casa do Choro, Sala Cecília Meirelles, Teatro Municipal
+- 🏛️ **17 venues culturais**: CCBB, Teatro Municipal, Casa do Choro, Sesc Rio (4 unidades), MAM Cinema, IMS, Parque Lage, CCJF, Casa Natura, Artemis
 - 🌳 **Eventos ao ar livre** (fim de semana)
 
 ### Pipeline Multi-Agente
@@ -28,6 +41,12 @@ Busca automatizada de eventos nas seguintes categorias:
    - Formata para WhatsApp com emojis
    - Cria resumos de até 200 palavras
    - Output pronto para Ctrl+C + Ctrl+V
+
+4. **🌐 Web Application** (FastAPI + FullCalendar.js)
+   - Calendário interativo com modal de detalhes
+   - Filtros dinâmicos e busca inteligente
+   - Atualização automática com APScheduler
+   - Compartilhamento direto no WhatsApp
 
 ## 🚀 Instalação
 
@@ -64,27 +83,39 @@ uv pip install -r pyproject.toml
 
 ## 📖 Uso
 
-### Execução Simples
+### 🔍 Buscar Eventos (CLI)
 
 ```bash
+# Executar busca
+uv run python main.py
+
+# Ou simplesmente
 python main.py
 ```
 
-### Ou com uv
+### 🌐 Iniciar Calendário Web
 
 ```bash
-uv run main.py
+# Modo desenvolvimento (com hot-reload)
+./start_web.sh
+
+# Ou manualmente
+uv run uvicorn web.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Saída
+Acesse: **http://localhost:8000**
 
-O script gera os seguintes arquivos em `output/`:
+### 📂 Saída
+
+O script gera arquivos em `output/YYYY-MM-DD_HH-MM-SS/`:
 
 - **`eventos_whatsapp.txt`** - Mensagem formatada para WhatsApp (copiar e colar)
 - **`raw_events.json`** - Eventos brutos coletados
 - **`structured_events.json`** - Eventos estruturados pelo LLM
-- **`verified_events.json`** - Eventos verificados e validados
-- **`busca_eventos.log`** - Logs de execução
+- **`verified_events.json`** - Eventos verificados e validados (usado pelo calendário web)
+- **`enriched_events_initial.json`** - Eventos enriquecidos com descrições detalhadas
+
+**Atalho**: `output/latest/` sempre aponta para a execução mais recente.
 
 ## ⚙️ Configuração
 
@@ -125,17 +156,33 @@ EVENT_CATEGORIES = {
 ## 🏗️ Arquitetura
 
 ```
-busca_eventos/
-├── main.py              # Orquestrador principal
-├── config.py            # Configurações
-├── agents/              # Agentes Agno
-│   ├── search_agent.py  # Busca de eventos
-│   ├── verify_agent.py  # Verificação e validação
-│   └── format_agent.py  # Formatação WhatsApp
-├── tools/               # Ferramentas de busca
-│   ├── web_search.py    # DuckDuckGo
-│   └── scraper.py       # Web scraping
-└── output/              # Resultados (criado automaticamente)
+busca-eventos-rio/
+├── main.py                  # Orquestrador principal
+├── config.py                # Configurações
+├── agents/                  # Agentes Agno
+│   ├── search_agent.py      # 20 micro-searches paralelas
+│   ├── verify_agent.py      # Validação de links
+│   ├── validation_agent.py  # Validação LLM de eventos
+│   ├── enrichment_agent.py  # Enriquecimento de descrições
+│   ├── format_agent.py      # Formatação WhatsApp
+│   └── retry_agent.py       # Retry automático
+├── models/
+│   └── event_models.py      # Modelos Pydantic
+├── utils/
+│   ├── agent_factory.py     # Factory de agentes
+│   ├── file_manager.py      # Gestão de arquivos
+│   └── eventim_scraper.py   # Scraper Eventim (fallback)
+├── web/                     # 🆕 Aplicação Web
+│   ├── app.py               # FastAPI backend
+│   ├── templates/
+│   │   └── index.html       # Calendário FullCalendar
+│   └── static/
+│       ├── css/style.css
+│       └── js/calendar.js
+├── output/                  # Resultados (criado automaticamente)
+├── railway.json             # Config Railway deploy
+├── Procfile                 # Railway start command
+└── start_web.sh             # Script para iniciar web app
 ```
 
 ## 🔧 Desenvolvimento
@@ -182,21 +229,71 @@ brasileiros e composições autorais...
 📝 Comédia stand-up com um dos maiores nomes do humor brasileiro...
 ```
 
+## 🌐 API Endpoints
+
+### **GET /**
+Página principal com calendário interativo
+
+### **GET /api/events**
+Lista eventos em formato FullCalendar
+```bash
+curl "http://localhost:8000/api/events?categoria=Jazz&venue=Blue%20Note"
+```
+
+### **GET /api/stats**
+Estatísticas dos eventos
+```json
+{
+  "total_eventos": 46,
+  "por_categoria": {"Jazz": 10, "Teatro-Comédia": 15},
+  "por_venue": {"Blue Note": 5, "CCBB Rio": 3}
+}
+```
+
+### **GET /api/categories** & **GET /api/venues**
+Lista categorias e venues disponíveis
+
+### **POST /api/refresh**
+Força atualização manual dos eventos (executa `main.py` em background)
+
+## 🚀 Deploy no Railway
+
+1. **Conectar repositório**
+   ```bash
+   # Via Railway CLI
+   railway link
+   ```
+
+2. **Configurar variáveis**
+   ```bash
+   railway variables set OPENROUTER_API_KEY=sk-or-v1-...
+   ```
+
+3. **Deploy automático**
+   O Railway detectará `railway.json` e fará deploy automaticamente!
+
 ## ⚠️ Limitações
 
-- **Web Scraping**: Seletores CSS podem quebrar se sites mudarem estrutura
-- **Datas**: Alguns sites não expõem datas em formato estruturado
-- **APIs**: Sympla/Eventbrite podem requerer autenticação adicional
-- **Custos**: OpenRouter cobra por token (modelos otimizados para custo-benefício)
+- **Limite por venue**: Máximo 5 eventos por venue (priorização inteligente por link, descrição, proximidade)
+- **Cobertura temporal**: 3 semanas à frente (configurável)
+- **Filtros de qualidade**: Exclusão automática de eventos mainstream (samba, pagode, turnês)
+- **Custos**: OpenRouter cobra por token (~$0.50-2.00 por execução completa)
+
+## 📚 Documentação Adicional
+
+- **[WEB_README.md](WEB_README.md)** - Documentação completa da aplicação web
+- **[GUIA_ANALISE.md](GUIA_ANALISE.md)** - Guia de análise do sistema
+- **[LIMITACOES.md](LIMITACOES.md)** - Limitações conhecidas e workarounds
 
 ## 🤝 Contribuindo
 
 Melhorias são bem-vindas! Áreas para contribuir:
 
-- Adicionar mais fontes de eventos
+- Adicionar mais venues culturais
 - Melhorar extração de datas/horários
-- Implementar cache de resultados
-- Adicionar mais categorias
+- Implementar cache Redis para performance
+- Adicionar exportação para Google Calendar (.ics)
+- Criar notificações push para novos eventos
 - Integração com APIs oficiais (Sympla, Eventbrite)
 
 ## 📄 Licença
@@ -205,6 +302,15 @@ MIT
 
 ## 🙏 Créditos
 
-- **Agno**: Framework multi-agente Python
-- **OpenRouter**: API unificada para múltiplos LLMs
-- **DuckDuckGo Search**: Busca web gratuita
+- **[Agno](https://github.com/agno-agi/agno)** - Framework multi-agente Python
+- **[OpenRouter](https://openrouter.ai/)** - API unificada para múltiplos LLMs
+- **[Perplexity AI](https://www.perplexity.ai/)** - Busca web em tempo real (Sonar Pro)
+- **[FullCalendar](https://fullcalendar.io/)** - Biblioteca de calendário interativo
+- **[FastAPI](https://fastapi.tiangolo.com/)** - Framework web moderno e rápido
+- **[Railway](https://railway.app/)** - Plataforma de deploy simplificada
+
+---
+
+**Desenvolvido com 🤖 [Claude Code](https://claude.com/claude-code)**
+
+*Encontre os melhores eventos culturais no Rio de Janeiro!* 🎭🎺🎨
