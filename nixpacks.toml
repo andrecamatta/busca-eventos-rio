@@ -1,0 +1,13 @@
+[phases.setup]
+nixPkgs = ["python3", "gcc"]
+
+[phases.install]
+cmds = [
+    "python -m venv --copies /opt/venv",
+    ". /opt/venv/bin/activate",
+    "pip install uv",
+    "uv sync --no-dev --frozen"
+]
+
+[start]
+cmd = "python -m uvicorn web.app:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 65"
