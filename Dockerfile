@@ -71,4 +71,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 EXPOSE $PORT
 
 # Comando final: uvicorn com timeout adequado para Railway
-CMD uvicorn web.app:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 65
+# Usar sh -c para garantir expansão correta de $PORT
+CMD ["sh", "-c", "uvicorn web.app:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-keep-alive 65"]
