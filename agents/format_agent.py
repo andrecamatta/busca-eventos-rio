@@ -37,7 +37,10 @@ class FormatAgent:
         )
 
     def format_for_whatsapp(self, verified_events: dict[str, Any]) -> str:
-        """Formata eventos verificados para compartilhamento no WhatsApp."""
+        """Formata eventos verificados para compartilhamento no WhatsApp.
+
+        Inclui consolidação automática de eventos recorrentes antes da formatação.
+        """
         logger.info(f"{self.log_prefix} Formatando eventos para WhatsApp...")
 
         # Extrair lista de eventos
@@ -49,6 +52,20 @@ class FormatAgent:
         if not events_list:
             logger.warning("Nenhum evento para formatar")
             return "Nenhum evento encontrado para o período especificado."
+
+        # Consolidar eventos recorrentes ANTES de formatar
+        logger.info(f"{self.log_prefix} Consolidando eventos recorrentes...")
+        from utils.event_consolidator import EventConsolidator
+
+        consolidator = EventConsolidator()
+        eventos_antes = len(events_list)
+        events_list = consolidator.consolidate_recurring_events(events_list)
+        eventos_depois = len(events_list)
+
+        logger.info(
+            f"{self.log_prefix} ✓ Eventos consolidados: {eventos_antes} → {eventos_depois} "
+            f"({eventos_antes - eventos_depois} eventos mesclados)"
+        )
 
         # Gerar timestamp atual
         current_timestamp = datetime.now().strftime('%d/%m/%Y às %H:%M')

@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -10,15 +12,40 @@ logger = logging.getLogger(__name__)
 class EventFileManager:
     """Responsável por salvar e carregar eventos em diferentes formatos."""
 
-    def __init__(self, output_dir: str | Path = "output"):
+    def __init__(self, output_dir: str | Path = "output", use_timestamp: bool = True):
         """
         Inicializa o gerenciador de arquivos.
 
         Args:
-            output_dir: Diretório onde arquivos serão salvos
+            output_dir: Diretório base onde arquivos serão salvos
+            use_timestamp: Se True, cria subpasta com timestamp da execução
         """
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.base_output_dir = Path(output_dir)
+        self.base_output_dir.mkdir(exist_ok=True)
+
+        if use_timestamp:
+            # Criar pasta com timestamp: YYYY-MM-DD_HH-MM-SS
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            self.output_dir = self.base_output_dir / timestamp
+            self.output_dir.mkdir(exist_ok=True)
+
+            # Criar/atualizar symlink 'latest' apontando para esta execução
+            self._update_latest_symlink()
+        else:
+            self.output_dir = self.base_output_dir
+
+    def _update_latest_symlink(self):
+        """Cria ou atualiza symlink 'latest' para a pasta da execução atual."""
+        latest_link = self.base_output_dir / "latest"
+
+        # Remover symlink antigo se existir
+        if latest_link.exists() or latest_link.is_symlink():
+            latest_link.unlink()
+
+        # Criar novo symlink relativo
+        relative_target = self.output_dir.name
+        latest_link.symlink_to(relative_target)
+        logger.info(f"✓ Symlink 'latest' atualizado: {latest_link} -> {relative_target}")
 
     def save_json(self, data: dict | str, filename: str) -> Path:
         """

@@ -54,6 +54,19 @@ class EventoVenue(EventoBase):
         "Sala Cecília Meireles",
         "Teatro Municipal do Rio de Janeiro",
         "Artemis - Torrefação Artesanal e Cafeteria",
+        "CCBB Rio - Centro Cultural Banco do Brasil",
+        "Oi Futuro",
+        "IMS - Instituto Moreira Salles",
+        "Parque Lage",
+        "CCJF - Centro Cultural Justiça Federal",
+        "Sesc Copacabana",
+        "Sesc Flamengo",
+        "Sesc Tijuca",
+        "Sesc Engenho de Dentro",
+        "Casa Natura Musical",
+        "MAM Cinema",
+        "Theatro Net Rio",
+        "CCBB Teatro e Cinema",
     ] = Field(..., description="Venue do evento")
 
 

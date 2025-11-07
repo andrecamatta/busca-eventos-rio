@@ -14,9 +14,10 @@ OPENROUTER_BASE_URL: Final[str] = "https://openrouter.ai/api/v1"
 
 # Modelos OpenRouter por função (otimização de custo vs performance)
 MODELS: Final[dict[str, str]] = {
-    "search": "perplexity/sonar-pro",  # Especializado em busca web com internet em tempo real
-    "verify": "openai/gpt-5-mini",  # Rápido e econômico para verificação
-    "format": "google/gemini-2.5-flash",  # Rápido para formatação
+    "search": "perplexity/sonar-pro",           # Busca web em tempo real (casos complexos)
+    "search_simple": "perplexity/sonar",        # Busca web simples (redução de custo ~50%)
+    "light": "google/gemini-2.5-flash",         # QueryOptimizer, FormatAgent (10-20x mais rápido, ~90% menor custo)
+    "important": "google/gemini-2.5-flash",     # Verify, Validation, Enrichment, Retry (teste de qualidade)
 }
 
 # Configurações de busca
@@ -47,9 +48,18 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
         "description": "Eventos em locais específicos",
     },
     "outdoor_weekend": {
-        "keywords": ["ao ar livre", "outdoor", "parque", "praia"],
+        "keywords": ["ao ar livre", "outdoor", "parque", "praia", "feira gastronômica", "feira de comida", "food festival", "mercado", "gastronomia"],
+        "exclude": [
+            # Gêneros musicais específicos
+            "samba", "pagode", "roda de samba", "axé", "forró",
+            # Shows mainstream/grandes artistas
+            "ivete sangalo", "thiaguinho", "alexandre pires", "luan santana",
+            "gusttavo lima", "wesley safadão", "simone mendes",
+            # Termos genéricos de shows pop comerciais
+            "turnê", "show nacional", "mega show", "tour brasil",
+        ],
         "days": ["saturday", "sunday"],
-        "description": "Eventos ao ar livre em fim de semana",
+        "description": "Eventos ao ar livre em fim de semana (foco: culturais/nichados, sem shows mainstream)",
     },
     "cursos_cafe": {
         "keywords": ["curso café", "workshop café", "barista", "degustação café", "coffee tasting"],
@@ -61,7 +71,7 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
 # Venues obrigatórios (deve ter pelo menos 1 evento de cada)
 REQUIRED_VENUES: Final[dict[str, list[str]]] = {
     "teatro_municipal": ["Teatro Municipal", "Theatro Municipal"],
-    "sala_cecilia": ["Sala Cecília Meirelles", "Cecília Meirelles", "Cecilia Meireles"],
+    "sala_cecilia": ["Sala Cecília Meireles", "Cecília Meireles", "Cecilia Meireles", "Sala Cecília Meirelles", "Cecília Meirelles"],
     "blue_note": ["Blue Note Rio", "Blue Note", "BlueNote"],
 }
 
@@ -70,7 +80,7 @@ VENUE_ADDRESSES: Final[dict[str, list[str]]] = {
     "artemis_torrefacao": [
         "Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro",
         "Conde de Bonfim, 751, Tijuca",
-        "Tijuca, Rio de Janeiro",  # aceitar se mencionar Tijuca
+        "Tijuca, Rio de Janeiro",
     ],
     "blue_note": [
         "Av. Afrânio de Melo Franco, 290, Leblon, Rio de Janeiro",
@@ -90,6 +100,67 @@ VENUE_ADDRESSES: Final[dict[str, list[str]]] = {
     "casa_choro": [
         "Rua da Carioca, 38, Centro, Rio de Janeiro",
         "Rua da Carioca, 38",
+        "Centro, Rio de Janeiro",
+    ],
+    "ccbb_rio": [
+        "Rua Primeiro de Março, 66, Centro, Rio de Janeiro",
+        "R. Primeiro de Março, 66, Centro",
+        "Centro, Rio de Janeiro",
+    ],
+    "sesc_copacabana": [
+        "Rua Domingos Ferreira, 160, Copacabana, Rio de Janeiro",
+        "Domingos Ferreira, 160, Copacabana",
+        "Copacabana, Rio de Janeiro",
+    ],
+    "sesc_flamengo": [
+        "Rua Marquês de Abrantes, 99, Flamengo, Rio de Janeiro",
+        "Marquês de Abrantes, 99, Flamengo",
+        "Flamengo, Rio de Janeiro",
+    ],
+    "sesc_tijuca": [
+        "Rua Barão de Mesquita, 539, Tijuca, Rio de Janeiro",
+        "Barão de Mesquita, 539, Tijuca",
+        "Tijuca, Rio de Janeiro",
+    ],
+    "sesc_engenho": [
+        "Rua Borja Reis, 291, Engenho de Dentro, Rio de Janeiro",
+        "Borja Reis, 291, Engenho de Dentro",
+        "Engenho de Dentro, Rio de Janeiro",
+    ],
+    "casa_natura": [
+        "Shopping Leblon, Av. Afrânio de Melo Franco, 290, Leblon, Rio de Janeiro",
+        "Shopping Leblon, Leblon",
+        "Leblon, Rio de Janeiro",
+    ],
+    "mam_cinema": [
+        "Av. Infante Dom Henrique, 85, Parque do Flamengo, Rio de Janeiro",
+        "Parque do Flamengo",
+        "Flamengo, Rio de Janeiro",
+    ],
+    "theatro_net": [
+        "Rua Siqueira Campos, 143, Copacabana, Rio de Janeiro",
+        "Siqueira Campos, 143, Copacabana",
+        "Copacabana, Rio de Janeiro",
+    ],
+    "parque_lage": [
+        "Rua Jardim Botânico, 414, Jardim Botânico, Rio de Janeiro",
+        "Jardim Botânico, 414",
+        "Jardim Botânico, Rio de Janeiro",
+    ],
+    "ims": [
+        "Rua Marquês de São Vicente, 476, Gávea, Rio de Janeiro",
+        "Marquês de São Vicente, 476, Gávea",
+        "Gávea, Rio de Janeiro",
+    ],
+    "oi_futuro": [
+        "Rua Dois de Dezembro, 63, Ipanema, Rio de Janeiro",
+        "Dois de Dezembro, 63, Flamengo",
+        "Ipanema, Rio de Janeiro",
+        "Flamengo, Rio de Janeiro",
+    ],
+    "ccjf": [
+        "Av. Rio Branco, 241, Centro, Rio de Janeiro",
+        "Rio Branco, 241, Centro",
         "Centro, Rio de Janeiro",
     ],
 }
@@ -121,7 +192,7 @@ OUTPUT_FORMAT: Final[str] = "whatsapp"  # whatsapp, json, markdown
 HTTP_TIMEOUT: Final[int] = 30
 MAX_RETRIES: Final[int] = 3
 
-# Threshold mínimo de eventos válidos
+# Threshold mínimo de eventos válidos (apenas eventos de SÁBADO/DOMINGO contam para o threshold)
 MIN_EVENTS_THRESHOLD: Final[int] = 10
 
 # Nível de rigor da validação individual
@@ -141,4 +212,21 @@ ENRICHMENT_GENERIC_TERMS: Final[list[str]] = [
     "músicos cariocas",
     "artistas locais",
     "evento tradicional",
+    "programa a confirmar",
+    "solistas a confirmar",
+    "músicos da casa",
 ]  # termos que indicam descrição genérica
+
+# Configurações de validação de qualidade de links
+LINK_QUALITY_THRESHOLD: Final[int] = 70  # score mínimo (0-100) para aceitar link
+LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 2  # máximo de tentativas de busca inteligente
+REQUIRE_SPECIFIC_ARTISTS: Final[bool] = True  # rejeitar eventos sem artistas específicos
+ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
+    "roda de choro",
+    "jam session",
+    "open mic",
+    "sarau",
+]  # tipos de eventos que aceitam "músicos da casa"
+
+# Limitação de eventos por venue
+MAX_EVENTS_PER_VENUE: Final[int] = 5  # máximo de eventos por venue individual

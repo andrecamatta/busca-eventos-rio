@@ -87,8 +87,28 @@ class EventSearchOrchestrator:
             # Salvar eventos verificados (versão inicial)
             self.file_manager.save_json(verified_events, "verified_events_initial.json")
 
-            # Fase 2.5: Retry Agent (se necessário)
-            logger.info(f"\n[FASE 2.5/4] 🔄 Verificando threshold mínimo ({MIN_EVENTS_THRESHOLD} eventos)...")
+            # Fase 3: Enriquecimento ANTES de retry (enriquecer apenas eventos já validados)
+            if ENRICHMENT_ENABLED and len(verified_events.get("verified_events", [])) > 0:
+                logger.info("\n[FASE 3/5] 🧠 Enriquecendo eventos iniciais com contexto adicional...")
+                enrichment_result = await self.enrichment_agent.enrich_events(
+                    verified_events.get("verified_events", [])
+                )
+
+                # Atualizar eventos com versões enriquecidas
+                verified_events["verified_events"] = enrichment_result["enriched_events"]
+
+                # Estatísticas de enriquecimento
+                stats_enrich = enrichment_result["enrichment_stats"]
+                logger.info(f"✓ Eventos enriquecidos: {stats_enrich['enriched']}/{stats_enrich['total']}")
+                logger.info(f"🔍 Buscas utilizadas: {stats_enrich['searches_used']}/{stats_enrich.get('max_searches', 10)}")
+
+                # Salvar eventos enriquecidos
+                self.file_manager.save_json(verified_events, "enriched_events_initial.json")
+            else:
+                logger.info("\n[FASE 3/5] ⏭️  Enriquecimento desabilitado ou sem eventos, pulando...")
+
+            # Fase 3.5: Retry Agent (se necessário)
+            logger.info(f"\n[FASE 3.5/5] 🔄 Verificando threshold mínimo ({MIN_EVENTS_THRESHOLD} eventos)...")
             needs_retry, analysis = self.retry_agent.needs_retry(verified_events)
 
             if needs_retry:
@@ -143,48 +163,8 @@ class EventSearchOrchestrator:
                 logger.warning("Nenhum evento passou na verificação")
                 return "Nenhum evento válido encontrado após verificação."
 
-            # Fase 3: Enriquecimento (Enrichment Agent)
-            if ENRICHMENT_ENABLED:
-                logger.info("\n[FASE 3/5] 🧠 Enriquecendo descrições com contexto adicional...")
-                enrichment_result = await self.enrichment_agent.enrich_events(
-                    verified_events.get("verified_events", [])
-                )
-
-                # Atualizar eventos com versões enriquecidas
-                verified_events["verified_events"] = enrichment_result["enriched_events"]
-
-                # Estatísticas de enriquecimento
-                stats = enrichment_result["enrichment_stats"]
-                logger.info(f"✓ Eventos enriquecidos: {stats['enriched']}/{stats['total']}")
-                logger.info(f"🔍 Buscas utilizadas: {stats['searches_used']}/{stats.get('max_searches', 10)}")
-
-                # Salvar eventos enriquecidos
-                self.file_manager.save_json(verified_events, "enriched_events.json")
-            else:
-                logger.info("\n[FASE 3/5] ⏭️  Enriquecimento desabilitado, pulando...")
-
-            # Fase 3.5: Consolidação de eventos recorrentes
-            logger.info("\n[FASE 3.5/5] 🔄 Consolidando eventos recorrentes...")
-            from utils.event_consolidator import EventConsolidator
-
-            consolidator = EventConsolidator()
-            eventos_antes = len(verified_events.get("verified_events", []))
-
-            verified_events["verified_events"] = consolidator.consolidate_recurring_events(
-                verified_events.get("verified_events", [])
-            )
-
-            eventos_depois = len(verified_events.get("verified_events", []))
-            logger.info(
-                f"✓ Eventos consolidados: {eventos_antes} → {eventos_depois} "
-                f"({eventos_antes - eventos_depois} eventos mesclados)"
-            )
-
-            # Salvar eventos consolidados
-            self.file_manager.save_json(verified_events, "consolidated_events.json")
-
-            # Fase 4: Formatação (Format Agent)
-            logger.info("\n[FASE 4/5] 📱 Formatando para WhatsApp...")
+            # Fase 4: Formatação (Format Agent com consolidação inline)
+            logger.info("\n[FASE 4/4] 📱 Formatando para WhatsApp...")
             whatsapp_message = self.format_agent.format_for_whatsapp(verified_events)
 
             # Salvar mensagem final
@@ -197,10 +177,10 @@ class EventSearchOrchestrator:
             logger.info("  - raw_events.json (eventos brutos)")
             logger.info("  - structured_events.json (eventos estruturados)")
             logger.info("  - verified_events_initial.json (eventos verificados inicialmente)")
-            logger.info("  - verified_events.json (eventos verificados finais)")
             if ENRICHMENT_ENABLED:
-                logger.info("  - enriched_events.json (eventos enriquecidos)")
-            logger.info("  - eventos_whatsapp.txt (mensagem final)")
+                logger.info("  - enriched_events_initial.json (eventos iniciais enriquecidos)")
+            logger.info("  - verified_events.json (eventos verificados finais após retry)")
+            logger.info("  - eventos_whatsapp.txt (mensagem final com consolidação)")
             logger.info("  - busca_eventos.log (logs)")
 
             return whatsapp_message

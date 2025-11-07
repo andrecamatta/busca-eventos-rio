@@ -3,11 +3,17 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.egg
+*.egg-info/
 .Python
+build/
+dist/
 env/
 venv/
 ENV/
 .venv
+.pytest_cache/
+.ruff_cache/
 
 # UV
 .uv/
@@ -34,6 +40,7 @@ Thumbs.db
 # Cache
 .cache/
 tmp/
+/tmp/
 
 # Playwright
 .playwright/

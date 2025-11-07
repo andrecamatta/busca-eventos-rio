@@ -33,18 +33,46 @@ class RetryAgent:
             markdown=True,
         )
 
+    def _is_weekend_event(self, event: dict) -> bool:
+        """Verifica se evento ocorre em sábado ou domingo.
+
+        Args:
+            event: Dicionário do evento com campo 'data'
+
+        Returns:
+            True se evento é sábado ou domingo, False caso contrário
+        """
+        data_str = event.get("data", "")
+        if not data_str:
+            return False
+
+        try:
+            # Parse data no formato DD/MM/YYYY
+            data = datetime.strptime(data_str, "%d/%m/%Y")
+            # weekday(): 0=segunda, 1=terça, ..., 5=sábado, 6=domingo
+            return data.weekday() in [5, 6]
+        except ValueError:
+            logger.warning(f"Data inválida no evento: {data_str}")
+            return False
+
     def needs_retry(self, verified_data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
         """Verifica se precisa de retry e retorna análise dos gaps."""
-        verified_count = len(verified_data.get("verified_events", []))
         verified_events = verified_data.get("verified_events", [])
+        total_count = len(verified_events)
 
-        logger.info(f"Verificando threshold: {verified_count} eventos (mínimo: {MIN_EVENTS_THRESHOLD})")
+        # MUDANÇA: Contar apenas eventos de sábado/domingo
+        weekend_events = [e for e in verified_events if self._is_weekend_event(e)]
+        weekend_count = len(weekend_events)
+        weekday_count = total_count - weekend_count
+
+        logger.info(f"Verificando threshold: {weekend_count} eventos de fim de semana (mínimo: {MIN_EVENTS_THRESHOLD})")
+        logger.info(f"Total de eventos: {total_count} ({weekday_count} em dias de semana serão ignorados para threshold)")
 
         # Verificar se há eventos dos venues obrigatórios
         missing_required_venues = self._check_required_venues(verified_events)
 
-        # Precisa retry se não atingir o mínimo OU se faltar algum venue obrigatório
-        if verified_count >= MIN_EVENTS_THRESHOLD and not missing_required_venues:
+        # Precisa retry se não atingir o mínimo de eventos de FIM DE SEMANA OU se faltar algum venue obrigatório
+        if weekend_count >= MIN_EVENTS_THRESHOLD and not missing_required_venues:
             return False, {}
 
         # Analisar gaps por categoria
@@ -87,7 +115,7 @@ class RetryAgent:
                 recoverable.append(event)
 
         analysis = {
-            "events_needed": MIN_EVENTS_THRESHOLD - verified_count,
+            "events_needed": MIN_EVENTS_THRESHOLD - weekend_count,
             "categories": categories,
             "recoverable_events": recoverable,
             "gaps": [k for k, v in categories.items() if v == 0],
@@ -276,6 +304,9 @@ OBJETIVO: Encontrar NO MÍNIMO {events_needed} eventos adicionais VÁLIDOS.
             response = self.agent.run(prompt)
             content = response.content
 
+            # Log da resposta bruta para debug
+            logger.debug(f"Resposta bruta do RetryAgent (primeiros 500 chars): {content[:500]}")
+
             # Limpar JSON usando função compartilhada
             cleaned_content = clean_json_response(content)
             complementary_data = json.loads(cleaned_content)
@@ -285,15 +316,122 @@ OBJETIVO: Encontrar NO MÍNIMO {events_needed} eventos adicionais VÁLIDOS.
                 f"Eventos encontrados: {len(complementary_data.get('eventos_complementares', []))}"
             )
 
+            # FALLBACK: Se há eventos do Blue Note, tentar scraping Eventim
+            self._enhance_blue_note_links(complementary_data, missing_required_venues)
+
             return complementary_data
 
+        except json.JSONDecodeError as e:
+            logger.error(f"Erro ao fazer parse de JSON na busca complementar: {e}")
+            logger.error(f"Conteúdo problemático (primeiros 1000 chars): {content[:1000]}")
+
+            # Fallback: tentar extrair eventos manualmente com regex
+            logger.warning("Tentando fallback com extração manual de eventos...")
+            try:
+                # Tentar encontrar padrão de array de eventos mesmo sem JSON válido
+                import re
+                eventos_pattern = r'"titulo":\s*"([^"]+)".*?"data":\s*"([^"]+)".*?"local":\s*"([^"]+)"'
+                matches = re.findall(eventos_pattern, content, re.DOTALL)
+
+                if matches:
+                    logger.info(f"Fallback encontrou {len(matches)} possíveis eventos no texto")
+                    # Retornar estrutura vazia mas com observação sobre o problema
+                    return {
+                        "eventos_complementares": [],
+                        "fontes_consultadas": [],
+                        "observacoes": f"Erro no formato JSON. Perplexity retornou texto não estruturado. {len(matches)} eventos detectados mas não parseados.",
+                    }
+            except Exception as fallback_error:
+                logger.error(f"Fallback também falhou: {fallback_error}")
+
+            return {
+                "eventos_complementares": [],
+                "fontes_consultadas": [],
+                "observacoes": f"Erro ao fazer parse de JSON: {str(e)}",
+            }
+
         except Exception as e:
-            logger.error(f"Erro na busca complementar: {e}")
+            logger.error(f"Erro inesperado na busca complementar: {e}")
+            logger.error(f"Resposta bruta: {content[:500] if 'content' in locals() else 'N/A'}")
             return {
                 "eventos_complementares": [],
                 "fontes_consultadas": [],
                 "observacoes": f"Erro na busca: {str(e)}",
             }
+
+    def _enhance_blue_note_links(self, complementary_data: dict, missing_required_venues: list[str]) -> None:
+        """
+        Melhora links de eventos do Blue Note usando scraping Eventim quando necessário.
+
+        Args:
+            complementary_data: Dados dos eventos complementares (será modificado in-place)
+            missing_required_venues: Lista de venues obrigatórios faltantes
+        """
+        if "blue_note" not in missing_required_venues:
+            return
+
+        eventos = complementary_data.get("eventos_complementares", [])
+        if not eventos:
+            return
+
+        # Filtrar apenas eventos do Blue Note
+        blue_note_events = [
+            e for e in eventos
+            if "blue note" in str(e.get("local", "")).lower()
+        ]
+
+        if not blue_note_events:
+            return
+
+        # Verificar se algum tem link genérico
+        has_generic_links = any(
+            not e.get("link_ingresso") or
+            "bluenoterio.com.br/shows" in str(e.get("link_ingresso", ""))
+            for e in blue_note_events
+        )
+
+        if not has_generic_links:
+            logger.info("✓ Eventos do Blue Note já têm links específicos")
+            return
+
+        logger.info("🔍 Detectado: eventos Blue Note com links genéricos. Iniciando scraping Eventim...")
+
+        try:
+            from utils.eventim_scraper import EventimScraper
+
+            # Realizar scraping
+            scraped_events = EventimScraper.scrape_blue_note_events()
+
+            if not scraped_events:
+                logger.warning("⚠️  Scraping Eventim não retornou eventos")
+                return
+
+            logger.info(f"✓ Scraping encontrou {len(scraped_events)} eventos no Eventim")
+
+            # Fazer match e atualizar links
+            improved_count = 0
+            for event in blue_note_events:
+                if event.get("link_ingresso") and "eventim.com.br/artist/blue-note-rio/" in event["link_ingresso"]:
+                    continue  # Já tem link específico
+
+                # Tentar match
+                titulo = event.get("titulo", "")
+                matched_link = EventimScraper.match_event_to_scraped(titulo, scraped_events)
+
+                if matched_link:
+                    event["link_ingresso"] = matched_link
+                    improved_count += 1
+                    logger.info(f"✓ Link atualizado para '{titulo}': {matched_link}")
+
+            if improved_count > 0:
+                logger.info(f"✅ {improved_count}/{len(blue_note_events)} eventos Blue Note tiveram links melhorados via scraping")
+            else:
+                logger.warning("⚠️  Nenhum match encontrado entre eventos Perplexity e scraping Eventim")
+
+        except ImportError as e:
+            logger.error(f"❌ Erro ao importar EventimScraper: {e}")
+        except Exception as e:
+            logger.error(f"❌ Erro no scraping/matching Eventim: {e}")
 
     def analyze_recoverable(self, recoverable_events: list[dict]) -> list[dict]:
         """Analisa eventos rejeitados que podem ser recuperados."""

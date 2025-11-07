@@ -32,7 +32,7 @@ class ValidationAgent:
 
         self.agent = AgentFactory.create_agent(
             name="Event Validation Agent",
-            model_type="important",  # GPT-5 - tarefa crítica (validação de eventos)
+            model_type="important",  # Gemini Flash 1.5 - validação de eventos
             description="Agente especializado em validação inteligente de eventos usando LLM",
             instructions=[
                 "Validar eventos de forma inteligente e flexível",
@@ -43,26 +43,77 @@ class ValidationAgent:
             markdown=True,
         )
 
+    def _needs_individual_validation(self, event: dict) -> bool:
+        """Determina se um evento precisa de validação individual via LLM.
+
+        Eventos com informações completas e link válido podem pular validação (otimização).
+        """
+        # Sempre validar se não tiver campos essenciais
+        has_complete_fields = all([
+            event.get('titulo'),
+            event.get('data'),
+            event.get('horario'),
+            event.get('local'),
+        ])
+
+        if not has_complete_fields:
+            return True  # Precisa validar
+
+        # Se tiver link válido E campos completos, pode pular
+        has_valid_link = event.get('link_ingresso') and event.get('link_valid')
+
+        if has_valid_link and has_complete_fields:
+            return False  # Pode pular validação
+
+        # Se não tiver link OU link não foi validado, precisa validar
+        return True
+
     async def validate_events_batch(self, events: list[dict]) -> dict[str, Any]:
-        """Valida um lote de eventos individualmente."""
+        """Valida um lote de eventos individualmente (com validação condicional)."""
         logger.info(f"{self.log_prefix} Validando {len(events)} eventos (modo: {VALIDATION_STRICTNESS})...")
 
         validated_events = []
         rejected_events = []
         validation_warnings = []
 
-        # Criar tasks para validar todos os eventos em paralelo
-        logger.info(f"{self.log_prefix} Iniciando validação paralela de {len(events)} eventos...")
-        validation_tasks = [
-            self.validate_event_individually(event)
-            for event in events
-        ]
+        # Separar eventos que precisam de validação vs auto-aprovados
+        events_to_validate = []
+        auto_approved_events = []
 
-        # Executar todas as validações em paralelo
-        validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+        for event in events:
+            if self._needs_individual_validation(event):
+                events_to_validate.append(event)
+            else:
+                auto_approved_events.append(event)
+                logger.info(
+                    f"✓ Auto-aprovado (campos completos + link válido): "
+                    f"{event.get('titulo', 'Sem título')}"
+                )
 
-        # Processar resultados
-        for i, (event, result) in enumerate(zip(events, validation_results)):
+        logger.info(
+            f"{self.log_prefix} Validação condicional: {len(auto_approved_events)} auto-aprovados, "
+            f"{len(events_to_validate)} precisam validação LLM"
+        )
+
+        # Auto-aprovar eventos com informações completas
+        validated_events.extend(auto_approved_events)
+
+        # Criar tasks apenas para eventos que precisam de validação
+        if events_to_validate:
+            logger.info(f"{self.log_prefix} Iniciando validação LLM de {len(events_to_validate)} eventos...")
+            validation_tasks = [
+                self.validate_event_individually(event)
+                for event in events_to_validate
+            ]
+
+            # Executar todas as validações em paralelo
+            validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+        else:
+            validation_results = []
+            logger.info(f"{self.log_prefix} Nenhum evento precisa de validação LLM (todos auto-aprovados)")
+
+        # Processar resultados (apenas dos eventos que foram validados)
+        for i, (event, result) in enumerate(zip(events_to_validate, validation_results)):
             event_title = event.get('titulo', 'Sem título')
 
             # Tratar exceções que possam ter ocorrido
