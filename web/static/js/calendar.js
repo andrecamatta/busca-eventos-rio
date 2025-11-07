@@ -160,7 +160,23 @@ async function refreshEvents() {
         const response = await fetch('/api/refresh', { method: 'POST' });
         const data = await response.json();
 
-        showToast('Atualização iniciada! Aguarde alguns minutos...', 'info');
+        // Verificar status HTTP
+        if (!response.ok) {
+            // Erro HTTP (503, 500, etc.)
+            console.error('Erro na requisição:', response.status, data);
+
+            if (response.status === 503) {
+                // API key não configurada
+                showToast('⚠️ Atualização indisponível: API key não configurada', 'error');
+            } else {
+                // Outros erros
+                showToast(data.detail || 'Erro ao iniciar atualização', 'error');
+            }
+            return;
+        }
+
+        // Sucesso
+        showToast('✓ Atualização iniciada! Aguarde alguns minutos...', 'info');
 
         // Aguardar 30 segundos e recarregar
         setTimeout(() => {
@@ -170,7 +186,7 @@ async function refreshEvents() {
 
     } catch (error) {
         console.error('Erro ao atualizar:', error);
-        showToast('Erro ao iniciar atualização', 'error');
+        showToast('Erro de conexão ao iniciar atualização', 'error');
     } finally {
         setTimeout(() => {
             btn.classList.remove('spinning');

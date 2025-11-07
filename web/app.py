@@ -164,14 +164,22 @@ def run_event_search():
             logger.error("❌ OPENROUTER_API_KEY não configurada. Busca cancelada.")
             return
 
-        # Verificar se comando uv está disponível
-        if not shutil.which("uv"):
-            logger.warning("⚠️  Comando 'uv' não encontrado. Tentando com python direto...")
-            cmd = ["python", "main.py"]
-        else:
-            cmd = ["uv", "run", "python", "main.py"]
+        # Determinar comando para executar main.py
+        venv_python = BASE_DIR / ".venv" / "bin" / "python"
 
-        logger.info(f"🔄 Iniciando busca automática de eventos com: {' '.join(cmd)}")
+        if shutil.which("uv"):
+            # Se uv está disponível, usar uv run
+            cmd = ["uv", "run", "python", "main.py"]
+            logger.info(f"🔄 Iniciando busca com uv: {' '.join(cmd)}")
+        elif venv_python.exists():
+            # Se não tem uv mas tem virtualenv, usar python do venv
+            cmd = [str(venv_python), "main.py"]
+            logger.info(f"🔄 Iniciando busca com venv python: {' '.join(cmd)}")
+        else:
+            # Fallback para python do sistema (pode não ter dependências)
+            logger.warning("⚠️  Nem uv nem virtualenv encontrados. Tentando python do sistema...")
+            cmd = ["python3", "main.py"]
+            logger.info(f"🔄 Iniciando busca com python do sistema: {' '.join(cmd)}")
 
         result = subprocess.run(
             cmd,
@@ -183,14 +191,21 @@ def run_event_search():
 
         if result.returncode == 0:
             logger.info("✓ Busca de eventos concluída com sucesso!")
+            if result.stdout:
+                logger.info(f"stdout: {result.stdout[:500]}")
         else:
             logger.error(f"❌ Erro na busca de eventos (code {result.returncode})")
-            logger.error(f"stderr: {result.stderr[:500]}")  # Primeiros 500 chars
+            if result.stderr:
+                logger.error(f"stderr: {result.stderr[:1000]}")
+            if result.stdout:
+                logger.error(f"stdout: {result.stdout[:1000]}")
 
     except subprocess.TimeoutExpired:
         logger.error("❌ Busca de eventos excedeu o timeout de 10 minutos")
     except Exception as e:
         logger.error(f"❌ Erro ao executar busca: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()[:1000]}")
 
 
 @app.on_event("startup")
@@ -327,7 +342,16 @@ async def get_venues():
 async def trigger_refresh():
     """Força atualização manual dos eventos."""
     try:
+        # Verificar se API key está configurada antes de aceitar a requisição
+        if not os.getenv("OPENROUTER_API_KEY"):
+            logger.warning("⚠️  Tentativa de atualização sem API key configurada")
+            raise HTTPException(
+                status_code=503,
+                detail="Atualização indisponível: OPENROUTER_API_KEY não configurada. Configure a variável de ambiente para habilitar buscas automáticas."
+            )
+
         # Executar busca em background
+        logger.info("📨 Requisição de atualização manual recebida")
         scheduler.add_job(
             run_event_search,
             id="manual_refresh",
@@ -335,7 +359,11 @@ async def trigger_refresh():
         )
         return JSONResponse(content={"status": "success", "message": "Atualização iniciada"})
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (como o 503 acima)
+        raise
     except Exception as e:
+        logger.error(f"❌ Erro ao agendar atualização: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
