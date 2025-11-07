@@ -57,8 +57,8 @@ COPY --from=builder /app /app
 # Instalar browsers do Playwright (chromium suficiente para maioria dos casos)
 RUN /app/.venv/bin/playwright install chromium --with-deps
 
-# Criar diretórios necessários
-RUN mkdir -p /app/output/latest
+# Criar diretório base de output (latest será symlink criado por EventFileManager)
+RUN mkdir -p /app/output
 
 # Railway define PORT dinamicamente, mas definimos default para testes locais
 ENV PORT=8000

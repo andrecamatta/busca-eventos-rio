@@ -39,10 +39,10 @@ scheduler = BackgroundScheduler()
 
 
 def ensure_output_directory():
-    """Garante que o diretório de output existe."""
+    """Garante que o diretório base de output existe."""
     try:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        LATEST_OUTPUT.mkdir(parents=True, exist_ok=True)
+        # LATEST_OUTPUT será criado como symlink por EventFileManager
         logger.info(f"✓ Diretório de output verificado: {OUTPUT_DIR}")
     except Exception as e:
         logger.warning(f"Não foi possível criar diretório de output: {e}")
