@@ -196,14 +196,28 @@ def run_event_search():
 @app.on_event("startup")
 async def startup_event():
     """Inicializa o scheduler na startup."""
+    logger.info("=" * 60)
+    logger.info("🚀 INICIANDO APLICAÇÃO EVENTOS CULTURAIS RIO")
+    logger.info("=" * 60)
+
+    # Log environment info
+    port = os.getenv("PORT", "NOT SET")
+    logger.info(f"📌 PORT configurado: {port}")
+    logger.info(f"📁 BASE_DIR: {BASE_DIR}")
+    logger.info(f"📂 OUTPUT_DIR: {OUTPUT_DIR}")
+
     # Garantir que diretórios existem
+    logger.info("📂 Criando diretórios de output...")
     ensure_output_directory()
+    logger.info("✓ Diretórios verificados")
 
     # Verificar se API key está configurada
     api_key = os.getenv("OPENROUTER_API_KEY")
+    logger.info(f"🔑 API Key configurada: {bool(api_key)}")
 
     if api_key:
         # Agendar busca diária às 6h da manhã
+        logger.info("⏰ Configurando scheduler...")
         scheduler.add_job(
             run_event_search,
             trigger="cron",
@@ -218,6 +232,10 @@ async def startup_event():
         logger.warning("⚠️  OPENROUTER_API_KEY não configurada - scheduler desabilitado")
         logger.info("💡 Configure a variável para habilitar atualização automática")
 
+    logger.info("=" * 60)
+    logger.info("✅ APLICAÇÃO PRONTA PARA RECEBER REQUISIÇÕES")
+    logger.info("=" * 60)
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -229,28 +247,15 @@ async def shutdown_event():
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint para Railway e monitoramento.
+    Health check endpoint RÁPIDO para Railway e monitoramento.
 
-    Retorna status da aplicação sem depender de eventos carregados.
+    Retorna apenas status básico sem operações pesadas de I/O.
     """
-    try:
-        eventos = load_latest_events()
-        api_key_configured = bool(os.getenv("OPENROUTER_API_KEY"))
-
-        return JSONResponse(content={
-            "status": "healthy",
-            "events_loaded": len(eventos),
-            "api_key_configured": api_key_configured,
-            "scheduler_active": scheduler.running if hasattr(scheduler, 'running') else False,
-            "output_dir_exists": LATEST_OUTPUT.exists(),
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Health check error: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "error": str(e)}
-        )
+    return JSONResponse(content={
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "app": "eventos-culturais-rio"
+    })
 
 
 @app.get("/", response_class=HTMLResponse)

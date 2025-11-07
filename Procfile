@@ -1,1 +1,1 @@
-web: /opt/venv/bin/uvicorn web.app:app --host 0.0.0.0 --port $PORT
+web: uvicorn web.app:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 65
