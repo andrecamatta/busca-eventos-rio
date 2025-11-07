@@ -895,10 +895,15 @@ CRITÉRIOS DE APROVAÇÃO:
 1. DATA VÁLIDA:
    - Deve estar entre {start_date.strftime('%d/%m/%Y')} e {end_date.strftime('%d/%m/%Y')}
 
-2. TEATRO COMÉDIA / STAND-UP:
+2. TEATRO COMÉDIA / STAND-UP - VALIDAÇÃO RIGOROSA:
    - APROVAR: comédia adulta, stand-up, humor para adultos, "indicado para maiores de 14/16/18"
-   - REJEITAR: apenas se EXPLICITAMENTE infantil ("teatro infantil", "para crianças", "kids", "família")
-   - DICA: Se diz "todas as idades mas voltado ao público adulto" → APROVAR (não é infantil)
+   - REJEITAR SEMPRE se contém QUALQUER termo infantil/familiar:
+     * "infantil", "criança(s)", "kids", "criancas"
+     * "infanto-juvenil", "infanto juvenil"
+     * "família", "familia", "family", "para toda família"
+     * "sessão infantil", "sessao infantil"
+     * "indicado para crianças", "para crianças"
+   - Se menciona "todas as idades" SEM clareza de ser adulto → REJEITAR (preferir segurança)
 
 3. EVENTOS AO AR LIVRE:
    - APROVAR: apenas se data for sábado OU domingo (use lista acima)

@@ -173,10 +173,10 @@ class RetryAgent:
         if "blue_note" in missing_required_venues:
             gap_descriptions.append(f"""
 🎺 BUSCA ULTRA-PRIORITÁRIA: BLUE NOTE RIO (VENUE OBRIGATÓRIO)
-- Endereço: Av. Afrânio de Melo Franco, 290 - Leblon, Rio de Janeiro
+- Endereço: Av. Nossa Senhora de Copacabana, 2241 - Copacabana, Rio de Janeiro
 - Buscar: bluenoterio.com, Instagram @bluenoteriodejaneiro
 - Tipos: jazz, blues, MPB, soul, R&B, música instrumental
-- Palavras-chave: "Blue Note Rio {month_year_str}", "shows Blue Note Leblon", "jazz Blue Note"
+- Palavras-chave: "Blue Note Rio {month_year_str}", "shows Blue Note Copacabana", "jazz Blue Note"
 - MÍNIMO: 1-2 eventos (OBRIGATÓRIO)
 """)
 

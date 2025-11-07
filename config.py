@@ -36,7 +36,14 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
     },
     "comedia_teatro": {
         "keywords": ["teatro comédia", "stand-up", "humor", "peça cômica"],
-        "exclude": ["infantil", "criança", "kids"],
+        "exclude": [
+            "infantil", "criança", "crianças", "kids", "criancas",
+            "infanto-juvenil", "infanto juvenil",
+            "família", "familia", "family",
+            "para toda família", "para toda a família",
+            "sessão infantil", "sessao infantil",
+            "indicado para crianças", "indicado para criancas",
+        ],
         "description": "Teatro gênero comédia (exceto infantil)",
     },
     "venues_especiais": {
@@ -83,9 +90,9 @@ VENUE_ADDRESSES: Final[dict[str, list[str]]] = {
         "Tijuca, Rio de Janeiro",
     ],
     "blue_note": [
-        "Av. Afrânio de Melo Franco, 290, Leblon, Rio de Janeiro",
-        "Avenida Afrânio de Melo Franco, 290, Leblon",
-        "Leblon, Rio de Janeiro",
+        "Av. Nossa Senhora de Copacabana, 2241, Copacabana, Rio de Janeiro",
+        "Avenida Nossa Senhora de Copacabana, 2241, Copacabana",
+        "Copacabana, Rio de Janeiro",
     ],
     "teatro_municipal": [
         "Praça Floriano, s/n, Centro, Rio de Janeiro",

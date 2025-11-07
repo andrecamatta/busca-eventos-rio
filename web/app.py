@@ -96,6 +96,25 @@ def load_latest_events() -> list[dict]:
         return []
 
 
+def extract_venue_from_local(local: str) -> str:
+    """
+    Extrai o nome do venue do campo 'local'.
+
+    Formato esperado: "Nome do Venue - Endereço completo"
+    Retorna: "Nome do Venue" ou string vazia se não conseguir extrair
+    """
+    if not local:
+        return ""
+
+    # Se contém " - ", extrair a parte antes do primeiro hífen
+    if " - " in local:
+        venue_name = local.split(" - ")[0].strip()
+        return venue_name
+
+    # Se não tem hífen, retornar vazio (local genérico)
+    return ""
+
+
 def parse_event_to_fullcalendar(event: dict) -> dict:
     """Converte evento do formato interno para FullCalendar."""
     try:
@@ -116,7 +135,12 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
 
         # Determinar cor baseado na categoria
         categoria = event.get("categoria", "Geral")
+
+        # Extrair venue do campo 'local' se não existir campo 'venue' direto
         venue = event.get("venue", "")
+        if not venue:
+            local = event.get("local", "")
+            venue = extract_venue_from_local(local)
 
         # Cores por categoria
         color_map = {

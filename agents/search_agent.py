@@ -424,10 +424,15 @@ VALIDAÇÃO:
                 "Teatros de comédia especializados"
             ],
             instrucoes_especiais="""
-ATENÇÃO - EXCLUSÕES CRÍTICAS:
-- NÃO incluir: eventos infantis, teatro para crianças
-- NÃO incluir eventos com tags: "kids", "família", "infantil"
-- APENAS comédia para público adulto
+ATENÇÃO - EXCLUSÕES CRÍTICAS (VALIDAÇÃO RIGOROSA):
+- REJEITAR IMEDIATAMENTE qualquer evento contendo:
+  * "infantil", "criança(s)", "kids", "criancas"
+  * "infanto-juvenil", "infanto juvenil"
+  * "família", "familia", "family", "para toda família"
+  * "sessão infantil", "sessao infantil"
+  * "indicado para crianças", "para crianças"
+- Se menciona "todas as idades" sem clareza de ser adulto → REJEITAR
+- APENAS comédia explicitamente para público adulto/maiores de 14/16/18
 """,
             start_date_str=start_date_str,
             end_date_str=end_date_str,
@@ -1368,7 +1373,7 @@ ESTRATÉGIA:
                         "titulo": scraped_event["titulo"],
                         "data": scraped_event["data"],
                         "horario": scraped_event["horario"],
-                        "local": "Blue Note Rio - Av. Afrânio de Melo Franco, 290, Leblon, Rio de Janeiro",
+                        "local": "Blue Note Rio - Av. Nossa Senhora de Copacabana, 2241, Copacabana, Rio de Janeiro",
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
