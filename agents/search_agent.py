@@ -6,29 +6,28 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
 from pydantic import ValidationError
 
-from config import MODELS, OPENROUTER_API_KEY, OPENROUTER_BASE_URL, SEARCH_CONFIG
+from config import SEARCH_CONFIG
 from models.event_models import ResultadoBuscaCategoria
+from utils.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
+
+# Prefixo para logs deste agente
+LOG_PREFIX = "[SearchAgent] 🔍"
 
 
 class SearchAgent:
     """Agente responsável por buscar eventos em múltiplas fontes."""
 
     def __init__(self):
+        self.log_prefix = "[SearchAgent] 🔍"
 
         # Agente de busca com Perplexity Sonar Pro (busca web em tempo real)
-        self.search_agent = Agent(
+        self.search_agent = AgentFactory.create_agent(
             name="Event Search Agent",
-            model=OpenAIChat(
-                id=MODELS["search"],  # perplexity/sonar-pro
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="search",  # perplexity/sonar-pro
             description="Agente com busca web em tempo real para encontrar eventos culturais no Rio de Janeiro",
             instructions=[
                 f"Você tem acesso à busca web em tempo real. Use para encontrar eventos no Rio de Janeiro "
@@ -47,13 +46,9 @@ class SearchAgent:
         )
 
         # Agente otimizador de queries (usa modelo rápido para melhorar prompts)
-        self.query_optimizer = Agent(
+        self.query_optimizer = AgentFactory.create_agent(
             name="Query Optimizer Agent",
-            model=OpenAIChat(
-                id=MODELS["verify"],  # gpt-5-mini (rápido e barato)
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="light",  # GPT-5 mini - tarefa leve (otimização de queries)
             description="Agente especializado em otimizar e refinar queries de busca",
             instructions=[
                 "Você é um especialista em criar queries de busca otimizadas",
@@ -310,7 +305,7 @@ Não adicione comentários ou explicações, apenas o prompt melhorado.
 
     async def search_all_sources(self) -> dict[str, Any]:
         """Busca eventos usando Perplexity Sonar Pro com 6 micro-searches focadas."""
-        logger.info("Iniciando busca de eventos com Perplexity Sonar Pro...")
+        logger.info(f"{self.log_prefix} Iniciando busca de eventos com Perplexity Sonar Pro...")
 
         # Gerar strings de data dinâmicas
         start_date_str = SEARCH_CONFIG['start_date'].strftime('%d/%m/%Y')
@@ -321,7 +316,7 @@ Não adicione comentários ou explicações, apenas o prompt melhorado.
         # ═══════════════════════════════════════════════════════════
         # ESTRATÉGIA: 6 MICRO-SEARCHES FOCADAS (DRY + Paralelas)
         # ═══════════════════════════════════════════════════════════
-        logger.info("🎯 Criando 6 prompts micro-focados...")
+        logger.info(f"{self.log_prefix} Criando 7 prompts micro-focados...")
 
         # MICRO-SEARCH 1: Jazz
         prompt_jazz = self._build_focused_prompt(
@@ -560,13 +555,13 @@ ESTRATÉGIA DE BUSCA MULTI-STEP:
             month_str=month_str
         )
 
-        logger.info("✓ 7 prompts criados com sucesso")
+        logger.info(f"{self.log_prefix} ✅ 7 prompts criados com sucesso")
 
         try:
             # ═══════════════════════════════════════════════════════════
             # OTIMIZAÇÃO PARALELA DOS 7 PROMPTS
             # ═══════════════════════════════════════════════════════════
-            logger.info("🧠 Otimizando 7 prompts em paralelo com LLM especialista...")
+            logger.info(f"{self.log_prefix} Otimizando 7 prompts em paralelo com LLM...")
 
             # Otimizar todos os prompts em paralelo
             prompts_otimizados = await asyncio.gather(
@@ -590,12 +585,12 @@ ESTRATÉGIA DE BUSCA MULTI-STEP:
                 prompt_artemis_opt,
             ) = prompts_otimizados
 
-            logger.info("✓ Todos os 7 prompts otimizados")
+            logger.info(f"{self.log_prefix} ✅ Todos os 7 prompts otimizados")
 
             # ═══════════════════════════════════════════════════════════
             # EXECUÇÃO PARALELA DAS 7 MICRO-SEARCHES COM PROMPTS OTIMIZADOS
             # ═══════════════════════════════════════════════════════════
-            logger.info("🚀 Executando 7 micro-searches em paralelo...")
+            logger.info(f"{self.log_prefix} Executando 7 micro-searches em paralelo...")
 
             # Executar as 7 buscas em paralelo com prompts otimizados
             results = await asyncio.gather(
@@ -766,48 +761,41 @@ ESTRATÉGIA DE BUSCA MULTI-STEP:
                     return []
 
             # Parse categorias com Pydantic validation
-            logger.info("🔍 DEBUG: Iniciando parse de categorias...")
             eventos_jazz = safe_parse_categoria(result_jazz, "Jazz")
-            logger.info(f"🔍 DEBUG: Jazz parsed - {len(eventos_jazz)} eventos")
+            logger.debug(f"Jazz parsed - {len(eventos_jazz)} eventos")
 
             eventos_comedia = safe_parse_categoria(result_comedia, "Teatro-Comédia")
-            logger.info(f"🔍 DEBUG: Teatro-Comédia parsed - {len(eventos_comedia)} eventos")
+            logger.debug(f"Teatro-Comédia parsed - {len(eventos_comedia)} eventos")
 
             eventos_outdoor = safe_parse_categoria(result_outdoor, "Outdoor-FimDeSemana")
-            logger.info(f"🔍 DEBUG: Outdoor parsed - {len(eventos_outdoor)} eventos")
+            logger.debug(f"Outdoor parsed - {len(eventos_outdoor)} eventos")
 
             # Merge eventos gerais (categorias)
-            logger.info("🔍 DEBUG: Fazendo merge de eventos gerais...")
             todos_eventos_gerais = eventos_jazz + eventos_comedia + eventos_outdoor
-            logger.info(f"🔍 DEBUG: Merge gerais OK - {len(todos_eventos_gerais)} eventos total")
 
             # Criar estrutura de eventos gerais
             eventos_gerais_merged = {"eventos": todos_eventos_gerais}
-            logger.info(f"🔍 DEBUG: Estrutura eventos_gerais_merged criada - type: {type(eventos_gerais_merged)}")
 
             # Parse eventos de venues
-            logger.info("🔍 DEBUG: Iniciando parse de venues...")
             eventos_casa_choro = safe_parse_venue(result_casa_choro, "Casa do Choro")
-            logger.info(f"🔍 DEBUG: Casa do Choro parsed - {len(eventos_casa_choro)} eventos")
+            logger.debug(f"Casa do Choro parsed - {len(eventos_casa_choro)} eventos")
 
             eventos_sala_cecilia = safe_parse_venue(result_sala_cecilia, "Sala Cecília Meireles")
-            logger.info(f"🔍 DEBUG: Sala Cecília Meireles parsed - {len(eventos_sala_cecilia)} eventos")
+            logger.debug(f"Sala Cecília Meireles parsed - {len(eventos_sala_cecilia)} eventos")
 
             eventos_teatro_municipal = safe_parse_venue(result_teatro_municipal, "Teatro Municipal do Rio de Janeiro")
-            logger.info(f"🔍 DEBUG: Teatro Municipal parsed - {len(eventos_teatro_municipal)} eventos")
+            logger.debug(f"Teatro Municipal parsed - {len(eventos_teatro_municipal)} eventos")
 
             eventos_artemis = safe_parse_venue(result_artemis, "Artemis - Torrefação Artesanal e Cafeteria")
-            logger.info(f"🔍 DEBUG: Artemis parsed - {len(eventos_artemis)} eventos")
+            logger.debug(f"Artemis parsed - {len(eventos_artemis)} eventos")
 
             # Criar estrutura de eventos de venues
-            logger.info("🔍 DEBUG: Criando estrutura eventos_locais_merged...")
             eventos_locais_merged = {
                 "Casa do Choro": eventos_casa_choro,
                 "Sala Cecília Meireles": eventos_sala_cecilia,
                 "Teatro Municipal do Rio de Janeiro": eventos_teatro_municipal,
                 "Artemis - Torrefação Artesanal e Cafeteria": eventos_artemis,
             }
-            logger.info(f"🔍 DEBUG: Estrutura eventos_locais_merged criada - type: {type(eventos_locais_merged)}")
 
             total_venues = len(eventos_casa_choro) + len(eventos_sala_cecilia) + len(eventos_teatro_municipal) + len(eventos_artemis)
             logger.info(
@@ -816,20 +804,15 @@ ESTRATÉGIA DE BUSCA MULTI-STEP:
             )
 
             # Retornar no formato compatível com o resto do sistema
-            logger.info("🔍 DEBUG: Serializando para JSON...")
             try:
                 json_geral = json.dumps(eventos_gerais_merged, ensure_ascii=False)
-                logger.info(f"🔍 DEBUG: JSON geral OK - {len(json_geral)} bytes")
-
                 json_especial = json.dumps(eventos_locais_merged, ensure_ascii=False)
-                logger.info(f"🔍 DEBUG: JSON especial OK - {len(json_especial)} bytes")
 
                 result = {
                     "perplexity_geral": json_geral,
                     "perplexity_especial": json_especial,
                     "search_timestamp": datetime.now().isoformat(),
                 }
-                logger.info("🔍 DEBUG: Return dict criado com sucesso")
                 return result
             except Exception as json_error:
                 logger.error(f"❌ Erro na serialização JSON: {json_error}")
@@ -876,29 +859,45 @@ ESTRATÉGIA DE BUSCA MULTI-STEP:
             titulo = event.get("titulo", "")
             data = event.get("data", "")
             local = event.get("local", "")
-            eventos_texto.append(f"{i}. {titulo} - {data} - {local}")
+            eventos_texto.append(f"{i}. {titulo} | Data: {data} | Local: {local}")
 
-        prompt = f"""Encontre os links de compra/informações para estes {len(events_batch)} eventos no Rio de Janeiro:
+        prompt = f"""Você precisa encontrar os links de compra de ingressos para estes {len(events_batch)} eventos específicos no Rio de Janeiro.
 
+EVENTOS:
 {chr(10).join(eventos_texto)}
 
-Para CADA evento, busque o link específico em:
-- Sympla (sympla.com.br)
-- Eventbrite (eventbrite.com.br)
-- Site oficial do venue (Blue Note, Dolores Club, Casa do Choro, etc)
-- Instagram oficial (se tiver link de venda)
+TAREFA:
+Para CADA evento acima, busque o link ESPECÍFICO da página de venda/informações do evento.
 
-Retorne no formato JSON:
+ONDE BUSCAR (em ordem de prioridade):
+1. Sympla.com.br - busque: "titulo evento sympla rio"
+2. Ingresso.com - busque: "titulo evento ingresso.com"
+3. Eventbrite.com.br - busque: "titulo evento eventbrite"
+4. Site oficial do local (Blue Note Rio, Teatro Municipal, Sala Cecília Meireles, Casa do Choro, etc)
+5. Bilheteria Digital, Ticket360, ou outros sistemas de venda
+
+CRITÉRIOS RIGOROSOS:
+✅ ACEITE APENAS links que:
+   - Apontam para a página ESPECÍFICA do evento (não listagem)
+   - Contêm o nome do evento, data ou ID único na URL
+   - Vêm de plataformas confiáveis de venda de ingressos
+
+❌ REJEITE links que:
+   - São homepages genéricas (ex: bluenoterio.com.br/)
+   - São páginas de listagem/agenda (ex: /shows/, /eventos/, /programacao/)
+   - Não mencionam o evento específico
+
+FORMATO DE RESPOSTA (JSON válido):
 {{
-  "1": "URL completo ou null",
-  "2": "URL completo ou null",
+  "1": "https://url-completa-do-evento-1.com/..." ou null,
+  "2": "https://url-completa-do-evento-2.com/..." ou null,
   ...
 }}
 
 IMPORTANTE:
-- Use null (sem aspas) se não encontrar link confiável
-- NÃO retorne links genéricos de homepage
-- Links devem começar com http:// ou https://
+- Se não encontrar link confiável e específico, retorne null (sem aspas)
+- Todos os links devem começar com http:// ou https://
+- Valide se a URL realmente existe antes de retornar
 """
 
         try:
@@ -914,10 +913,27 @@ IMPORTANTE:
             # Parse JSON
             links_map = json.loads(content)
 
-            # Converter chaves para int se necessário
+            # Converter chaves para int se necessário e validar formato
             result = {}
             for key, value in links_map.items():
-                result[str(key)] = value if value and value != "null" else None
+                # Validar que o link não é genérico
+                if value and value != "null" and isinstance(value, str):
+                    # Checar se não é link genérico básico
+                    generic_endings = ['/shows/', '/eventos/', '/agenda/', '/programacao/', '/calendar/']
+                    is_generic = any(value.rstrip('/').endswith(ending.rstrip('/')) for ending in generic_endings)
+
+                    # Também verificar se é apenas homepage (sem path específico)
+                    from urllib.parse import urlparse
+                    parsed = urlparse(value)
+                    path = parsed.path.rstrip('/')
+
+                    if is_generic or not path or path == '/':
+                        logger.warning(f"   ⚠️ Link genérico rejeitado: {value}")
+                        result[str(key)] = None
+                    else:
+                        result[str(key)] = value
+                else:
+                    result[str(key)] = None
 
             return result
 

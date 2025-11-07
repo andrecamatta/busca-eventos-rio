@@ -8,8 +8,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -20,26 +18,25 @@ from tenacity import (
 from config import (
     HTTP_TIMEOUT,
     MAX_RETRIES,
-    MODELS,
-    OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
     SEARCH_CONFIG,
 )
+from utils.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
+
+# Prefixo para logs deste agente
+LOG_PREFIX = "[VerifyAgent] ✔️"
 
 
 class VerifyAgent:
     """Agente responsável por verificar e validar informações de eventos."""
 
     def __init__(self):
-        self.agent = Agent(
+        self.log_prefix = "[VerifyAgent] ✔️"
+
+        self.agent = AgentFactory.create_agent(
             name="Event Verification Agent",
-            model=OpenAIChat(
-                id=MODELS["verify"],  # Claude Sonnet para verificação rigorosa
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="important",  # GPT-5 - tarefa crítica (verificação rigorosa)
             description="Agente especializado em verificar e validar informações de eventos",
             instructions=[
                 "Verificar se as datas dos eventos estão no período correto "
@@ -71,6 +68,12 @@ class VerifyAgent:
         generic_patterns = [
             r'/eventos/[^/]+\?',  # /eventos/categoria?params
             r'/eventos\?',         # /eventos?params
+            r'/eventos/?$',        # /eventos ou /eventos/ no final
+            r'/shows/?$',          # /shows ou /shows/ no final (Blue Note, etc)
+            r'/agenda/?$',         # /agenda ou /agenda/ no final
+            r'/programacao/?$',    # /programacao ou /programacao/ no final
+            r'/calendar/?$',       # /calendar ou /calendar/ no final
+            r'/schedule/?$',       # /schedule ou /schedule/ no final
             r'/busca\?',          # /busca?query=
             r'/search\?',         # /search?q=
             r'[?&]city=',         # query param de cidade
@@ -84,22 +87,28 @@ class VerifyAgent:
             if re.search(pattern, url, re.IGNORECASE):
                 return True
 
-        # Verificar se URL é muito curta (provavelmente genérica)
-        # Ex: ingresso.com/eventos vs ingresso.com/evento/nome-evento-123456
+        # Verificar se URL é homepage (muito curta)
+        # Ex: salaceliciameireles.com.br/ ou casadochoro.com.br/
         path = url.split('?')[0]  # Remover query params
         path_parts = [p for p in path.split('/') if p and p not in ['http:', 'https:', '']]
 
-        # URL específica geralmente tem pelo menos 3 partes: dominio/tipo/identificador
-        if len(path_parts) < 3:
-            # Exceções: alguns domínios têm estrutura diferente
-            if not any(domain in url.lower() for domain in ['bluenote', 'casadeshow', 'teatro']):
+        # URL com apenas domínio (homepage) é genérica
+        if len(path_parts) == 1:
+            return True
+
+        # URL com domínio + apenas 1 segmento genérico também é genérica
+        # Ex: bluenoterio.com.br/shows (2 partes, mas shows é genérico)
+        if len(path_parts) == 2:
+            generic_segments = ['shows', 'eventos', 'events', 'agenda', 'programacao', 'calendar', 'schedule']
+            last_segment = path_parts[-1].lower().rstrip('/')
+            if last_segment in generic_segments:
                 return True
 
         return False
 
     async def verify_events(self, events_json: str) -> dict[str, Any]:
         """Verifica e valida eventos extraídos pelo agente de busca."""
-        logger.info("Iniciando verificação de eventos...")
+        logger.info(f"{self.log_prefix} Iniciando verificação de eventos...")
 
         try:
             events_data = json.loads(events_json) if isinstance(events_json, str) else events_json
@@ -114,7 +123,7 @@ class VerifyAgent:
         verified_data = self._verify_with_llm(events_with_link_validation)
 
         # NOVA CAMADA: Validação individual rigorosa com ValidationAgent
-        logger.info("Iniciando validação individual rigorosa...")
+        logger.info(f"{self.log_prefix} Iniciando validação individual rigorosa...")
         from agents.validation_agent import ValidationAgent
 
         validation_agent = ValidationAgent()
@@ -160,14 +169,24 @@ class VerifyAgent:
     ) -> dict:
         """Valida um único link com retry automático para erros temporários."""
         logger.info(f"Validando link (tentativa {attempt_num}): {link}")
-        response = await client.head(link, timeout=10)
+        response = await client.head(link, timeout=HTTP_TIMEOUT)
         return {
             "valid": 200 <= response.status_code < 400,
             "status_code": response.status_code,
         }
 
-    async def _intelligent_link_search(self, event: dict) -> str | None:
-        """Usa Perplexity para buscar o link correto de um evento."""
+    async def _intelligent_link_search(self, event: dict, attempt: int = 1) -> dict[str, Any]:
+        """Usa Perplexity para buscar o link correto de um evento e valida o conteúdo.
+
+        Returns:
+            dict com: link (str), quality_score (int), validation (dict) ou None se não encontrar
+        """
+        from config import LINK_MAX_INTELLIGENT_SEARCHES, LINK_QUALITY_THRESHOLD
+
+        if attempt > LINK_MAX_INTELLIGENT_SEARCHES:
+            logger.warning(f"{self.log_prefix} Limite de {LINK_MAX_INTELLIGENT_SEARCHES} tentativas atingido para: {event.get('titulo')}")
+            return None
+
         titulo = event.get("titulo", "") or event.get("nome", "")
         data = event.get("data", "")
         horario = event.get("horario", "")
@@ -177,7 +196,7 @@ class VerifyAgent:
         descricao = event.get("descricao_enriquecida") or event.get("descricao", "")
         fontes = event.get("fontes", [])
 
-        logger.info(f"Buscando link correto para: {titulo}")
+        logger.info(f"{self.log_prefix} Buscando link correto (tentativa {attempt}/{LINK_MAX_INTELLIGENT_SEARCHES}): {titulo}")
 
         # Criar agente de busca com Perplexity
         search_agent = Agent(
@@ -202,12 +221,17 @@ class VerifyAgent:
         categoria_info = f"\nCategoria: {categoria}" if categoria else ""
         preco_info = f"\nPreço: {preco}" if preco else ""
 
+        # Se é retry, adicionar contexto do problema anterior
+        retry_context = ""
+        if attempt > 1:
+            retry_context = "\n\n⚠️ TENTATIVA ANTERIOR RETORNOU LINK DE BAIXA QUALIDADE. Por favor, busque um link MAIS ESPECÍFICO que contenha:\n- Título EXATO do evento\n- Data específica\n- Nomes dos artistas/músicos (se houver)\n- Botão de compra de ingresso"
+
         prompt = f"""Encontre o link de compra/informações OFICIAL para este evento no Rio de Janeiro:
 
 Título: {titulo}
 Data: {data}{horario_info}
 Local: {local}{categoria_info}{preco_info}
-Descrição: {descricao[:200]}{fonte_info}
+Descrição: {descricao[:200]}{fonte_info}{retry_context}
 
 IMPORTANTE:
 - Busque o link ESPECÍFICO deste evento, não a página principal do local
@@ -235,19 +259,251 @@ NÃO retorne:
 
             # Validar resposta
             if new_link and new_link != "NONE" and new_link.startswith("http"):
-                logger.info(f"✓ Link encontrado: {new_link}")
-                return new_link
+                logger.info(f"{self.log_prefix} Link encontrado: {new_link}")
+
+                # NOVO: Validar qualidade do link encontrado
+                try:
+                    from agents.validation_agent import ValidationAgent
+
+                    validation_agent = ValidationAgent()
+                    link_info = await validation_agent._fetch_link_info(new_link, event)
+
+                    quality_validation = link_info.get("quality_validation")
+
+                    if quality_validation:
+                        score = quality_validation["score"]
+                        is_quality = quality_validation["is_quality"]
+
+                        if is_quality:
+                            logger.info(f"{self.log_prefix} ✅ Link aprovado (score: {score}/100)")
+                            return {
+                                "link": new_link,
+                                "quality_score": score,
+                                "validation": quality_validation,
+                                "structured_data": link_info.get("structured_data", {}),
+                            }
+                        else:
+                            logger.warning(
+                                f"{self.log_prefix} ❌ Link rejeitado (score: {score}/{LINK_QUALITY_THRESHOLD})"
+                            )
+                            logger.warning(f"{self.log_prefix} Issues: {', '.join(quality_validation['issues'])}")
+
+                            # Retry se ainda tiver tentativas
+                            if attempt < LINK_MAX_INTELLIGENT_SEARCHES:
+                                logger.info(f"{self.log_prefix} Tentando busca novamente com critérios mais rigorosos...")
+                                return await self._intelligent_link_search(event, attempt + 1)
+                            else:
+                                logger.warning(f"{self.log_prefix} Todas tentativas esgotadas. Retornando link mesmo com baixa qualidade.")
+                                return {
+                                    "link": new_link,
+                                    "quality_score": score,
+                                    "validation": quality_validation,
+                                    "low_quality": True,
+                                }
+                    else:
+                        # Sem validação de qualidade (erro), aceitar link
+                        logger.warning(f"{self.log_prefix} Validação de qualidade falhou, aceitando link")
+                        return {"link": new_link, "quality_score": None, "validation": None}
+
+                except Exception as e:
+                    logger.error(f"{self.log_prefix} Erro ao validar qualidade do link: {e}")
+                    # Em caso de erro, retornar link sem validação
+                    return {"link": new_link, "quality_score": None, "validation": None}
+
             else:
-                logger.warning(f"✗ Nenhum link válido encontrado para: {titulo}")
+                logger.warning(f"{self.log_prefix} ✗ Nenhum link válido encontrado para: {titulo}")
                 return None
 
         except Exception as e:
-            logger.error(f"Erro na busca inteligente de link: {e}")
+            logger.error(f"{self.log_prefix} Erro na busca inteligente de link: {e}")
             return None
 
+    async def _validate_single_event_link(
+        self, event: dict, client: httpx.AsyncClient
+    ) -> dict:
+        """Valida o link de um único evento com retry e busca inteligente.
+
+        Args:
+            event: Evento a validar
+            client: Cliente HTTP assíncrono compartilhado
+
+        Returns:
+            Dicionário com estatísticas da validação deste evento
+        """
+        stats = {
+            "total_links": 0,
+            "validated_first_try": 0,
+            "failed_all_retries": 0,
+            "intelligent_searches": 0,
+            "links_fixed": 0,
+            "no_retry_needed": 0,
+            "generic_links_detected": 0,
+        }
+
+        link = event.get("link") or event.get("link_ingresso") or event.get("ticket_link")
+
+        if not link:
+            event["link_valid"] = None
+            return stats
+
+        # Detectar placeholder "INCOMPLETO" e ir direto para busca inteligente
+        if link in ["INCOMPLETO", "incompleto", "/INCOMPLETO", "NONE", "none"]:
+            logger.info(f"→ Link placeholder detectado ({link}), iniciando busca inteligente: {event.get('titulo')}")
+            stats["total_links"] += 1
+            stats["intelligent_searches"] += 1
+
+            link_result = await self._intelligent_link_search(event)
+
+            if link_result and link_result.get("link"):
+                new_link = link_result["link"]
+                event["link_original"] = link
+                event["link"] = new_link
+                event["link_updated_by_ai"] = True
+                event["link_quality_score"] = link_result.get("quality_score")
+                event["link_quality_validation"] = link_result.get("validation")
+
+                # Armazenar dados estruturados extraídos do link
+                if link_result.get("structured_data"):
+                    event["link_structured_data"] = link_result["structured_data"]
+
+                # Link já foi validado no _intelligent_link_search
+                event["link_valid"] = True
+                event["link_status_code"] = 200
+                stats["links_fixed"] += 1
+                logger.info(f"✓ Link corrigido com sucesso: {new_link}")
+            else:
+                event["link_valid"] = False
+                event["link_error"] = "Placeholder sem link válido encontrado"
+                event["requires_manual_link_check"] = True
+                logger.warning(f"⚠ Nenhum link encontrado para: {event.get('titulo')}")
+
+            return stats
+
+        # Detectar link genérico (página de busca/categoria) e ir para busca inteligente
+        if self._is_generic_link(link):
+            logger.info(f"🚫 Link genérico detectado, iniciando busca inteligente: {link[:80]}...")
+            stats["total_links"] += 1
+            stats["generic_links_detected"] += 1
+            stats["intelligent_searches"] += 1
+
+            link_result = await self._intelligent_link_search(event)
+
+            if link_result and link_result.get("link"):
+                new_link = link_result["link"]
+                event["link_original"] = link
+                event["link"] = new_link
+                event["link_updated_by_ai"] = True
+                event["link_was_generic"] = True
+                event["link_quality_score"] = link_result.get("quality_score")
+                event["link_quality_validation"] = link_result.get("validation")
+
+                # Armazenar dados estruturados extraídos do link
+                if link_result.get("structured_data"):
+                    event["link_structured_data"] = link_result["structured_data"]
+
+                # Link já foi validado no _intelligent_link_search
+                event["link_valid"] = True
+                event["link_status_code"] = 200
+                stats["links_fixed"] += 1
+                logger.info(f"✓ Link genérico substituído por link específico: {new_link}")
+            else:
+                # Nenhum link específico encontrado, manter genérico mas marcar
+                event["link_valid"] = False
+                event["link_is_generic"] = True
+                event["link_error"] = "Link genérico - página de busca/categoria"
+                event["requires_manual_link_check"] = True
+                logger.warning(f"⚠ Nenhum link específico encontrado para: {event.get('titulo')}")
+
+            return stats
+
+        stats["total_links"] += 1
+        original_link = link
+
+        try:
+            # Tentar validar com retry automático
+            result = await self._validate_single_link(client, link, attempt_num=1)
+            event["link_valid"] = result["valid"]
+            event["link_status_code"] = result["status_code"]
+            stats["validated_first_try"] += 1
+            logger.info(f"✓ Link válido: {link} (status: {result['status_code']})")
+
+        except Exception as e:
+            # Verificar se é erro que não deve ter retry (404, 403, etc)
+            if isinstance(e, httpx.HTTPStatusError):
+                if e.response.status_code in [404, 403, 401, 410]:
+                    # Erros permanentes - não fazer retry
+                    event["link_valid"] = False
+                    event["link_status_code"] = e.response.status_code
+                    event["link_error"] = f"HTTP {e.response.status_code}"
+                    stats["no_retry_needed"] += 1
+                    logger.warning(f"✗ Link com erro permanente: {link} ({e.response.status_code})")
+
+                    # Ir direto para busca inteligente
+                    stats["intelligent_searches"] += 1
+                    link_result = await self._intelligent_link_search(event)
+
+                    if link_result and link_result.get("link") and link_result["link"] != original_link:
+                        new_link = link_result["link"]
+                        event["link_original"] = original_link
+                        event["link"] = new_link
+                        event["link_updated_by_ai"] = True
+                        event["link_quality_score"] = link_result.get("quality_score")
+                        event["link_quality_validation"] = link_result.get("validation")
+
+                        # Armazenar dados estruturados extraídos do link
+                        if link_result.get("structured_data"):
+                            event["link_structured_data"] = link_result["structured_data"]
+
+                        # Link já foi validado no _intelligent_link_search
+                        event["link_valid"] = True
+                        event["link_status_code"] = 200
+                        stats["links_fixed"] += 1
+                        logger.info(f"✓ Link corrigido com sucesso: {new_link}")
+
+                    return stats
+
+            # Todas as tentativas de retry falharam (timeout, connection error, etc)
+            logger.warning(f"✗ Todas as {MAX_RETRIES} tentativas falharam para: {link}")
+            logger.warning(f"   Erro: {type(e).__name__}: {e}")
+
+            event["link_valid"] = False
+            event["link_error"] = f"{type(e).__name__}: {str(e)}"
+            event["link_validation_failed"] = True
+            stats["failed_all_retries"] += 1
+
+            # Tentar busca inteligente como último recurso
+            logger.info(f"→ Tentando busca inteligente para: {event.get('titulo')}")
+            stats["intelligent_searches"] += 1
+
+            link_result = await self._intelligent_link_search(event)
+
+            if link_result and link_result.get("link") and link_result["link"] != original_link:
+                new_link = link_result["link"]
+                event["link_original"] = original_link
+                event["link"] = new_link
+                event["link_updated_by_ai"] = True
+                event["link_quality_score"] = link_result.get("quality_score")
+                event["link_quality_validation"] = link_result.get("validation")
+
+                # Armazenar dados estruturados extraídos do link
+                if link_result.get("structured_data"):
+                    event["link_structured_data"] = link_result["structured_data"]
+
+                # Link já foi validado no _intelligent_link_search
+                event["link_valid"] = True
+                event["link_status_code"] = 200
+                stats["links_fixed"] += 1
+                logger.info(f"✓ Link corrigido com sucesso: {new_link}")
+            else:
+                # Marcar para revisão manual
+                event["requires_manual_link_check"] = True
+                logger.warning(f"⚠ Evento requer revisão manual de link: {event.get('titulo')}")
+
+        return stats
+
     async def _validate_links(self, events: dict | list) -> dict | list:
-        """Valida se os links de eventos são acessíveis com retry e busca inteligente."""
-        logger.info("Validando links de eventos com retry automático...")
+        """Valida se os links de eventos são acessíveis com retry e busca inteligente (paralelizado)."""
+        logger.info(f"{self.log_prefix} Validando links de eventos em paralelo com retry automático...")
 
         # Extrair eventos da estrutura complexa do structured_events.json
         event_list = []
@@ -268,7 +524,7 @@ NÃO retorne:
         else:
             event_list = events
 
-        # Estatísticas de validação
+        # Estatísticas agregadas
         stats = {
             "total_links": 0,
             "validated_first_try": 0,
@@ -276,165 +532,27 @@ NÃO retorne:
             "failed_all_retries": 0,
             "intelligent_searches": 0,
             "links_fixed": 0,
-            "no_retry_needed": 0,  # HTTP 404, 403, etc
-            "generic_links_detected": 0,  # Links genéricos detectados
+            "no_retry_needed": 0,
+            "generic_links_detected": 0,
         }
 
+        # Validar todos os links em paralelo
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
-            for event in event_list:
-                link = event.get("link") or event.get("link_ingresso") or event.get("ticket_link")
+            # Criar tasks para validar todos os eventos em paralelo
+            validation_tasks = [
+                self._validate_single_event_link(event, client)
+                for event in event_list
+            ]
 
-                if not link:
-                    event["link_valid"] = None
-                    continue
+            # Executar todas as validações em paralelo
+            logger.info(f"Iniciando validação paralela de {len(event_list)} links...")
+            validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
 
-                # Detectar placeholder "INCOMPLETO" e ir direto para busca inteligente
-                if link in ["INCOMPLETO", "incompleto", "/INCOMPLETO", "NONE", "none"]:
-                    logger.info(f"→ Link placeholder detectado ({link}), iniciando busca inteligente: {event.get('titulo')}")
-                    stats["total_links"] += 1
-                    stats["intelligent_searches"] += 1
-
-                    new_link = await self._intelligent_link_search(event)
-
-                    if new_link and new_link not in ["INCOMPLETO", "NONE", "none"]:
-                        event["link_original"] = link
-                        event["link"] = new_link
-                        event["link_updated_by_ai"] = True
-
-                        # Validar novo link (1 tentativa)
-                        try:
-                            result = await self._validate_single_link(client, new_link, attempt_num=1)
-                            event["link_valid"] = result["valid"]
-                            event["link_status_code"] = result["status_code"]
-                            stats["links_fixed"] += 1
-                            logger.info(f"✓ Link corrigido com sucesso: {new_link}")
-                        except Exception as e:
-                            event["link_valid"] = False
-                            event["link_error"] = f"Novo link falhou: {type(e).__name__}"
-                            logger.warning(f"✗ Novo link também falhou: {new_link}")
-                    else:
-                        event["link_valid"] = False
-                        event["link_error"] = "Placeholder sem link válido encontrado"
-                        event["requires_manual_link_check"] = True
-                        logger.warning(f"⚠ Nenhum link encontrado para: {event.get('titulo')}")
-
-                    continue
-
-                # Detectar link genérico (página de busca/categoria) e ir para busca inteligente
-                if self._is_generic_link(link):
-                    logger.info(f"🚫 Link genérico detectado, iniciando busca inteligente: {link[:80]}...")
-                    stats["total_links"] += 1
-                    stats["generic_links_detected"] += 1
-                    stats["intelligent_searches"] += 1
-
-                    new_link = await self._intelligent_link_search(event)
-
-                    if new_link and not self._is_generic_link(new_link):
-                        event["link_original"] = link
-                        event["link"] = new_link
-                        event["link_updated_by_ai"] = True
-                        event["link_was_generic"] = True
-
-                        # Validar novo link (1 tentativa)
-                        try:
-                            result = await self._validate_single_link(client, new_link, attempt_num=1)
-                            event["link_valid"] = result["valid"]
-                            event["link_status_code"] = result["status_code"]
-                            stats["links_fixed"] += 1
-                            logger.info(f"✓ Link genérico substituído por link específico: {new_link}")
-                        except Exception as e:
-                            event["link_valid"] = False
-                            event["link_error"] = f"Novo link falhou: {type(e).__name__}"
-                            logger.warning(f"✗ Novo link também falhou: {new_link}")
-                    else:
-                        # Nenhum link específico encontrado, manter genérico mas marcar
-                        event["link_valid"] = False
-                        event["link_is_generic"] = True
-                        event["link_error"] = "Link genérico - página de busca/categoria"
-                        event["requires_manual_link_check"] = True
-                        logger.warning(f"⚠ Nenhum link específico encontrado para: {event.get('titulo')}")
-
-                    continue
-
-                stats["total_links"] += 1
-                original_link = link
-
-                try:
-                    # Tentar validar com retry automático
-                    result = await self._validate_single_link(client, link, attempt_num=1)
-                    event["link_valid"] = result["valid"]
-                    event["link_status_code"] = result["status_code"]
-                    stats["validated_first_try"] += 1
-                    logger.info(f"✓ Link válido: {link} (status: {result['status_code']})")
-
-                except Exception as e:
-                    # Verificar se é erro que não deve ter retry (404, 403, etc)
-                    if isinstance(e, httpx.HTTPStatusError):
-                        if e.response.status_code in [404, 403, 401, 410]:
-                            # Erros permanentes - não fazer retry
-                            event["link_valid"] = False
-                            event["link_status_code"] = e.response.status_code
-                            event["link_error"] = f"HTTP {e.response.status_code}"
-                            stats["no_retry_needed"] += 1
-                            logger.warning(f"✗ Link com erro permanente: {link} ({e.response.status_code})")
-
-                            # Ir direto para busca inteligente
-                            stats["intelligent_searches"] += 1
-                            new_link = await self._intelligent_link_search(event)
-
-                            if new_link and new_link != original_link:
-                                event["link_original"] = original_link
-                                event["link"] = new_link
-                                event["link_updated_by_ai"] = True
-
-                                # Validar novo link (1 tentativa apenas)
-                                try:
-                                    result = await self._validate_single_link(client, new_link, attempt_num=1)
-                                    event["link_valid"] = result["valid"]
-                                    event["link_status_code"] = result["status_code"]
-                                    stats["links_fixed"] += 1
-                                    logger.info(f"✓ Link corrigido com sucesso: {new_link}")
-                                except Exception:
-                                    event["link_valid"] = False
-                                    logger.warning(f"✗ Novo link também falhou: {new_link}")
-
-                            continue
-
-                    # Todas as tentativas de retry falharam (timeout, connection error, etc)
-                    logger.warning(f"✗ Todas as {MAX_RETRIES} tentativas falharam para: {link}")
-                    logger.warning(f"   Erro: {type(e).__name__}: {e}")
-
-                    event["link_valid"] = False
-                    event["link_error"] = f"{type(e).__name__}: {str(e)}"
-                    event["link_validation_failed"] = True
-                    stats["failed_all_retries"] += 1
-
-                    # Tentar busca inteligente como último recurso
-                    logger.info(f"→ Tentando busca inteligente para: {event.get('titulo')}")
-                    stats["intelligent_searches"] += 1
-
-                    new_link = await self._intelligent_link_search(event)
-
-                    if new_link and new_link != original_link:
-                        event["link_original"] = original_link
-                        event["link"] = new_link
-                        event["link_updated_by_ai"] = True
-
-                        # Validar novo link (1 tentativa apenas)
-                        try:
-                            result = await self._validate_single_link(client, new_link, attempt_num=1)
-                            event["link_valid"] = result["valid"]
-                            event["link_status_code"] = result["status_code"]
-                            stats["links_fixed"] += 1
-                            logger.info(f"✓ Link corrigido com sucesso: {new_link}")
-                        except Exception as e2:
-                            event["link_valid"] = False
-                            event["link_error"] = f"Novo link falhou: {type(e2).__name__}"
-                            logger.warning(f"✗ Novo link também falhou: {new_link}")
-                    else:
-                        # Marcar para revisão manual
-                        event["requires_manual_link_check"] = True
-                        logger.warning(f"⚠ Evento requer revisão manual de link: {event.get('titulo')}")
+            # Agregar estatísticas
+            for result in validation_results:
+                if isinstance(result, dict):
+                    for key in stats:
+                        stats[key] += result.get(key, 0)
 
         # Log de estatísticas
         logger.info(f"\n{'='*60}")

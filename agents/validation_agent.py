@@ -8,34 +8,31 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
 from bs4 import BeautifulSoup
 
 from config import (
     HTTP_TIMEOUT,
-    MODELS,
-    OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
     SEARCH_CONFIG,
     VALIDATION_STRICTNESS,
     VENUE_ADDRESSES,
 )
+from utils.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
+
+# Prefixo para logs deste agente
+LOG_PREFIX = "[ValidationAgent] ⚖️"
 
 
 class ValidationAgent:
     """Agente especializado em validação individual inteligente com LLM."""
 
     def __init__(self):
-        self.agent = Agent(
+        self.log_prefix = "[ValidationAgent] ⚖️"
+
+        self.agent = AgentFactory.create_agent(
             name="Event Validation Agent",
-            model=OpenAIChat(
-                id=MODELS["format"],  # Gemini Flash - rápido e econômico
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="important",  # GPT-5 - tarefa crítica (validação de eventos)
             description="Agente especializado em validação inteligente de eventos usando LLM",
             instructions=[
                 "Validar eventos de forma inteligente e flexível",
@@ -48,14 +45,14 @@ class ValidationAgent:
 
     async def validate_events_batch(self, events: list[dict]) -> dict[str, Any]:
         """Valida um lote de eventos individualmente."""
-        logger.info(f"Validando {len(events)} eventos (modo: {VALIDATION_STRICTNESS})...")
+        logger.info(f"{self.log_prefix} Validando {len(events)} eventos (modo: {VALIDATION_STRICTNESS})...")
 
         validated_events = []
         rejected_events = []
         validation_warnings = []
 
         # Criar tasks para validar todos os eventos em paralelo
-        logger.info(f"Iniciando validação paralela de {len(events)} eventos...")
+        logger.info(f"{self.log_prefix} Iniciando validação paralela de {len(events)} eventos...")
         validation_tasks = [
             self.validate_event_individually(event)
             for event in events
@@ -127,7 +124,7 @@ class ValidationAgent:
         # 2. Buscar informações do link (se tiver)
         link = event.get("link_ingresso") or event.get("link", "")
         if link:
-            link_info = await self._fetch_link_info(link)
+            link_info = await self._fetch_link_info(link, event)  # Passar evento para validação de qualidade
             evidences["link"] = link_info
 
             # VALIDAÇÃO AUTOMÁTICA DE DATA: Comparar data do evento com data extraída do link
@@ -136,31 +133,72 @@ class ValidationAgent:
                 event_date = event.get("data", "").split()[0]  # Remove horário se presente
 
                 if event_date and event_date not in extracted_dates:
-                    logger.warning(
-                        f"⚠️  DATA DIVERGENTE: Evento informa '{event_date}', "
-                        f"mas link contém {extracted_dates}"
-                    )
+                    # Para festivais multi-dia, verificar se data está dentro do range
+                    is_multi_day_event = len(extracted_dates) > 1
 
-                    # Modo STRICT: Rejeitar imediatamente
-                    if VALIDATION_STRICTNESS == "strict":
-                        return {
-                            "approved": False,
-                            "reason": f"Data divergente: evento informa {event_date}, mas link oficial contém {extracted_dates[0]}. Rejeitado em modo strict.",
-                            "confidence": 0,
-                            "date_mismatch": True,
-                        }
+                    if is_multi_day_event:
+                        try:
+                            # Converter datas para objetos datetime
+                            event_date_obj = datetime.strptime(event_date, "%d/%m/%Y")
+                            dates_objs = [datetime.strptime(d, "%d/%m/%Y") for d in extracted_dates]
 
-                    # Modo PERMISSIVE: Corrigir data automaticamente
+                            # Verificar se a data do evento está dentro do range
+                            min_date = min(dates_objs)
+                            max_date = max(dates_objs)
+
+                            if min_date <= event_date_obj <= max_date:
+                                logger.info(
+                                    f"✓ Festival multi-dia detectado: data {event_date} está dentro do range "
+                                    f"({min_date.strftime('%d/%m/%Y')} a {max_date.strftime('%d/%m/%Y')})"
+                                )
+                                evidences["date"]["is_within_festival_range"] = True
+                                evidences["date"]["festival_start"] = min_date.strftime("%d/%m/%Y")
+                                evidences["date"]["festival_end"] = max_date.strftime("%d/%m/%Y")
+                                # Data está OK, continuar validação
+                            else:
+                                raise ValueError("Data fora do range do festival")
+
+                        except (ValueError, TypeError):
+                            # Se não conseguir parsear ou data estiver fora do range
+                            logger.warning(
+                                f"⚠️  DATA DIVERGENTE: Evento informa '{event_date}', "
+                                f"mas festival vai de {min(extracted_dates)} a {max(extracted_dates)}"
+                            )
+
+                            if VALIDATION_STRICTNESS == "strict":
+                                return {
+                                    "approved": False,
+                                    "reason": f"Data {event_date} fora do range do festival ({min(extracted_dates)} a {max(extracted_dates)}). Rejeitado em modo strict.",
+                                    "confidence": 0,
+                                    "date_mismatch": True,
+                                }
                     else:
-                        logger.info(
-                            f"✓ Corrigindo data automaticamente: {event_date} → {extracted_dates[0]}"
+                        # Evento de um único dia com data divergente
+                        logger.warning(
+                            f"⚠️  DATA DIVERGENTE: Evento informa '{event_date}', "
+                            f"mas link contém {extracted_dates}"
                         )
-                        event["data_original"] = event_date
-                        event["data"] = extracted_dates[0]
-                        event["data_corrigida_automaticamente"] = True
-                        evidences["date"]["corrected"] = True
-                        evidences["date"]["original_date"] = event_date
-                        evidences["date"]["corrected_date"] = extracted_dates[0]
+
+                        # Modo STRICT: Rejeitar imediatamente
+                        if VALIDATION_STRICTNESS == "strict":
+                            return {
+                                "approved": False,
+                                "reason": f"Data divergente: evento informa {event_date}, mas link oficial contém {extracted_dates[0]}. Rejeitado em modo strict.",
+                                "confidence": 0,
+                                "date_mismatch": True,
+                            }
+
+                        # Modo PERMISSIVE: Corrigir data automaticamente
+                        else:
+                            logger.info(
+                                f"✓ Corrigindo data automaticamente: {event_date} → {extracted_dates[0]}"
+                            )
+                            event["data_original"] = event_date
+                            event["data"] = extracted_dates[0]
+                            event["data_corrigida_automaticamente"] = True
+                            evidences["date"]["corrected"] = True
+                            evidences["date"]["original_date"] = event_date
+                            evidences["date"]["corrected_date"] = extracted_dates[0]
         else:
             evidences["link"] = {"status": "no_link", "reason": "Link não fornecido"}
 
@@ -169,8 +207,13 @@ class ValidationAgent:
 
         return llm_decision
 
-    async def _fetch_link_info(self, link: str) -> dict[str, Any]:
-        """Busca informações do link (status HTTP + conteúdo)."""
+    async def _fetch_link_info(self, link: str, event: dict = None) -> dict[str, Any]:
+        """Busca informações do link (status HTTP + conteúdo estruturado).
+
+        Args:
+            link: URL para validar
+            event: Dados do evento (opcional, para validação de qualidade)
+        """
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
                 response = await client.get(link, timeout=15)
@@ -188,15 +231,47 @@ class ValidationAgent:
                     except Exception as e:
                         logger.warning(f"Erro ao extrair texto da página: {e}")
                         page_text = ""
+                        soup = None
 
                     # Extrair datas do conteúdo
                     extracted_date = self._extract_date_from_content(page_text)
+
+                    # Extrair dados estruturados (novo)
+                    structured_data = {}
+                    if soup:
+                        try:
+                            structured_data = self._extract_structured_data(soup, page_text)
+                            # Adicionar data extraída aos dados estruturados
+                            structured_data["extracted_date"] = extracted_date
+                        except Exception as e:
+                            logger.warning(f"{self.log_prefix} Erro ao extrair dados estruturados: {e}")
+
+                    # Validar qualidade do link (novo)
+                    quality_validation = None
+                    if event and structured_data:
+                        try:
+                            # Combinar dados estruturados com extração de data
+                            validation_data = {**structured_data, "extracted_date": extracted_date}
+                            quality_validation = self._validate_link_quality(validation_data, event)
+
+                            logger.info(
+                                f"{self.log_prefix} Link quality score: {quality_validation['score']}/100 "
+                                f"({'✅ APROVADO' if quality_validation['is_quality'] else '❌ REJEITADO'})"
+                            )
+
+                            if quality_validation['issues']:
+                                logger.debug(f"{self.log_prefix} Issues: {', '.join(quality_validation['issues'])}")
+
+                        except Exception as e:
+                            logger.warning(f"{self.log_prefix} Erro ao validar qualidade do link: {e}")
 
                     return {
                         "status": "accessible",
                         "status_code": 200,
                         "content_preview": page_text,
                         "extracted_date": extracted_date,
+                        "structured_data": structured_data,  # Novo
+                        "quality_validation": quality_validation,  # Novo
                     }
                 elif response.status_code == 404:
                     return {
@@ -285,6 +360,222 @@ class ValidationAgent:
             }
         else:
             return {"found": False, "dates": []}
+
+    def _extract_structured_data(self, soup: BeautifulSoup, page_text: str) -> dict[str, Any]:
+        """Extrai dados estruturados da página do evento.
+
+        Returns:
+            dict com: title, artists, time, price, purchase_link, description
+        """
+        data = {
+            "title": None,
+            "artists": [],
+            "time": None,
+            "price": None,
+            "purchase_links": [],
+            "description": None,
+        }
+
+        # Extrair título da página
+        # Prioridade: og:title, meta twitter:title, h1, title tag
+        og_title = soup.find("meta", property="og:title")
+        if og_title and og_title.get("content"):
+            data["title"] = og_title["content"].strip()
+        else:
+            twitter_title = soup.find("meta", attrs={"name": "twitter:title"})
+            if twitter_title and twitter_title.get("content"):
+                data["title"] = twitter_title["content"].strip()
+            else:
+                h1 = soup.find("h1")
+                if h1:
+                    data["title"] = h1.get_text().strip()
+                else:
+                    title_tag = soup.find("title")
+                    if title_tag:
+                        data["title"] = title_tag.get_text().strip()
+
+        # Extrair artistas/músicos
+        # Padrões comuns: "com Fulano", "participação de", "apresenta", nomes próprios
+        artist_patterns = [
+            r'(?:com|Com|featuring|Featuring|ft\.|Ft\.)\s+([A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõ\s]+(?:[A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõ]+)*)',
+            r'(?:participação de|Participação de|apresenta|Apresenta)\s+([A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõ\s]+(?:[A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõ]+)*)',
+            r'(?:solista|Solista|maestro|Maestro)\s*:\s*([A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõ\s]+(?:[A-ZÁÉÍÓÚÂÊÔÃÕ][a-záéíóúâêôãõ]+)*)',
+        ]
+
+        for pattern in artist_patterns:
+            matches = re.findall(pattern, page_text)
+            for match in matches:
+                artist_name = match.strip()
+                # Filtrar nomes muito curtos ou genéricos
+                if len(artist_name) > 4 and artist_name.lower() not in ["consultar", "confirmar", "definir"]:
+                    if artist_name not in data["artists"]:
+                        data["artists"].append(artist_name)
+
+        # Extrair horário
+        # Padrões: "19h", "19h00", "19:00", "às 19h"
+        time_patterns = [
+            r'(\d{1,2})[h:](\d{2})',  # 19h00 ou 19:00
+            r'(\d{1,2})h',  # 19h
+            r'às\s+(\d{1,2})[h:](\d{2})?',  # às 19h ou às 19h00
+        ]
+
+        for pattern in time_patterns:
+            match = re.search(pattern, page_text)
+            if match:
+                groups = match.groups()
+                hour = groups[0]
+                minute = groups[1] if len(groups) > 1 and groups[1] else "00"
+                data["time"] = f"{hour.zfill(2)}:{minute.zfill(2) if minute else '00'}"
+                break
+
+        # Extrair preço
+        # Padrões: "R$ 50", "R$50,00", "a partir de R$ 30"
+        price_patterns = [
+            r'R\$\s*(\d+(?:,\d{2})?)',
+            r'(\d+)\s*reais',
+            r'a partir de\s+R\$\s*(\d+)',
+        ]
+
+        for pattern in price_patterns:
+            match = re.search(pattern, page_text)
+            if match:
+                price_value = match.group(1).replace(",", ".")
+                data["price"] = f"R$ {price_value}"
+                break
+
+        # Extrair links de compra
+        # Procurar por links com palavras-chave de compra
+        purchase_keywords = ["ingresso", "comprar", "ticket", "compra", "venda", "reserva", "sympla", "eventbrite"]
+        links = soup.find_all("a", href=True)
+
+        for link in links:
+            href = link.get("href", "")
+            link_text = link.get_text().lower()
+
+            # Verificar se é link de compra
+            is_purchase_link = any(keyword in link_text for keyword in purchase_keywords)
+            is_purchase_link = is_purchase_link or any(keyword in href.lower() for keyword in ["sympla.com", "eventbrite.com", "ticket"])
+
+            if is_purchase_link and href.startswith("http"):
+                if href not in data["purchase_links"]:
+                    data["purchase_links"].append(href)
+
+        # Extrair descrição
+        # Prioridade: og:description, meta description, primeiro parágrafo
+        og_desc = soup.find("meta", property="og:description")
+        if og_desc and og_desc.get("content"):
+            data["description"] = og_desc["content"].strip()
+        else:
+            meta_desc = soup.find("meta", attrs={"name": "description"})
+            if meta_desc and meta_desc.get("content"):
+                data["description"] = meta_desc["content"].strip()
+            else:
+                # Procurar primeiro parágrafo significativo
+                paragraphs = soup.find_all("p")
+                for p in paragraphs:
+                    text = p.get_text().strip()
+                    if len(text) > 50:  # Parágrafo com conteúdo significativo
+                        data["description"] = text
+                        break
+
+        return data
+
+    def _validate_link_quality(self, extracted_data: dict, event: dict) -> dict[str, Any]:
+        """Valida qualidade do link baseado nos dados extraídos.
+
+        Returns:
+            dict com: score (0-100), is_quality, issues (lista de problemas)
+        """
+        from config import LINK_QUALITY_THRESHOLD, ACCEPT_GENERIC_EVENTS
+
+        score = 0
+        issues = []
+
+        # Peso: Título específico (30 pontos)
+        if extracted_data.get("title"):
+            title = extracted_data["title"].lower()
+            event_title = event.get("titulo", "").lower()
+
+            # Verificar se título da página corresponde ao evento
+            # Tolerância: pelo menos 50% de palavras em comum
+            title_words = set(title.split())
+            event_words = set(event_title.split())
+
+            if title_words and event_words:
+                common_words = title_words & event_words
+                similarity = len(common_words) / max(len(event_words), 1)
+
+                if similarity > 0.5:
+                    score += 30
+                elif similarity > 0.3:
+                    score += 15
+                    issues.append("Título da página não corresponde bem ao evento")
+                else:
+                    issues.append("Título da página muito diferente do evento")
+            else:
+                score += 10  # Pelo menos tem um título
+        else:
+            issues.append("Página sem título identificável")
+
+        # Peso: Artistas específicos (25 pontos)
+        if extracted_data.get("artists") and len(extracted_data["artists"]) > 0:
+            score += 25
+        else:
+            # Verificar se é tipo de evento que aceita genérico
+            event_title_lower = event.get("titulo", "").lower()
+            is_acceptable_generic = any(
+                generic_type in event_title_lower
+                for generic_type in ACCEPT_GENERIC_EVENTS
+            )
+
+            if is_acceptable_generic:
+                score += 15  # Aceita sem artistas específicos, mas com penalidade
+                issues.append("Evento sem artistas específicos (aceitável para este tipo)")
+            else:
+                issues.append("Página não menciona artistas/músicos específicos")
+
+        # Peso: Data encontrada (15 pontos)
+        if extracted_data.get("extracted_date", {}).get("found"):
+            score += 15
+        else:
+            issues.append("Data não encontrada na página")
+
+        # Peso: Horário específico (10 pontos)
+        if extracted_data.get("time"):
+            score += 10
+        else:
+            issues.append("Horário não encontrado")
+
+        # Peso: Preço ou indicação de valor (10 pontos)
+        if extracted_data.get("price"):
+            score += 10
+        elif "consultar" in event.get("preco", "").lower():
+            score += 5  # Aceita "consultar" com penalidade
+
+        # Peso: Link de compra funcional (10 pontos)
+        if extracted_data.get("purchase_links") and len(extracted_data["purchase_links"]) > 0:
+            score += 10
+        else:
+            issues.append("Link de compra de ingresso não encontrado na página")
+
+        # Bônus: Descrição detalhada (5 pontos adicionais)
+        if extracted_data.get("description") and len(extracted_data.get("description", "")) > 100:
+            score += 5
+
+        # Penalidade: Link é homepage genérica (-20 pontos)
+        if extracted_data.get("is_generic_page"):
+            score -= 20
+            issues.append("Link é página genérica (homepage/listagem)")
+
+        # Garantir score entre 0-100
+        score = max(0, min(100, score))
+
+        return {
+            "score": score,
+            "is_quality": score >= LINK_QUALITY_THRESHOLD,
+            "issues": issues,
+            "threshold": LINK_QUALITY_THRESHOLD,
+        }
 
     async def _analyze_with_llm(self, event: dict, evidences: dict) -> dict[str, Any]:
         """Usa LLM (Gemini Flash) para análise final inteligente do evento."""

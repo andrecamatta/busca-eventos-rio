@@ -5,25 +5,24 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
-
-from config import MAX_DESCRIPTION_LENGTH, MODELS, OPENROUTER_API_KEY, OPENROUTER_BASE_URL
+from config import MAX_DESCRIPTION_LENGTH
+from utils.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
+
+# Prefixo para logs deste agente
+LOG_PREFIX = "[FormatAgent] 📝"
 
 
 class FormatAgent:
     """Agente responsável por formatar eventos para compartilhamento no WhatsApp."""
 
     def __init__(self):
-        self.agent = Agent(
+        self.log_prefix = "[FormatAgent] 📝"
+
+        self.agent = AgentFactory.create_agent(
             name="Event Format Agent",
-            model=OpenAIChat(
-                id=MODELS["format"],
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="light",  # GPT-5 mini - tarefa leve (formatação WhatsApp)
             description="Agente especializado em formatar eventos para compartilhamento no WhatsApp",
             instructions=[
                 "Organizar eventos em ordem crescente por data",
@@ -39,7 +38,7 @@ class FormatAgent:
 
     def format_for_whatsapp(self, verified_events: dict[str, Any]) -> str:
         """Formata eventos verificados para compartilhamento no WhatsApp."""
-        logger.info("Formatando eventos para WhatsApp...")
+        logger.info(f"{self.log_prefix} Formatando eventos para WhatsApp...")
 
         # Extrair lista de eventos
         if isinstance(verified_events, dict):
@@ -114,7 +113,7 @@ Não inclua explicações adicionais.
                 if formatted_message.startswith("text") or formatted_message.startswith("plaintext"):
                     formatted_message = formatted_message.split("\n", 1)[1]
 
-            logger.info("Formatação concluída com sucesso")
+            logger.info(f"{self.log_prefix} ✅ Formatação concluída com sucesso")
             return formatted_message.strip()
 
         except Exception as e:

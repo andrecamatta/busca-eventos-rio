@@ -1,12 +1,10 @@
 """Agente de enriquecimento inteligente de descrições de eventos."""
 
+import asyncio
 import json
 import logging
 import re
 from typing import Any
-
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
 
 from config import (
     ENRICHMENT_BATCH_SIZE,
@@ -15,26 +13,25 @@ from config import (
     ENRICHMENT_MAX_SEARCHES,
     ENRICHMENT_MIN_DESC_LENGTH,
     MAX_DESCRIPTION_LENGTH,
-    MODELS,
-    OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
 )
+from utils.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
+
+# Prefixo para logs deste agente
+LOG_PREFIX = "[EnrichmentAgent] 💎"
 
 
 class EnrichmentAgent:
     """Agente especializado em enriquecer descrições genéricas de eventos."""
 
     def __init__(self):
-        # Agent para busca web com Perplexity
-        self.search_agent = Agent(
+        self.log_prefix = "[EnrichmentAgent] 💎"
+
+        # Agent para busca web com Perplexity (versão simples para economia)
+        self.search_agent = AgentFactory.create_agent(
             name="Event Search Agent",
-            model=OpenAIChat(
-                id=MODELS["search"],  # perplexity/sonar-pro
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="search_simple",  # perplexity/sonar (não-pro, ~50% mais barato)
             description="Agente especializado em buscar contexto adicional de eventos",
             instructions=[
                 "Buscar informações específicas sobre artistas, venues e eventos",
@@ -44,14 +41,10 @@ class EnrichmentAgent:
             markdown=True,
         )
 
-        # Agent para processar e enriquecer com Gemini
-        self.processing_agent = Agent(
+        # Agent para processar e enriquecer com GPT-5
+        self.processing_agent = AgentFactory.create_agent(
             name="Event Enrichment Processor",
-            model=OpenAIChat(
-                id=MODELS["format"],  # google/gemini-2.5-flash
-                api_key=OPENROUTER_API_KEY,
-                base_url=OPENROUTER_BASE_URL,
-            ),
+            model_type="important",  # GPT-5 - tarefa crítica (enriquecimento de descrições)
             description="Agente especializado em enriquecer descrições de eventos",
             instructions=[
                 "Combinar informações existentes com contexto adicional",
@@ -78,9 +71,8 @@ class EnrichmentAgent:
                 },
             }
 
-        logger.info(f"Analisando {len(events)} eventos para enriquecimento...")
+        logger.info(f"{self.log_prefix} Analisando {len(events)} eventos para enriquecimento...")
 
-        enriched_events = []
         enrichment_stats = {
             "total": len(events),
             "enriched": 0,
@@ -88,33 +80,63 @@ class EnrichmentAgent:
             "reasons": [],
         }
 
-        for i, event in enumerate(events):
+        # Separar eventos em grupos: precisam vs não precisam de enriquecimento
+        events_to_enrich = []
+        events_ok = []
+
+        for event in events:
+            needs_enrichment, reason = self._needs_enrichment(event)
+            if needs_enrichment:
+                events_to_enrich.append((event, reason))
+            else:
+                events_ok.append(event)
+
+        logger.info(
+            f"{self.log_prefix} {len(events_to_enrich)} eventos precisam de enriquecimento, "
+            f"{len(events_ok)} já estão OK"
+        )
+
+        # Processar em batches paralelos
+        enriched_events = []
+        for i in range(0, len(events_to_enrich), ENRICHMENT_BATCH_SIZE):
+            # Verificar limite de buscas
             if self.searches_count >= ENRICHMENT_MAX_SEARCHES:
                 logger.warning(
-                    f"Limite de {ENRICHMENT_MAX_SEARCHES} buscas atingido, "
-                    f"eventos restantes não serão enriquecidos"
+                    f"{self.log_prefix} Limite de {ENRICHMENT_MAX_SEARCHES} buscas atingido, "
+                    f"{len(events_to_enrich) - i} eventos restantes não serão enriquecidos"
                 )
-                enriched_events.extend(events[i:])
+                # Adicionar eventos restantes sem enriquecimento
+                for event, _ in events_to_enrich[i:]:
+                    enriched_events.append(event)
                 break
 
-            needs_enrichment, reason = self._needs_enrichment(event)
+            # Pegar batch
+            batch = events_to_enrich[i : i + ENRICHMENT_BATCH_SIZE]
+            batch_size = len(batch)
 
-            if needs_enrichment:
-                logger.info(
-                    f"Enriquecendo evento {i+1}/{len(events)}: "
-                    f"{event.get('titulo', 'Sem título')} ({reason})"
-                )
+            logger.info(
+                f"{self.log_prefix} Processando batch {i//ENRICHMENT_BATCH_SIZE + 1} "
+                f"({batch_size} eventos em paralelo)..."
+            )
 
-                enriched_event = await self._enrich_single_event(event, reason)
-                enriched_events.append(enriched_event)
-                enrichment_stats["enriched"] += 1
-                enrichment_stats["reasons"].append(reason)
-            else:
-                logger.debug(
-                    f"Evento {i+1}/{len(events)} não precisa de enriquecimento: "
-                    f"{event.get('titulo', 'Sem título')}"
-                )
-                enriched_events.append(event)
+            # Enriquecer batch em paralelo
+            tasks = [self._enrich_single_event(event, reason) for event, reason in batch]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Processar resultados
+            for (event, reason), result in zip(batch, batch_results):
+                if isinstance(result, Exception):
+                    logger.error(
+                        f"{self.log_prefix} Erro ao enriquecer '{event.get('titulo', 'Sem título')}': {result}"
+                    )
+                    enriched_events.append(event)  # Fallback: manter original
+                else:
+                    enriched_events.append(result)
+                    enrichment_stats["enriched"] += 1
+                    enrichment_stats["reasons"].append(reason)
+
+        # Adicionar eventos que não precisaram de enriquecimento
+        enriched_events.extend(events_ok)
 
         enrichment_stats["searches_used"] = self.searches_count
 
@@ -200,7 +222,7 @@ class EnrichmentAgent:
             return f"{titulo} {local} Rio de Janeiro detalhes informações completas"
 
     async def _search_context(self, query: str) -> str:
-        """Busca contexto adicional com Perplexity Sonar Pro."""
+        """Busca contexto adicional com Perplexity Sonar."""
 
         prompt = f"""Busque informações específicas sobre este evento no Rio de Janeiro:
 
