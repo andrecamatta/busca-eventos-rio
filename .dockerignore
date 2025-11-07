@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+evals/
+tests/
+
+# Output data (não incluir no build)
+output/
+*.log
+execution_*.log
+busca_eventos.log
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Environment variables (NUNCA incluir)
+.env
+.env.*
+
+# Railway
+.railway/
+
+# Backup files
+*_backup*
+*.bak
+output_backup/
+
+# Cache
+.cache/
+tmp/
+/tmp/
+.ruff_cache/
+.uv/
+
+# Playwright cache (será instalado no build)
+.playwright/
+playwright-report/
