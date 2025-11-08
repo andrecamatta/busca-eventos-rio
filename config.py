@@ -64,7 +64,19 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
         "description": "Feiras de artesanato e arte",
     },
     "outdoor_parques": {
-        "keywords": ["ao ar livre", "outdoor", "parque", "praia", "jardim botânico", "aterro", "quinta da boa vista"],
+        "keywords": [
+            # Locais
+            "ao ar livre", "outdoor", "parque", "praia", "jardim botânico", "aterro", "quinta da boa vista",
+            "praça", "largo", "orla", "calçadão",
+            # Tipos de eventos
+            "feira", "feira cultural", "feira de rua", "feirinha",
+            "festival", "festival de rua", "festival comunitário",
+            "junta local", "corona sunset",
+            # Bairros/regiões
+            "Ipanema", "Copacabana", "Glória", "Laranjeiras", "Madureira", "Lapa",
+            # Temporais
+            "fim de semana", "sábado", "domingo",
+        ],
         "exclude": [
             # Gêneros musicais específicos (excluir do outdoor)
             "samba", "pagode", "roda de samba", "axé", "forró",
@@ -256,6 +268,20 @@ ENRICHMENT_GENERIC_TERMS: Final[list[str]] = [
     "solistas a confirmar",
     "músicos da casa",
 ]  # termos que indicam descrição genérica
+
+# Mapeamento de venues para consolidação (aliases)
+VENUE_ALIASES: Final[dict[str, str]] = {
+    # CCBB - consolidar todos os sub-venues
+    "CCBB Teatro e Cinema": "CCBB Rio - Centro Cultural Banco do Brasil",
+    "CCBB Teatro I": "CCBB Rio - Centro Cultural Banco do Brasil",
+    "CCBB Teatro II": "CCBB Rio - Centro Cultural Banco do Brasil",
+    "CCBB Teatro III": "CCBB Rio - Centro Cultural Banco do Brasil",
+    "CCBB Cinema": "CCBB Rio - Centro Cultural Banco do Brasil",
+
+    # Sala Cecília Meireles - variações de nome
+    "Cecília Meirelles": "Sala Cecília Meireles",
+    "Sala Cecilia Meireles": "Sala Cecília Meireles",
+}
 
 # Configurações de validação de qualidade de links
 LINK_QUALITY_THRESHOLD: Final[int] = 70  # score mínimo (0-100) para aceitar link

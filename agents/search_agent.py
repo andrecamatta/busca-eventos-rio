@@ -110,6 +110,38 @@ class SearchAgent:
 
         return limited_events
 
+    def _normalize_venue_names(self, eventos_por_venue: dict[str, list[dict]]) -> dict[str, list[dict]]:
+        """
+        Consolida sub-venues em venues principais usando VENUE_ALIASES.
+
+        Exemplo: "CCBB Teatro III" → "CCBB Rio - Centro Cultural Banco do Brasil"
+        """
+        from config import VENUE_ALIASES
+
+        normalized = {}
+        consolidation_log = []
+
+        for venue_name, eventos in eventos_por_venue.items():
+            # Obter nome canônico do venue
+            canonical_name = VENUE_ALIASES.get(venue_name, venue_name)
+
+            # Log de consolidação se houve mudança
+            if canonical_name != venue_name and len(eventos) > 0:
+                consolidation_log.append(f"{venue_name} → {canonical_name} ({len(eventos)} eventos)")
+
+            # Merge eventos no venue canônico
+            if canonical_name not in normalized:
+                normalized[canonical_name] = []
+            normalized[canonical_name].extend(eventos)
+
+        # Log consolidações realizadas
+        if consolidation_log:
+            logger.info(f"🔗 Consolidação de venues:")
+            for log_msg in consolidation_log:
+                logger.info(f"   - {log_msg}")
+
+        return normalized
+
     async def _run_micro_search(self, prompt: str, search_name: str) -> str:
         """Executa uma micro-search focada de forma assíncrona."""
         logger.info(f"   🔍 Iniciando busca: {search_name}")
@@ -452,25 +484,47 @@ ATENÇÃO - EXCLUSÕES CRÍTICAS (VALIDAÇÃO RIGOROSA):
         prompt_outdoor = self._build_focused_prompt(
             categoria="Outdoor/Parques",
             tipo_busca="categoria",
-            descricao="Eventos culturais ao ar livre APENAS em sábados e domingos no Rio de Janeiro (EXCLUIR feiras gastronômicas e artesanato)",
+            descricao="Eventos culturais ao ar livre APENAS em sábados e domingos no Rio de Janeiro - INCLUINDO feiras culturais e eventos em praças",
             tipos_evento=[
                 "Festivais culturais ao ar livre (sábado/domingo)",
-                "Eventos comunitários em parques",
+                "Eventos comunitários em parques e praças",
+                "Feiras culturais mistas (música + arte + gastronomia)",
+                "Eventos de rua em praças públicas",
                 "Festivais independentes e alternativos",
-                "Shows e performances ao ar livre"
+                "Shows e performances ao ar livre",
+                "Juntas locais e eventos comunitários regulares",
+                "Eventos na orla (Copacabana, Ipanema, Leblon)"
             ],
             palavras_chave=[
                 f"festival cultural Rio fim de semana {month_str}",
                 "evento comunitário parque Rio",
                 "festival independente Rio",
-                "show ao ar livre Rio"
+                "show ao ar livre Rio",
+                f"feira cultural Rio sábado domingo {month_str}",
+                f"feira O Fuxico Ipanema {month_str}",
+                f"feira das Yabás Madureira {month_str}",
+                f"feira da Glória {month_str}",
+                f"feirinha Laranjeiras {month_str}",
+                f"junta local Rio {month_str}",
+                f"corona sunset Copacabana {month_str}",
+                f"eventos praça Rio fim de semana {month_str}",
+                f"eventos orla Rio sábado domingo {month_str}"
             ],
             venues_sugeridos=[
                 "Aterro do Flamengo",
                 "Jockey Club Brasileiro",
                 "Marina da Glória",
                 "Parque Lage",
-                "Pista Cláudio Coutinho"
+                "Pista Cláudio Coutinho",
+                "Praça Nossa Senhora da Paz (Ipanema)",
+                "Praça Paulo da Portela (Madureira)",
+                "Praça Marechal Deodoro (Glória)",
+                "Praça Paris",
+                "Praça XV",
+                "Orla de Copacabana",
+                "Orla de Ipanema",
+                "Avenida Augusto Severo (Glória)",
+                "Largo da Carioca"
             ],
             instrucoes_especiais="""
 ATENÇÃO - DIAS ESPECÍFICOS:
@@ -479,12 +533,13 @@ ATENÇÃO - DIAS ESPECÍFICOS:
 - Verificar dia da semana da data do evento
 
 ATENÇÃO - EXCLUSÕES CRÍTICAS:
-- NÃO incluir: feiras gastronômicas, feiras de artesanato (são categorias separadas)
 - NÃO incluir: shows mainstream de grandes artistas (Ivete Sangalo, Thiaguinho, Luan Santana, etc.)
-- NÃO incluir: samba, pagode, roda de samba, axé, forró
+- NÃO incluir: samba, pagode, roda de samba, axé, forró (EXCETO se fizer parte de feira cultural mista)
 - NÃO incluir: eventos com tags: "turnê", "show nacional", "mega show"
-- FOCO EXCLUSIVO: festivais culturais nichados, performances, eventos comunitários
-- Preferir: festivais alternativos, arte urbana, cultura underground
+- NÃO incluir: eventos puramente promocionais/comerciais de marcas
+- ✅ INCLUIR: feiras culturais mistas, eventos comunitários, festivais independentes
+- ✅ INCLUIR: eventos com múltiplos elementos (música + arte + gastronomia)
+- FOCO: festivais culturais nichados, performances, eventos comunitários em praças e orlas
 """,
             start_date_str=start_date_str,
             end_date_str=end_date_str,
@@ -1579,6 +1634,10 @@ ESTRATÉGIA:
                 f"✓ Merge concluído: {len(todos_eventos_gerais)} eventos gerais, "
                 f"{total_venues_before} eventos de venues"
             )
+
+            # Normalizar nomes de venues (consolidar CCBB Teatro I/II/III, etc.)
+            logger.info(f"🔗 Normalizando nomes de venues...")
+            eventos_locais_merged = self._normalize_venue_names(eventos_locais_merged)
 
             # Aplicar limitação de eventos por venue
             logger.info(f"📊 Aplicando limitação de {MAX_EVENTS_PER_VENUE} eventos por venue...")
