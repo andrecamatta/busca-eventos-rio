@@ -319,4 +319,4 @@ CONTINUOUS_EVENT_TYPES: Final[dict[str, str]] = {
 }
 
 # Limitação de eventos por venue
-MAX_EVENTS_PER_VENUE: Final[int] = 7  # máximo de eventos por venue individual
+MAX_EVENTS_PER_VENUE: Final[int] = 25  # máximo de eventos por venue individual
