@@ -3,13 +3,15 @@
 import json
 import logging
 import os
+import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -22,6 +24,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = BASE_DIR / "output"
 LATEST_OUTPUT = OUTPUT_DIR / "latest"
+LOG_FILE = BASE_DIR / "busca_eventos.log"
 
 # FastAPI app
 app = FastAPI(
@@ -173,6 +176,7 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
                 "local": event.get("local", ""),
                 "preco": event.get("preco", "Consultar"),
                 "link_ingresso": event.get("link_ingresso"),
+                "link_type": event.get("link_type", "info"),  # purchase, info, ou venue
                 "descricao": event.get("descricao", ""),
                 "categoria": categoria,
                 "venue": venue,
@@ -184,6 +188,36 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
     except Exception as e:
         logger.error(f"Erro ao parsear evento: {e} - {event}")
         return None
+
+
+def parse_log_line(line: str) -> Optional[dict]:
+    """
+    Parseia uma linha de log no formato:
+    2025-11-08 15:36:54,176 - module.name - LEVEL - message
+
+    Returns:
+        Dict com timestamp, module, level, message ou None se não conseguir parsear
+    """
+    # Regex para parsear formato de log
+    # Formato: YYYY-MM-DD HH:MM:SS,mmm - module - LEVEL - message
+    pattern = r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - ([^ ]+) - (\w+) - (.+)$'
+    match = re.match(pattern, line.strip())
+
+    if match:
+        return {
+            "timestamp": match.group(1),
+            "module": match.group(2),
+            "level": match.group(3),
+            "message": match.group(4)
+        }
+
+    # Se não conseguir parsear, retornar linha raw
+    return {
+        "timestamp": "",
+        "module": "",
+        "level": "RAW",
+        "message": line.strip()
+    }
 
 
 def run_event_search():
@@ -423,6 +457,200 @@ async def get_stats():
         "por_venue": venues,
         "ultima_atualizacao": datetime.now().isoformat()
     })
+
+
+@app.get("/api/logs")
+async def get_logs(
+    lines: int = 100,
+    level: Optional[str] = None,
+    search: Optional[str] = None,
+    reverse: bool = True
+):
+    """
+    Retorna últimas linhas do log de execução com filtros.
+
+    Query params:
+    - lines: número de linhas a retornar (padrão: 100, máx: 1000)
+    - level: filtrar por nível (INFO, ERROR, WARNING, DEBUG) - aceita múltiplos separados por vírgula
+    - search: buscar texto específico (case-insensitive)
+    - reverse: ordem cronológica reversa (padrão: True = mais recentes primeiro)
+
+    Examples:
+        /api/logs?lines=50
+        /api/logs?level=ERROR,WARNING
+        /api/logs?search=blue%20note
+        /api/logs?level=ERROR&search=timeout
+    """
+    try:
+        # Validar parâmetros
+        lines = min(max(1, lines), 1000)  # Entre 1 e 1000
+
+        # Verificar se arquivo existe
+        if not LOG_FILE.exists():
+            return JSONResponse(content={
+                "logs": [],
+                "total_lines": 0,
+                "filtered_lines": 0,
+                "file_size_mb": 0,
+                "message": "Arquivo de log ainda não existe. Execute uma busca primeiro."
+            })
+
+        # Obter tamanho do arquivo
+        file_size_bytes = LOG_FILE.stat().st_size
+        file_size_mb = round(file_size_bytes / (1024 * 1024), 2)
+
+        # Ler arquivo (otimizado para arquivos grandes)
+        with open(LOG_FILE, 'r', encoding='utf-8', errors='ignore') as f:
+            all_lines = f.readlines()
+
+        total_lines = len(all_lines)
+
+        # Parsear níveis de filtro se fornecidos
+        level_filters = None
+        if level:
+            level_filters = [l.strip().upper() for l in level.split(',')]
+
+        # Processar linhas
+        parsed_logs = []
+        for line in all_lines:
+            if not line.strip():
+                continue
+
+            log_entry = parse_log_line(line)
+            if not log_entry:
+                continue
+
+            # Filtrar por nível
+            if level_filters and log_entry["level"] not in level_filters:
+                continue
+
+            # Filtrar por busca de texto
+            if search:
+                search_lower = search.lower()
+                # Buscar em todos os campos
+                searchable = f"{log_entry['timestamp']} {log_entry['module']} {log_entry['level']} {log_entry['message']}".lower()
+                if search_lower not in searchable:
+                    continue
+
+            parsed_logs.append(log_entry)
+
+        # Aplicar ordem reversa se solicitado
+        if reverse:
+            parsed_logs = parsed_logs[::-1]
+
+        # Limitar número de linhas
+        filtered_count = len(parsed_logs)
+        parsed_logs = parsed_logs[:lines]
+
+        return JSONResponse(content={
+            "logs": parsed_logs,
+            "total_lines": total_lines,
+            "filtered_lines": filtered_count,
+            "returned_lines": len(parsed_logs),
+            "file_size_mb": file_size_mb,
+            "filters": {
+                "level": level_filters,
+                "search": search,
+                "reverse": reverse
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao ler logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao ler logs: {str(e)}")
+
+
+@app.get("/api/logs/download")
+async def download_logs():
+    """
+    Download do arquivo completo de logs.
+
+    Retorna o arquivo busca_eventos.log para download direto.
+    Útil para análise offline ou arquivamento.
+    """
+    try:
+        if not LOG_FILE.exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Arquivo de log não encontrado. Execute uma busca primeiro."
+            )
+
+        # Retornar arquivo para download
+        return FileResponse(
+            path=LOG_FILE,
+            media_type="text/plain",
+            filename="busca_eventos.log",
+            headers={
+                "Content-Disposition": f"attachment; filename=busca_eventos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erro ao fazer download de logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao fazer download: {str(e)}")
+
+
+@app.post("/api/logs/clear")
+async def clear_logs():
+    """
+    Limpa o arquivo de log (rotação).
+
+    Cria backup do arquivo atual antes de limpar.
+    Só permite limpeza se arquivo > 5MB.
+
+    Returns:
+        JSON com status da operação e informações do backup
+    """
+    try:
+        if not LOG_FILE.exists():
+            return JSONResponse(content={
+                "status": "success",
+                "message": "Arquivo de log não existe, nada para limpar."
+            })
+
+        # Verificar tamanho do arquivo
+        file_size_bytes = LOG_FILE.stat().st_size
+        file_size_mb = round(file_size_bytes / (1024 * 1024), 2)
+
+        # Só permitir limpeza se arquivo > 5MB
+        MIN_SIZE_MB = 5
+        if file_size_mb < MIN_SIZE_MB:
+            return JSONResponse(content={
+                "status": "skipped",
+                "message": f"Arquivo muito pequeno ({file_size_mb}MB). Só é possível limpar arquivos > {MIN_SIZE_MB}MB.",
+                "file_size_mb": file_size_mb
+            })
+
+        # Criar backup
+        backup_dir = OUTPUT_DIR / "log_backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = backup_dir / f"busca_eventos_{timestamp}.log"
+
+        shutil.copy2(LOG_FILE, backup_file)
+        logger.info(f"✓ Backup criado: {backup_file}")
+
+        # Limpar arquivo original (mantém arquivo vazio)
+        with open(LOG_FILE, 'w') as f:
+            f.write(f"# Log rotacionado em {datetime.now().isoformat()}\n")
+            f.write(f"# Backup salvo em: {backup_file}\n\n")
+
+        logger.info(f"✓ Arquivo de log limpo. Tamanho anterior: {file_size_mb}MB")
+
+        return JSONResponse(content={
+            "status": "success",
+            "message": f"Log rotacionado com sucesso. Backup criado.",
+            "backup_file": str(backup_file),
+            "previous_size_mb": file_size_mb,
+            "timestamp": timestamp
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao limpar logs: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao limpar logs: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -96,6 +96,34 @@ body {
     color: white;
 }
 
+/* Estilos diferenciados por tipo de link */
+.event-link-purchase {
+    background: #28a745;  /* Verde - link direto de compra */
+}
+
+.event-link-purchase:hover {
+    background: #218838;
+    color: white;
+}
+
+.event-link-info {
+    background: #17a2b8;  /* Azul claro - site informativo/artista */
+}
+
+.event-link-info:hover {
+    background: #138496;
+    color: white;
+}
+
+.event-link-venue {
+    background: #6c757d;  /* Cinza - homepage do venue */
+}
+
+.event-link-venue:hover {
+    background: #5a6268;
+    color: white;
+}
+
 /* Botões */
 #refresh-btn {
     animation: none;

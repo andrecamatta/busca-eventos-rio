@@ -255,8 +255,8 @@ function handleEventClick(info) {
         ` : ''}
 
         ${props.link_ingresso ? `
-        <a href="${props.link_ingresso}" target="_blank" class="event-link">
-            <i class="fas fa-external-link-alt"></i> Comprar Ingresso
+        <a href="${props.link_ingresso}" target="_blank" class="event-link event-link-${props.link_type || 'info'}">
+            <i class="${getLinkIcon(props.link_type)}"></i> ${getLinkLabel(props.link_type)}
         </a>
         ` : ''}
     `;
@@ -325,4 +325,24 @@ function showToast(message, type = 'info') {
 
     const bsToast = new bootstrap.Toast(toast);
     bsToast.show();
+}
+
+// Obter ícone baseado no tipo de link
+function getLinkIcon(linkType) {
+    const icons = {
+        'purchase': 'fas fa-shopping-cart',  // Plataforma de venda
+        'info': 'fas fa-info-circle',        // Site informativo
+        'venue': 'fas fa-building'           // Página do venue
+    };
+    return icons[linkType] || 'fas fa-external-link-alt';
+}
+
+// Obter label baseado no tipo de link
+function getLinkLabel(linkType) {
+    const labels = {
+        'purchase': 'Comprar Ingresso',     // Link direto de compra
+        'info': 'Mais Informações',         // Site do artista ou informativo
+        'venue': 'Site do Local'            // Homepage do venue
+    };
+    return labels[linkType] || 'Mais Informações';
 }

@@ -10,12 +10,21 @@ class EventoBase(BaseModel):
     """Base model para todos os eventos (campos normalizados)."""
 
     titulo: str = Field(..., min_length=1, description="Nome completo do evento")
-    data: str = Field(..., pattern=r"^\d{2}/\d{2}/\d{4}$", description="Data DD/MM/YYYY")
+    data: str = Field(..., pattern=r"^\d{2}/\d{2}/\d{4}$", description="Data DD/MM/YYYY (início)")
     horario: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Horário HH:MM")
     local: str = Field(..., min_length=1, description="Venue + endereço completo")
     preco: str = Field(default="Consultar", description="Preço ou 'Consultar'")
     link_ingresso: Optional[str] = Field(None, description="URL de compra (opcional)")
+    link_type: Optional[Literal["purchase", "info", "venue"]] = Field(
+        None,
+        description="Tipo de link: 'purchase' (plataforma de venda), 'info' (site informativo), 'venue' (página do local)"
+    )
     descricao: Optional[str] = Field(None, description="Descrição do evento (opcional)")
+
+    # Campos para eventos contínuos (exposições, mostras, temporadas)
+    data_fim: Optional[str] = Field(None, pattern=r"^\d{2}/\d{2}/\d{4}$", description="Data final (para eventos contínuos)")
+    is_temporada: bool = Field(default=False, description="Se é evento contínuo (exposição, mostra)")
+    tipo_temporada: Optional[str] = Field(None, description="Tipo: 'exposição', 'mostra', 'feira contínua'")
 
     @field_validator("data")
     @classmethod
@@ -26,6 +35,26 @@ class EventoBase(BaseModel):
             return v
         except ValueError:
             raise ValueError(f"Data deve estar no formato DD/MM/YYYY, recebido: {v}")
+
+    @field_validator("data_fim")
+    @classmethod
+    def validate_date_fim(cls, v: Optional[str], info) -> Optional[str]:
+        """Valida data_fim e garante que seja posterior a data."""
+        if v is None:
+            return v
+
+        try:
+            data_fim_dt = datetime.strptime(v, "%d/%m/%Y")
+        except ValueError:
+            raise ValueError(f"data_fim deve estar no formato DD/MM/YYYY, recebido: {v}")
+
+        # Validar que data_fim seja posterior a data
+        if "data" in info.data:
+            data_inicio_dt = datetime.strptime(info.data["data"], "%d/%m/%Y")
+            if data_fim_dt < data_inicio_dt:
+                raise ValueError(f"data_fim ({v}) deve ser posterior ou igual a data ({info.data['data']})")
+
+        return v
 
     @field_validator("link_ingresso")
     @classmethod

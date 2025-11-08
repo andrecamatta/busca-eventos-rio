@@ -8,21 +8,13 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
-from bs4 import BeautifulSoup
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
 from config import (
     HTTP_TIMEOUT,
     MAX_RETRIES,
     SEARCH_CONFIG,
 )
 from utils.agent_factory import AgentFactory
+from utils.http_client import HttpClientWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +39,7 @@ class VerifyAgent:
 
     def __init__(self):
         self.log_prefix = "[VerifyAgent] ✔️"
+        self.http_client = HttpClientWrapper()
 
         self.agent = AgentFactory.create_agent(
             name="Event Verification Agent",
@@ -131,6 +124,72 @@ class VerifyAgent:
 
         return False
 
+    def _classify_link_type(self, url: str, event: dict) -> str:
+        """Classifica o tipo de link do evento.
+
+        Args:
+            url: URL do link
+            event: Dados do evento (para contexto)
+
+        Returns:
+            "purchase" (plataforma de venda), "info" (site informativo), ou "venue" (página do local)
+        """
+        if not url:
+            return "info"  # Default para links ausentes
+
+        url_lower = url.lower()
+
+        # 1. PLATAFORMAS DE VENDA (maior prioridade)
+        purchase_platforms = [
+            'sympla.com',
+            'eventbrite.com',
+            'ticketmaster.com',
+            'ingresso.com',
+            'ingressodigital.com',
+            'tickets.com',
+            'eventim.com.br/artist',  # Eventim com artista específico
+            'eleventickets.com',
+        ]
+
+        for platform in purchase_platforms:
+            if platform in url_lower:
+                return "purchase"
+
+        # 2. VENUES COM PÁGINAS ESPECÍFICAS DE EVENTOS
+        venue_event_patterns = [
+            ('bluenoterio.com.br/shows/', 5),  # Blue Note com slug do show
+            ('salaceliciameireles.rj.gov.br/programacao/', 5),  # Sala Cecília com evento específico
+        ]
+
+        for pattern, min_length in venue_event_patterns:
+            if pattern in url_lower:
+                # Verificar se tem slug/ID significativo no final
+                slug = url.split('/')[-1].rstrip('/')
+                if len(slug) > min_length:
+                    return "purchase"  # Página específica de evento
+
+        # 3. VERIFICAR SE É LINK GENÉRICO (listagem/homepage)
+        if self._is_generic_link(url):
+            return "venue"  # Links genéricos geralmente são páginas do venue
+
+        # 4. VERIFICAR SE É SITE DE ARTISTA (informativo)
+        # NOTA: _is_artist_or_venue_site precisa do título do evento
+        titulo = event.get("titulo", "")
+        if titulo:
+            try:
+                if hasattr(self, '_validation_agent') and self._validation_agent:
+                    if self._validation_agent._is_artist_or_venue_site(url, titulo):
+                        return "info"
+            except:
+                pass  # Se falhar, continuar com outras verificações
+
+        # 5. DOMÍNIOS .GOV.BR = venue
+        if '.gov.br' in url_lower:
+            return "venue"
+
+        # 6. FALLBACK: Link externo genérico = info
+        return "info"
+
     def _matches_url_pattern(self, url: str) -> bool:
         """Valida se URL corresponde ao padrão esperado para o domínio.
 
@@ -173,75 +232,79 @@ class VerifyAgent:
             dict com: valid (bool), reason (str), details (dict)
         """
         try:
-            # Fetch HTML da página
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
-                response = await client.get(link)
+            # Fetch + parse usando HttpClientWrapper
+            result = await self.http_client.fetch_and_parse(
+                link,
+                extract_text=True,
+                text_max_length=5000,  # Mais texto para validação de conteúdo
+                clean_html=True
+            )
 
-                if response.status_code != 200:
-                    return {
-                        "valid": False,
-                        "reason": f"HTTP {response.status_code}",
-                        "details": {}
-                    }
-
-                # Parse HTML
-                soup = BeautifulSoup(response.text, 'html.parser')
-
-                # Extrair texto visível da página
-                page_text = soup.get_text(separator=' ', strip=True).lower()
-
-                # Informações do evento para validar
-                titulo = (event.get("titulo") or event.get("nome", "")).lower()
-                local = (event.get("local", "")).lower()
-
-                # Validações de conteúdo
-                issues = []
-                matches = []
-
-                # Verificar título (pelo menos 60% das palavras)
-                titulo_words = [w for w in titulo.split() if len(w) > 3]  # palavras > 3 chars
-                if titulo_words:
-                    titulo_matches = sum(1 for word in titulo_words if word in page_text)
-                    titulo_match_ratio = titulo_matches / len(titulo_words)
-
-                    if titulo_match_ratio >= 0.6:
-                        matches.append(f"Título encontrado ({titulo_match_ratio:.0%})")
-                    else:
-                        issues.append(f"Título não encontrado ({titulo_match_ratio:.0%} match)")
-
-                # Verificar local (palavras principais)
-                local_words = [w for w in local.split() if len(w) > 4]  # palavras > 4 chars
-                if local_words:
-                    local_matches = sum(1 for word in local_words if word in page_text)
-                    local_match_ratio = local_matches / len(local_words) if local_words else 0
-
-                    if local_match_ratio >= 0.5:
-                        matches.append(f"Local encontrado ({local_match_ratio:.0%})")
-                    else:
-                        issues.append(f"Local não encontrado ({local_match_ratio:.0%} match)")
-
-                # Verificar se página tem indicadores de venda (botões de compra)
-                buy_indicators = ['comprar', 'ingresso', 'ticket', 'buy', 'cart', 'carrinho']
-                has_buy_button = any(indicator in page_text for indicator in buy_indicators)
-
-                if has_buy_button:
-                    matches.append("Botão de compra encontrado")
-                else:
-                    issues.append("Nenhum botão de compra encontrado")
-
-                # Decisão final
-                valid = len(matches) >= 2 and len(issues) <= 1
-
+            if not result["success"]:
+                status_code = result["status_code"]
                 return {
-                    "valid": valid,
-                    "reason": "Conteúdo validado" if valid else f"Validação falhou: {', '.join(issues)}",
-                    "details": {
-                        "matches": matches,
-                        "issues": issues,
-                        "titulo_match": titulo_match_ratio if titulo_words else None,
-                        "local_match": local_match_ratio if local_words else None,
-                    }
+                    "valid": False,
+                    "reason": f"HTTP {status_code}" if status_code else result["error"],
+                    "details": {}
                 }
+
+            # Extrair texto visível da página
+            page_text = result["text"].lower()
+
+            # Informações do evento para validar
+            titulo = (event.get("titulo") or event.get("nome", "")).lower()
+            local = (event.get("local", "")).lower()
+
+            # Validações de conteúdo
+            issues = []
+            matches = []
+
+            # Verificar título (pelo menos 60% das palavras)
+            titulo_words = [w for w in titulo.split() if len(w) > 3]  # palavras > 3 chars
+            titulo_match_ratio = 0
+            if titulo_words:
+                titulo_matches = sum(1 for word in titulo_words if word in page_text)
+                titulo_match_ratio = titulo_matches / len(titulo_words)
+
+                if titulo_match_ratio >= 0.6:
+                    matches.append(f"Título encontrado ({titulo_match_ratio:.0%})")
+                else:
+                    issues.append(f"Título não encontrado ({titulo_match_ratio:.0%} match)")
+
+            # Verificar local (palavras principais)
+            local_words = [w for w in local.split() if len(w) > 4]  # palavras > 4 chars
+            local_match_ratio = 0
+            if local_words:
+                local_matches = sum(1 for word in local_words if word in page_text)
+                local_match_ratio = local_matches / len(local_words) if local_words else 0
+
+                if local_match_ratio >= 0.5:
+                    matches.append(f"Local encontrado ({local_match_ratio:.0%})")
+                else:
+                    issues.append(f"Local não encontrado ({local_match_ratio:.0%} match)")
+
+            # Verificar se página tem indicadores de venda (botões de compra)
+            buy_indicators = ['comprar', 'ingresso', 'ticket', 'buy', 'cart', 'carrinho']
+            has_buy_button = any(indicator in page_text for indicator in buy_indicators)
+
+            if has_buy_button:
+                matches.append("Botão de compra encontrado")
+            else:
+                issues.append("Nenhum botão de compra encontrado")
+
+            # Decisão final
+            valid = len(matches) >= 2 and len(issues) <= 1
+
+            return {
+                "valid": valid,
+                "reason": "Conteúdo validado" if valid else f"Validação falhou: {', '.join(issues)}",
+                "details": {
+                    "matches": matches,
+                    "issues": issues,
+                    "titulo_match": titulo_match_ratio if titulo_words else None,
+                    "local_match": local_match_ratio if local_words else None,
+                }
+            }
 
         except Exception as e:
             logger.error(f"Erro ao validar conteúdo do link: {e}")
@@ -299,108 +362,6 @@ class VerifyAgent:
             "duplicates_removed": verified_data.get("duplicates_removed", []),
         }
 
-    @retry(
-        stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((
-            httpx.TimeoutException,
-            httpx.ConnectError,
-            httpx.ReadTimeout,
-        )),
-        reraise=True,
-    )
-    async def _validate_single_link(
-        self, client: httpx.AsyncClient, link: str, event: dict = None, attempt_num: int = 1
-    ) -> dict:
-        """Valida um único link com retry automático para erros temporários.
-
-        Args:
-            client: Cliente HTTP assíncrono
-            link: URL a validar
-            event: Evento (opcional, necessário para validação de conteúdo SPA)
-            attempt_num: Número da tentativa
-
-        Returns:
-            dict com: valid (bool), status_code (int), spa_validation (dict, opcional)
-        """
-        logger.info(f"Validando link (tentativa {attempt_num}): {link}")
-        response = await client.head(link, timeout=HTTP_TIMEOUT)
-
-        status_valid = 200 <= response.status_code < 400
-
-        if not status_valid:
-            return {
-                "valid": False,
-                "status_code": response.status_code,
-            }
-
-        # Se HTTP 200, verificar se é SPA que precisa validação adicional
-        parsed = urlparse(link)
-        domain = parsed.netloc.lower()
-        is_spa = any(spa_domain in domain for spa_domain in SPA_DOMAINS)
-
-        if is_spa:
-            logger.info(f"🔍 Link SPA detectado ({domain}), aplicando validação adicional...")
-
-            # 1. Validar padrão de URL
-            pattern_valid = self._matches_url_pattern(link)
-
-            if not pattern_valid:
-                logger.warning(f"❌ Link SPA falhou validação de padrão: {link}")
-
-                # 2. Tentar validação de conteúdo se padrão falhar E temos dados do evento
-                if event:
-                    logger.info("→ Tentando validação de conteúdo...")
-                    content_validation = await self._validate_link_content(link, event)
-
-                    if content_validation["valid"]:
-                        logger.info(f"✅ Link SPA aprovado por validação de conteúdo: {content_validation['reason']}")
-                        return {
-                            "valid": True,
-                            "status_code": response.status_code,
-                            "spa_validation": {
-                                "type": "content",
-                                "result": content_validation
-                            }
-                        }
-                    else:
-                        logger.warning(f"❌ Link SPA rejeitado: {content_validation['reason']}")
-                        return {
-                            "valid": False,
-                            "status_code": response.status_code,
-                            "spa_validation": {
-                                "type": "content",
-                                "result": content_validation
-                            }
-                        }
-                else:
-                    # Sem dados do evento, não podemos validar conteúdo
-                    logger.warning("❌ Link SPA falhou validação de padrão e sem dados para validar conteúdo")
-                    return {
-                        "valid": False,
-                        "status_code": response.status_code,
-                        "spa_validation": {
-                            "type": "pattern",
-                            "reason": "URL não corresponde ao padrão esperado"
-                        }
-                    }
-            else:
-                logger.info("✅ Link SPA aprovado por padrão de URL")
-                return {
-                    "valid": True,
-                    "status_code": response.status_code,
-                    "spa_validation": {
-                        "type": "pattern",
-                        "reason": "URL corresponde ao padrão esperado"
-                    }
-                }
-
-        # Link não-SPA, validação HTTP é suficiente
-        return {
-            "valid": status_valid,
-            "status_code": response.status_code,
-        }
-
     async def _intelligent_link_search(self, event: dict, attempt: int = 1) -> dict[str, Any]:
         """Usa Perplexity para buscar o link correto de um evento e valida o conteúdo.
 
@@ -450,34 +411,70 @@ class VerifyAgent:
         # Se é retry, adicionar contexto do problema anterior
         retry_context = ""
         if attempt > 1:
-            retry_context = "\n\n⚠️ TENTATIVA ANTERIOR RETORNOU LINK DE BAIXA QUALIDADE. Por favor, busque um link MAIS ESPECÍFICO que contenha:\n- Título EXATO do evento\n- Data específica\n- Nomes dos artistas/músicos (se houver)\n- Botão de compra de ingresso"
+            retry_context = f"""
 
-        prompt = f"""Encontre o link de compra/informações OFICIAL para este evento no Rio de Janeiro:
+⚠️ TENTATIVA {attempt}/{LINK_MAX_INTELLIGENT_SEARCHES} - TENTATIVA ANTERIOR FALHOU
 
-Título: {titulo}
-Data: {data}{horario_info}
-Local: {local}{categoria_info}{preco_info}
-Descrição: {descricao[:200]}{fonte_info}{retry_context}
+PROBLEMAS DETECTADOS:
+- Link retornado foi genérico/homepage ou não foi encontrado
+- Tente buscar em OUTRAS plataformas além da anterior
+- Verifique redes sociais do venue (Instagram/Facebook) por links nos posts
+- Se realmente não existir link online, retorne "NONE"
+"""
 
-IMPORTANTE:
-- Busque o link ESPECÍFICO deste evento, não a página principal do local
-- Priorize plataformas de venda: Sympla, Eventbrite, Ticketmaster
-- Se não encontrar em plataformas, busque no site oficial do venue
-- Valide que a data e título correspondem ao evento solicitado
+        prompt = f"""Encontre o link OFICIAL de compra/venda de ingresso para este evento:
 
-Busque em:
-- Sympla (sympla.com.br) - busque pelo título exato
-- Eventbrite (eventbrite.com.br) - busque pelo título exato
-- Ticketmaster Brasil
-- Site oficial do venue/local (ex: bluenoterio.com.br, casadochoro.com.br)
-- Instagram oficial do evento/local (apenas se tiver link de venda)
+EVENTO:
+- Título: {titulo}
+- Data: {data}{horario_info}
+- Local: {local}{categoria_info}{preco_info}
+- Descrição: {descricao[:200]}{fonte_info}{retry_context}
 
-Retorne APENAS o URL completo e válido (começando com http:// ou https://), ou "NONE" se não encontrar nada confiável.
-NÃO retorne:
-- Links genéricos de homepage
-- Agregadores de eventos
-- Links quebrados
-- Páginas de busca"""
+⚠️ REGRAS CRÍTICAS (leia com atenção):
+
+1. NÃO RETORNE sites de ARTISTAS ou VENUES (páginas institucionais):
+   ❌ ERRADO: raphaelghanem.com.br (site do artista)
+   ❌ ERRADO: casadochoro.com.br (homepage do venue)
+   ❌ ERRADO: sympla.com.br (homepage do Sympla)
+   ❌ ERRADO: salaceliciameireles.rj.gov.br/programacao (listagem geral)
+
+   ✅ CORRETO: sympla.com.br/evento/raphael-ghanem-18112025/12345
+   ✅ CORRETO: eventbrite.com.br/e/quarteto-de-cordas-tickets-67890
+   ✅ CORRETO: bluenoterio.com.br/shows/nome-show__abc123/
+
+2. O link DEVE conter identificador ÚNICO do evento:
+   - ID numérico: /evento/nome/123456
+   - Slug com data: /evento-18-11-2025
+   - Hash alfanumérico: /show/nome__abc123de/
+   - Parâmetro: ?event_id=789
+
+3. PLATAFORMAS PRIORITÁRIAS (nesta ordem):
+   a) Sympla: sympla.com.br/evento/[nome-evento]/[ID-numerico]
+   b) Eventbrite: eventbrite.com.br/e/[nome-evento]-tickets-[ID]
+   c) Ticketmaster: ticketmaster.com.br/event/[ID]
+   d) Ingresso.com: ingresso.com/evento/[nome-evento]/[ID]
+   e) Site do venue com página específica (ex: bluenoterio.com.br/shows/[evento]/)
+
+4. SE NÃO ENCONTRAR link específico em NENHUMA plataforma:
+   - Retorne "NONE"
+   - NÃO invente links genéricos
+
+EXEMPLOS DE LINKS VÁLIDOS (RETORNE ASSIM):
+✅ https://www.sympla.com.br/evento/raphael-ghanem-stand-up/2345678
+✅ https://www.eventbrite.com.br/e/quarteto-de-cordas-da-osb-tickets-987654321
+✅ https://bluenoterio.com.br/shows/irma-you-and-my-guitar__22hz624n/
+✅ https://sis.ingressodigital.com/lojanew/detalhes_evento.asp?eve_cod=15246
+
+EXEMPLOS DE LINKS INVÁLIDOS (NÃO RETORNE):
+❌ https://raphaelghanem.com.br (site oficial do artista)
+❌ https://www.sympla.com.br (homepage do Sympla)
+❌ https://www.sympla.com.br/eventos/rio-de-janeiro (listagem por cidade)
+❌ https://casadochoro.com.br/programacao (calendário do venue)
+❌ https://salaceliciameireles.rj.gov.br/programacao (agenda geral)
+
+RETORNE APENAS:
+- O URL completo (https://...) OU
+- A palavra "NONE" (se não encontrar link específico de venda)"""
 
         try:
             response = search_agent.run(prompt)
@@ -556,14 +553,11 @@ NÃO retorne:
             logger.error(f"{self.log_prefix} Erro na busca inteligente de link: {e}")
             return None
 
-    async def _validate_single_event_link(
-        self, event: dict, client: httpx.AsyncClient
-    ) -> dict:
+    async def _validate_single_event_link(self, event: dict) -> dict:
         """Valida o link de um único evento com retry e busca inteligente.
 
         Args:
             event: Evento a validar
-            client: Cliente HTTP assíncrono compartilhado
 
         Returns:
             Dicionário com estatísticas da validação deste evento
@@ -590,6 +584,7 @@ NÃO retorne:
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
                 event["link_ingresso"] = new_link
+                event["link_type"] = self._classify_link_type(new_link, event)
                 event["link_updated_by_ai"] = True
                 event["link_added_by_ai"] = True  # Novo campo para indicar que foi adicionado (não apenas corrigido)
                 event["link_quality_score"] = link_result.get("quality_score")
@@ -624,6 +619,7 @@ NÃO retorne:
                 new_link = link_result["link"]
                 event["link_original"] = link
                 event["link_ingresso"] = new_link
+                event["link_type"] = self._classify_link_type(new_link, event)
                 event["link_updated_by_ai"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
                 event["link_quality_validation"] = link_result.get("validation")
@@ -658,6 +654,7 @@ NÃO retorne:
                 new_link = link_result["link"]
                 event["link_original"] = link
                 event["link_ingresso"] = new_link
+                event["link_type"] = self._classify_link_type(new_link, event)
                 event["link_updated_by_ai"] = True
                 event["link_was_generic"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
@@ -703,90 +700,23 @@ NÃO retorne:
             logger.info(f"✓ Link oficial Sala Cecília válido (sem validação HTTP): {link}")
             return stats
 
-        try:
-            # Tentar validar com retry automático (passando evento para validação SPA)
-            result = await self._validate_single_link(client, link, event=event, attempt_num=1)
-            event["link_valid"] = result["valid"]
-            event["link_status_code"] = result["status_code"]
-
-            # Adicionar informações de validação SPA se presente
-            if "spa_validation" in result:
-                event["spa_validation"] = result["spa_validation"]
-
+        # EXCEÇÃO 3: Links oficiais do Teatro Municipal (.gov.br) - SSL issues
+        if 'theatromunicipal.rj.gov.br' in link.lower():
+            event["link_valid"] = True
+            event["link_status_code"] = 200
+            event["validation_skipped"] = "Official Teatro Municipal links are trusted (SSL issues)"
             stats["validated_first_try"] += 1
-            logger.info(f"✓ Link válido: {link} (status: {result['status_code']})")
+            logger.info(f"✓ Link oficial Teatro Municipal válido (sem validação HTTP): {link}")
+            return stats
 
-        except Exception as e:
-            # Verificar se é erro que não deve ter retry (404, 403, etc)
-            if isinstance(e, httpx.HTTPStatusError):
-                if e.response.status_code in [404, 403, 401, 410]:
-                    # Erros permanentes - não fazer retry
-                    event["link_valid"] = False
-                    event["link_status_code"] = e.response.status_code
-                    event["link_error"] = f"HTTP {e.response.status_code}"
-                    stats["no_retry_needed"] += 1
-                    logger.warning(f"✗ Link com erro permanente: {link} ({e.response.status_code})")
-
-                    # Ir direto para busca inteligente
-                    stats["intelligent_searches"] += 1
-                    link_result = await self._intelligent_link_search(event)
-
-                    if link_result and link_result.get("link") and link_result["link"] != original_link:
-                        new_link = link_result["link"]
-                        event["link_original"] = original_link
-                        event["link_ingresso"] = new_link
-                        event["link_updated_by_ai"] = True
-                        event["link_quality_score"] = link_result.get("quality_score")
-                        event["link_quality_validation"] = link_result.get("validation")
-
-                        # Armazenar dados estruturados extraídos do link
-                        if link_result.get("structured_data"):
-                            event["link_structured_data"] = link_result["structured_data"]
-
-                        # Link já foi validado no _intelligent_link_search
-                        event["link_valid"] = True
-                        event["link_status_code"] = 200
-                        stats["links_fixed"] += 1
-                        logger.info(f"✓ Link corrigido com sucesso: {new_link}")
-
-                    return stats
-
-            # Todas as tentativas de retry falharam (timeout, connection error, etc)
-            logger.warning(f"✗ Todas as {MAX_RETRIES} tentativas falharam para: {link}")
-            logger.warning(f"   Erro: {type(e).__name__}: {e}")
-
-            event["link_valid"] = False
-            event["link_error"] = f"{type(e).__name__}: {str(e)}"
-            event["link_validation_failed"] = True
-            stats["failed_all_retries"] += 1
-
-            # Tentar busca inteligente como último recurso
-            logger.info(f"→ Tentando busca inteligente para: {event.get('titulo')}")
-            stats["intelligent_searches"] += 1
-
-            link_result = await self._intelligent_link_search(event)
-
-            if link_result and link_result.get("link") and link_result["link"] != original_link:
-                new_link = link_result["link"]
-                event["link_original"] = original_link
-                event["link_ingresso"] = new_link
-                event["link_updated_by_ai"] = True
-                event["link_quality_score"] = link_result.get("quality_score")
-                event["link_quality_validation"] = link_result.get("validation")
-
-                # Armazenar dados estruturados extraídos do link
-                if link_result.get("structured_data"):
-                    event["link_structured_data"] = link_result["structured_data"]
-
-                # Link já foi validado no _intelligent_link_search
-                event["link_valid"] = True
-                event["link_status_code"] = 200
-                stats["links_fixed"] += 1
-                logger.info(f"✓ Link corrigido com sucesso: {new_link}")
-            else:
-                # Marcar para revisão manual
-                event["requires_manual_link_check"] = True
-                logger.warning(f"⚠ Evento requer revisão manual de link: {event.get('titulo')}")
+        # OTIMIZAÇÃO: Não fazer HEAD request aqui (redundante)
+        # O validation_agent já faz GET completo que inclui validação de status
+        # Apenas marcar como "pending validation" para economia de 700+ requisições
+        event["link_valid"] = None  # Será validado no validation_agent
+        event["link_pending_validation"] = True
+        event["link_status_code"] = None
+        stats["validated_first_try"] += 1
+        logger.info(f"→ Link aguardando validação completa: {link}")
 
         return stats
 
@@ -826,22 +756,21 @@ NÃO retorne:
         }
 
         # Validar todos os links em paralelo
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
-            # Criar tasks para validar todos os eventos em paralelo
-            validation_tasks = [
-                self._validate_single_event_link(event, client)
-                for event in event_list
-            ]
+        # Criar tasks para validar todos os eventos em paralelo
+        validation_tasks = [
+            self._validate_single_event_link(event)
+            for event in event_list
+        ]
 
-            # Executar todas as validações em paralelo
-            logger.info(f"Iniciando validação paralela de {len(event_list)} links...")
-            validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
+        # Executar todas as validações em paralelo
+        logger.info(f"Iniciando validação paralela de {len(event_list)} links...")
+        validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
 
-            # Agregar estatísticas
-            for result in validation_results:
-                if isinstance(result, dict):
-                    for key in stats:
-                        stats[key] += result.get(key, 0)
+        # Agregar estatísticas
+        for result in validation_results:
+            if isinstance(result, dict):
+                for key in stats:
+                    stats[key] += result.get(key, 0)
 
         # Log de estatísticas
         logger.info(f"\n{'='*60}")
