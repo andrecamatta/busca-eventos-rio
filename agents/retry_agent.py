@@ -55,6 +55,61 @@ class RetryAgent:
             logger.warning(f"Data inválida no evento: {data_str}")
             return False
 
+    def _check_saturday_coverage(self, verified_events: list[dict]) -> list[str]:
+        """Verifica se cada sábado tem pelo menos 1 evento outdoor.
+
+        Args:
+            verified_events: Lista de eventos verificados
+
+        Returns:
+            Lista de sábados descobertos (formato DD/MM/YYYY)
+        """
+        from config import SEARCH_CONFIG
+
+        # Listar todos os sábados no intervalo
+        start_date = SEARCH_CONFIG["start_date"]
+        end_date = SEARCH_CONFIG["end_date"]
+
+        saturdays = []
+        current = start_date
+        while current <= end_date:
+            if current.weekday() == 5:  # 5 = sábado
+                saturdays.append(current.strftime("%d/%m/%Y"))
+            current += timedelta(days=1)
+
+        # Verificar quais sábados TÊM eventos outdoor
+        saturdays_with_outdoor = set()
+
+        for event in verified_events:
+            # Verificar se é outdoor
+            categoria = event.get("categoria", "").lower()
+            if "outdoor" not in categoria and "ar livre" not in categoria:
+                continue
+
+            # Verificar se é sábado
+            data_str = event.get("data", "")
+            if not data_str:
+                continue
+
+            try:
+                data = datetime.strptime(data_str, "%d/%m/%Y")
+                if data.weekday() == 5:  # sábado
+                    saturdays_with_outdoor.add(data_str)
+            except ValueError:
+                continue
+
+        # Retornar sábados SEM eventos outdoor
+        saturdays_uncovered = [s for s in saturdays if s not in saturdays_with_outdoor]
+
+        if saturdays_uncovered:
+            logger.warning(
+                f"⚠️  Sábados SEM eventos outdoor: {len(saturdays_uncovered)}/{len(saturdays)} "
+                f"({', '.join(saturdays_uncovered[:3])}...)" if len(saturdays_uncovered) > 3
+                else f"⚠️  Sábados SEM eventos outdoor: {', '.join(saturdays_uncovered)}"
+            )
+
+        return saturdays_uncovered
+
     def needs_retry(self, verified_data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
         """Verifica se precisa de retry e retorna análise dos gaps."""
         verified_events = verified_data.get("verified_events", [])
@@ -71,8 +126,14 @@ class RetryAgent:
         # Verificar se há eventos dos venues obrigatórios
         missing_required_venues = self._check_required_venues(verified_events)
 
-        # Precisa retry se não atingir o mínimo de eventos de FIM DE SEMANA OU se faltar algum venue obrigatório
-        if weekend_count >= MIN_EVENTS_THRESHOLD and not missing_required_venues:
+        # Verificar cobertura de outdoor por sábado
+        saturdays_uncovered = self._check_saturday_coverage(verified_events)
+
+        # Precisa retry se:
+        # 1. Não atingir mínimo de eventos de fim de semana, OU
+        # 2. Faltar venue obrigatório, OU
+        # 3. Algum sábado sem evento outdoor
+        if weekend_count >= MIN_EVENTS_THRESHOLD and not missing_required_venues and not saturdays_uncovered:
             return False, {}
 
         # Analisar gaps por categoria
@@ -120,10 +181,14 @@ class RetryAgent:
             "recoverable_events": recoverable,
             "gaps": [k for k, v in categories.items() if v == 0],
             "missing_required_venues": missing_required_venues,
+            "saturdays_uncovered": saturdays_uncovered,
         }
 
         if missing_required_venues:
             logger.warning(f"Venues obrigatórios faltantes: {missing_required_venues}")
+
+        if saturdays_uncovered:
+            logger.warning(f"⚠️  {len(saturdays_uncovered)} sábados sem outdoor: {', '.join(saturdays_uncovered)}")
 
         logger.info(f"Análise de gaps: {json.dumps(analysis, indent=2, ensure_ascii=False)}")
         return True, analysis
@@ -201,7 +266,20 @@ class RetryAgent:
 - MÍNIMO: 3-5 eventos de comédia
 """)
 
-        if "outdoor" in gaps or categories.get("outdoor", 0) < 2:
+        # PRIORIDADE: Se há sábados sem outdoor, buscar especificamente
+        saturdays_uncovered = analysis.get("saturdays_uncovered", [])
+        if saturdays_uncovered:
+            saturdays_list = ', '.join(saturdays_uncovered[:5])  # Mostrar até 5
+            more_text = f" (e mais {len(saturdays_uncovered) - 5})" if len(saturdays_uncovered) > 5 else ""
+            gap_descriptions.append(f"""
+🚨 BUSCA ULTRA-PRIORITÁRIA: OUTDOOR NOS SÁBADOS DESCOBERTOS
+- FOCO PRINCIPAL: Buscar eventos ao ar livre especificamente para as datas: {saturdays_list}{more_text}
+- Locais: Aterro do Flamengo, Jockey Club, Marina da Glória, Parque Lage, Jardim Botânico, Quinta da Boa Vista
+- Tipos: festivais, shows ao ar livre, feiras culturais, food trucks com música, eventos em parques
+- Palavras-chave: "festival Rio sábado {month_str}", "evento ao ar livre sábado", "show outdoor Rio fim de semana"
+- MÍNIMO: Pelo menos 1 evento para CADA sábado descoberto ({len(saturdays_uncovered)} eventos necessários)
+""")
+        elif "outdoor" in gaps or categories.get("outdoor", 0) < 2:
             gap_descriptions.append(f"""
 🌳 BUSCA COMPLEMENTAR: EVENTOS AO AR LIVRE EM FIM DE SEMANA
 - Dias: APENAS sábados e domingos entre {start_date_str} e {end_date_str}

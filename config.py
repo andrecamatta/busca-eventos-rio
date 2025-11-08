@@ -82,11 +82,33 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
     },
 }
 
+# Lista GLOBAL de exclusões (aplicada a TODOS os eventos, independente de categoria)
+GLOBAL_EXCLUDE_KEYWORDS: Final[list[str]] = [
+    # Conteúdo infantil/familiar
+    "infantil", "criança", "crianças", "kids", "criancas",
+    "infanto-juvenil", "infanto juvenil",
+    "família", "familia", "family",
+    "para toda família", "para toda a família",
+    "sessão infantil", "sessao infantil",
+    "indicado para crianças", "indicado para criancas",
+    "filme infantil", "filmes infantis", "cinema infantil",
+    "sessão dupla", "sessao dupla",
+    "oficina infantil", "oficina-infantil",
+    "atividade infantil", "atividades infantis",
+    "para crianças", "para criancas",
+    "pequenos artistas", "crianças e famílias",
+    # Conteúdo LGBTQIAPN+
+    "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn",
+    "pride", "parada gay", "parada lgbtq",
+    "diversidade sexual", "queer", "drag queen", "drag king",
+]
+
 # Venues obrigatórios (deve ter pelo menos 1 evento de cada)
 REQUIRED_VENUES: Final[dict[str, list[str]]] = {
     "teatro_municipal": ["Teatro Municipal", "Theatro Municipal"],
     "sala_cecilia": ["Sala Cecília Meireles", "Cecília Meireles", "Cecilia Meireles", "Sala Cecília Meirelles", "Cecília Meirelles"],
     "blue_note": ["Blue Note Rio", "Blue Note", "BlueNote"],
+    "artemis": ["Artemis", "Artemis Torrefação", "Artemis - Torrefação Artesanal e Cafeteria"],
 }
 
 # Endereços reais dos venues (para validação rigorosa)

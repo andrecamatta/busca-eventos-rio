@@ -1706,10 +1706,15 @@ FORMATO JSON (sem comentários):
         Returns:
             Lista de eventos filtrados (sem eventos que contêm keywords de exclusão)
         """
-        from config import EVENT_CATEGORIES
+        from config import EVENT_CATEGORIES, GLOBAL_EXCLUDE_KEYWORDS
 
-        # Buscar lista de exclusão da categoria "outdoor_weekend"
-        exclude_keywords = EVENT_CATEGORIES.get("outdoor_weekend", {}).get("exclude", [])
+        # Iniciar com exclusões GLOBAIS (infantil, LGBTQ+, etc) - aplicadas a TODOS os eventos
+        exclude_keywords = list(GLOBAL_EXCLUDE_KEYWORDS)
+
+        # Adicionar exclusões específicas de outdoor (shows mainstream) se aplicável
+        outdoor_exclude = EVENT_CATEGORIES.get("outdoor_weekend", {}).get("exclude", [])
+        if outdoor_exclude:
+            exclude_keywords.extend(outdoor_exclude)
 
         if not exclude_keywords:
             return events
