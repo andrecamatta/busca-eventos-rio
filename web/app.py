@@ -48,6 +48,8 @@ job_status = {
     "last_result": None,  # "success", "error", ou None
     "last_error": None,
     "last_duration_seconds": None,
+    "last_stdout": None,
+    "last_stderr": None,
 }
 
 
@@ -309,6 +311,8 @@ def run_event_search():
 
             job_status["last_result"] = "success"
             job_status["last_error"] = None
+            job_status["last_stdout"] = result.stdout[:5000] if result.stdout else None
+            job_status["last_stderr"] = result.stderr[:5000] if result.stderr else None
         else:
             error_msg = f"Subprocess retornou código {result.returncode}"
             logger.error("=" * 80)
@@ -328,6 +332,8 @@ def run_event_search():
 
             job_status["last_result"] = "error"
             job_status["last_error"] = error_msg
+            job_status["last_stdout"] = result.stdout[:5000] if result.stdout else None
+            job_status["last_stderr"] = result.stderr[:5000] if result.stderr else None
 
     except subprocess.TimeoutExpired as e:
         duration = time.time() - start_time
