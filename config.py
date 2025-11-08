@@ -73,7 +73,7 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
             "festival", "festival de rua", "festival comunitário",
             "junta local", "corona sunset",
             # Bairros/regiões
-            "Ipanema", "Copacabana", "Glória", "Laranjeiras", "Madureira", "Lapa",
+            "Ipanema", "Copacabana", "Glória", "Laranjeiras", "Lapa",
             # Temporais
             "fim de semana", "sábado", "domingo",
         ],
