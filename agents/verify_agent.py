@@ -709,14 +709,59 @@ RETORNE APENAS:
             logger.info(f"✓ Link oficial Teatro Municipal válido (sem validação HTTP): {link}")
             return stats
 
-        # OTIMIZAÇÃO: Não fazer HEAD request aqui (redundante)
-        # O validation_agent já faz GET completo que inclui validação de status
-        # Apenas marcar como "pending validation" para economia de 700+ requisições
-        event["link_valid"] = None  # Será validado no validation_agent
-        event["link_pending_validation"] = True
-        event["link_status_code"] = None
-        stats["validated_first_try"] += 1
-        logger.info(f"→ Link aguardando validação completa: {link}")
+        # Validar link via HTTP request
+        http_client = HttpClientWrapper()
+        link_status = await http_client.check_link_status(link)
+
+        # Link acessível (200 OK)
+        if link_status["accessible"]:
+            event["link_valid"] = True
+            event["link_status_code"] = link_status["status_code"]
+            stats["validated_first_try"] += 1
+            logger.info(f"✓ Link válido ({link_status['status_code']}): {link}")
+            return stats
+
+        # Link com erro (404, 403, timeout) - tentar busca inteligente
+        status_code = link_status.get("status_code")
+        reason = link_status.get("reason", "Unknown error")
+
+        logger.warning(f"⚠️ Link com erro ({reason}): {link} - Tentando busca inteligente...")
+        stats["total_links"] += 1
+        stats["link_errors"] = stats.get("link_errors", 0) + 1
+        stats["intelligent_searches"] += 1
+
+        # Tentar encontrar link alternativo
+        link_result = await self._intelligent_link_search(event)
+
+        if link_result and link_result.get("link"):
+            new_link = link_result["link"]
+            event["link_original"] = link
+            event["link_ingresso"] = new_link
+            event["link_type"] = self._classify_link_type(new_link, event)
+            event["link_updated_by_ai"] = True
+            event["link_recovered_from_error"] = True
+            event["link_original_error"] = f"{status_code} - {reason}" if status_code else reason
+            event["link_quality_score"] = link_result.get("quality_score")
+            event["link_quality_validation"] = link_result.get("validation")
+
+            # Armazenar dados estruturados extraídos do link
+            if link_result.get("structured_data"):
+                event["link_structured_data"] = link_result["structured_data"]
+
+            # Link já foi validado no _intelligent_link_search
+            event["link_valid"] = True
+            event["link_status_code"] = 200
+            stats["links_fixed"] += 1
+            stats["links_recovered"] = stats.get("links_recovered", 0) + 1
+            logger.info(f"✓ Link recuperado com sucesso: {new_link} (original tinha erro: {reason})")
+        else:
+            # Nenhum link alternativo encontrado
+            event["link_valid"] = False
+            event["link_status_code"] = status_code
+            event["link_error"] = f"{status_code} - {reason}" if status_code else reason
+            event["requires_manual_link_check"] = True
+            stats["links_failed_permanently"] = stats.get("links_failed_permanently", 0) + 1
+            logger.error(f"❌ Link permanentemente inválido ({reason}): {link} - Nenhum link alternativo encontrado")
 
         return stats
 

@@ -179,19 +179,39 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
         else:
             color = "#95a5a6"  # Cinza claro default
 
+        # Validar link antes de incluir (não mostrar links 404 ou inválidos)
+        link_ingresso = event.get("link_ingresso")
+        link_valid = event.get("link_valid")
+        link_status_code = event.get("link_status_code")
+
+        # Só incluir link se for válido (não é False e não é 404)
+        if link_valid is False or link_status_code == 404:
+            link_ingresso = None
+
+        # Badge visual para eventos contínuos (exposições/temporadas)
+        title = event.get("titulo", "Sem título")
+        is_temporada = event.get("is_temporada", False)
+        tipo_temporada = event.get("tipo_temporada")
+
+        if is_temporada and tipo_temporada:
+            # Adicionar ícone de calendário ao título
+            title = f"📅 {title}"
+
         return {
             "id": hash(event.get("titulo", "") + data_str + horario_str),
-            "title": event.get("titulo", "Sem título"),
+            "title": title,
             "start": start_datetime,
             "end": start_datetime,  # Eventos pontuais
             "extendedProps": {
                 "local": event.get("local", ""),
                 "preco": event.get("preco", "Consultar"),
-                "link_ingresso": event.get("link_ingresso"),
-                "link_type": event.get("link_type", "info"),  # purchase, info, ou venue
+                "link_ingresso": link_ingresso,  # None se inválido
+                "link_type": event.get("link_type", "info") if link_ingresso else None,  # purchase, info, ou venue
                 "descricao": event.get("descricao", ""),
                 "categoria": categoria,
                 "venue": venue,
+                "is_temporada": is_temporada,
+                "tipo_temporada": tipo_temporada,
             },
             "color": color,
             "textColor": "#ffffff",
@@ -457,7 +477,8 @@ async def index(request: Request):
 @app.get("/api/events")
 async def get_events(
     categoria: Optional[str] = None,
-    venue: Optional[str] = None
+    venue: Optional[str] = None,
+    apenas_com_link: bool = False
 ):
     """
     Retorna eventos em formato FullCalendar.
@@ -465,6 +486,7 @@ async def get_events(
     Query params:
     - categoria: filtrar por categoria (Jazz, Teatro-Comédia, Outdoor-FimDeSemana)
     - venue: filtrar por venue específico
+    - apenas_com_link: mostrar apenas eventos com link de ingresso válido
     """
     eventos = load_latest_events()
 
@@ -474,6 +496,15 @@ async def get_events(
 
     if venue:
         eventos = [e for e in eventos if e.get("venue") == venue]
+
+    if apenas_com_link:
+        # Filtrar apenas eventos com link válido (não None, não False, não 404)
+        eventos = [
+            e for e in eventos
+            if e.get("link_ingresso")
+            and e.get("link_valid") is not False
+            and e.get("link_status_code") != 404
+        ]
 
     # Converter para formato FullCalendar
     calendar_events = []

@@ -4,13 +4,14 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from bs4 import BeautifulSoup
 
 from config import (
     HTTP_TIMEOUT,
+    MIN_HOURS_ADVANCE,
     SEARCH_CONFIG,
     VALIDATION_STRICTNESS,
     VENUE_ADDRESSES,
@@ -77,9 +78,23 @@ class ValidationAgent:
 
         is_trusted_venue = any(venue in local for venue in TRUSTED_VENUES)
 
-        # Auto-aprovar venues confiáveis com campos completos (mesmo sem link validado)
+        # Auto-aprovar venues confiáveis com campos completos SE link for válido ou não existir
         if is_trusted_venue and has_complete_fields:
-            return False  # Pode pular validação LLM (venue confiável)
+            link = event.get('link_ingresso')
+            link_valid = event.get('link_valid')
+
+            # Se não tem link, pode auto-aprovar (evento presencial sem venda online)
+            if not link:
+                return False  # Pode pular validação LLM (venue confiável sem link)
+
+            # Se tem link, só auto-aprovar se link for válido
+            if link_valid is True:
+                return False  # Pode pular validação LLM (venue confiável com link válido)
+
+            # Se tem link mas é inválido (False ou None), PRECISA validar
+            # Links quebrados em venues confiáveis precisam ser verificados
+            logger.warning(f"⚠️ Venue confiável '{local}' com link inválido - validação necessária")
+            return True  # Precisa validar (link potencialmente quebrado)
 
         # Se tiver link válido (explicitamente marcado como True) E campos completos, pode pular
         has_valid_link = event.get('link_ingresso') and event.get('link_valid') is True
@@ -872,5 +887,29 @@ Retorne JSON:
                 "valid": False,
                 "reason": f"Data fora do período válido ({start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')})",
             }
+
+        # VALIDAÇÃO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos MIN_HOURS_ADVANCE horas
+        now = datetime.now()
+        if event_date_only == now.date():
+            # Evento é hoje - validar horário
+            horario_str = event.get("horario", "00:00")
+            try:
+                # Parse horário (formato HH:MM)
+                hora_partes = horario_str.split(":")
+                if len(hora_partes) >= 2:
+                    hora = int(hora_partes[0])
+                    minuto = int(hora_partes[1])
+                    event_datetime = datetime.combine(event_date_only, datetime.min.time()).replace(hour=hora, minute=minuto)
+
+                    # Verificar se faltam pelo menos MIN_HOURS_ADVANCE horas
+                    hora_minima = now + timedelta(hours=MIN_HOURS_ADVANCE)
+                    if event_datetime < hora_minima:
+                        return {
+                            "valid": False,
+                            "reason": f"Evento hoje às {horario_str} já passou ou está muito próximo (menos de {MIN_HOURS_ADVANCE}h)",
+                        }
+            except (ValueError, IndexError):
+                # Se não conseguir parsear horário, aceitar por segurança (modo permissivo)
+                logger.warning(f"Não foi possível parsear horário '{horario_str}' para validação temporal")
 
         return {"valid": True, "reason": "Data válida", "date": event_date.strftime('%d/%m/%Y')}

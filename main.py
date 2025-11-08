@@ -22,6 +22,7 @@ from agents.retry_agent import RetryAgent
 from agents.search_agent import SearchAgent
 from agents.verify_agent import VerifyAgent
 from config import ENRICHMENT_ENABLED, MIN_EVENTS_THRESHOLD, OPENROUTER_API_KEY, SEARCH_CONFIG
+from utils.continuous_event_handler import consolidate_continuous_events
 from utils.deduplicator import deduplicate_events
 from utils.event_classifier import classify_events
 from utils.event_merger import EventMerger
@@ -176,6 +177,18 @@ class EventSearchOrchestrator:
                 verified_events.get("verified_events", [])
             )
             logger.info(f"✓ Eventos classificados em categorias")
+
+            # Consolidação de eventos contínuos (exposições, mostras, temporadas)
+            logger.info("\n[FASE 3.9/5] 📅 Consolidando eventos contínuos (exposições/mostras)...")
+            before_consolidation = len(verified_events.get("verified_events", []))
+            verified_events["verified_events"] = consolidate_continuous_events(
+                verified_events.get("verified_events", [])
+            )
+            after_consolidation = len(verified_events.get("verified_events", []))
+            if before_consolidation != after_consolidation:
+                logger.info(f"✓ Consolidação aplicada: {before_consolidation} -> {after_consolidation} eventos")
+            else:
+                logger.info(f"✓ Nenhum evento contínuo detectado para consolidar")
 
             # Salvar eventos verificados finais
             self.file_manager.save_json(verified_events, "verified_events.json")

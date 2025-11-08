@@ -247,6 +247,9 @@ MAX_RETRIES: Final[int] = 3
 # Threshold mínimo de eventos válidos (apenas eventos de SÁBADO/DOMINGO contam para o threshold)
 MIN_EVENTS_THRESHOLD: Final[int] = 10
 
+# Horas mínimas de antecedência para eventos do próprio dia
+MIN_HOURS_ADVANCE: Final[int] = 3  # Eventos hoje só aparecem se faltam +3h
+
 # Nível de rigor da validação individual
 # "permissive": aceita eventos com pequenas inconsistências, usa LLM para decidir
 # "strict": regras rígidas, rejeita qualquer inconsistência

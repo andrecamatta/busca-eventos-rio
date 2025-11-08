@@ -21,6 +21,36 @@ logger = logging.getLogger(__name__)
 # Prefixo para logs deste agente
 LOG_PREFIX = "[EnrichmentAgent] 💎"
 
+# Frases proibidas em descrições (menções a critérios de filtro/validação)
+FORBIDDEN_DESC_PHRASES = [
+    r"sem elementos infantis",
+    r"sem temáticas lgbt\+?",
+    r"sem conteúdo infantil",
+    r"não é para crianças",
+    r"público adulto apenas",
+    r"exclusões aplicadas",
+    r"evento adulto",
+    r"filtros aplicados",
+    r"sem conteúdo lgbt",
+]
+
+
+def sanitize_description(desc: str) -> str:
+    """Remove menções a critérios de filtro/validação da descrição."""
+    if not desc:
+        return desc
+
+    # Limpar frases proibidas
+    for pattern in FORBIDDEN_DESC_PHRASES:
+        desc = re.sub(pattern, "", desc, flags=re.IGNORECASE)
+
+    # Limpar espaços duplicados e pontuação solta
+    desc = re.sub(r'\s+', ' ', desc)  # Espaços múltiplos -> único
+    desc = re.sub(r'\s+([.,;!?])', r'\1', desc)  # Espaço antes de pontuação
+    desc = re.sub(r'([.,;!?])\s*([.,;!?])', r'\1', desc)  # Pontuação dupla
+
+    return desc.strip()
+
 
 class EnrichmentAgent:
     """Agente especializado em enriquecer descrições genéricas de eventos."""
@@ -285,6 +315,9 @@ Retorne APENAS a nova descrição, sem explicações adicionais."""
             # Remover possíveis markdown artifacts
             content = content.replace("**", "").replace("*", "")
 
+            # SANITIZAR: Remover menções a critérios de filtro/validação
+            content = sanitize_description(content)
+
             # Limitar tamanho
             words = content.split()
             if len(words) > MAX_DESCRIPTION_LENGTH:
@@ -294,5 +327,5 @@ Retorne APENAS a nova descrição, sem explicações adicionais."""
 
         except Exception as e:
             logger.error(f"Erro no processamento do enriquecimento: {e}")
-            # Fallback: retornar descrição original
-            return original_desc
+            # Fallback: retornar descrição original (também sanitizada)
+            return sanitize_description(original_desc)

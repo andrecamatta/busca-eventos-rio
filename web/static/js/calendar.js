@@ -3,7 +3,8 @@
 let calendar;
 let currentEvent = null;
 let currentFilters = {
-    categoria: ''
+    categoria: '',
+    apenas_com_link: false
 };
 
 // Detectar dispositivo móvel
@@ -79,6 +80,9 @@ async function fetchEvents(info, successCallback, failureCallback) {
         if (currentFilters.categoria) {
             params.append('categoria', currentFilters.categoria);
         }
+        if (currentFilters.apenas_com_link) {
+            params.append('apenas_com_link', 'true');
+        }
 
         const response = await fetch(`/api/events?${params.toString()}`);
         if (!response.ok) {
@@ -121,6 +125,7 @@ async function loadFilters() {
 // Aplicar filtros
 function applyFilters() {
     currentFilters.categoria = document.getElementById('filter-categoria').value;
+    currentFilters.apenas_com_link = document.getElementById('filter-link-valido').checked;
 
     calendar.refetchEvents();
     showToast('Filtros aplicados', 'success');
@@ -129,7 +134,8 @@ function applyFilters() {
 // Limpar filtros
 function clearFilters() {
     document.getElementById('filter-categoria').value = '';
-    currentFilters = { categoria: '' };
+    document.getElementById('filter-link-valido').checked = false;
+    currentFilters = { categoria: '', apenas_com_link: false };
 
     calendar.refetchEvents();
     showToast('Filtros removidos', 'info');
