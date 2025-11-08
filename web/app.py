@@ -40,6 +40,16 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 # Scheduler para atualização automática
 scheduler = BackgroundScheduler()
 
+# Status do job de atualização (rastreamento global)
+job_status = {
+    "is_running": False,
+    "last_started": None,
+    "last_completed": None,
+    "last_result": None,  # "success", "error", ou None
+    "last_error": None,
+    "last_duration_seconds": None,
+}
+
 
 def ensure_output_directory():
     """Garante que o diretório base de output existe."""
@@ -221,33 +231,52 @@ def parse_log_line(line: str) -> Optional[dict]:
 
 
 def run_event_search():
-    """Executa a busca de eventos (main.py)."""
+    """Executa a busca de eventos (main.py) com logging detalhado e rastreamento de status."""
     import subprocess
     import shutil
+    import time
+    import traceback
+
+    # Marcar início da execução
+    start_time = time.time()
+    job_status["is_running"] = True
+    job_status["last_started"] = datetime.now().isoformat()
+    job_status["last_result"] = None
+    job_status["last_error"] = None
+
+    logger.info("=" * 80)
+    logger.info("🚀 INICIANDO BUSCA DE EVENTOS (MANUAL/SCHEDULED)")
+    logger.info(f"📅 Horário de início: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 80)
 
     try:
         # Verificar se API key está configurada
         if not os.getenv("OPENROUTER_API_KEY"):
-            logger.error("❌ OPENROUTER_API_KEY não configurada. Busca cancelada.")
+            error_msg = "OPENROUTER_API_KEY não configurada. Busca cancelada."
+            logger.error(f"❌ {error_msg}")
+            job_status["last_result"] = "error"
+            job_status["last_error"] = error_msg
             return
 
         # Determinar comando para executar main.py
         venv_python = BASE_DIR / ".venv" / "bin" / "python"
 
         if shutil.which("uv"):
-            # Se uv está disponível, usar uv run
             cmd = ["uv", "run", "python", "main.py"]
-            logger.info(f"🔄 Iniciando busca com uv: {' '.join(cmd)}")
+            logger.info(f"✓ Comando selecionado: uv run python main.py")
         elif venv_python.exists():
-            # Se não tem uv mas tem virtualenv, usar python do venv
             cmd = [str(venv_python), "main.py"]
-            logger.info(f"🔄 Iniciando busca com venv python: {' '.join(cmd)}")
+            logger.info(f"✓ Comando selecionado: {venv_python} main.py")
         else:
-            # Fallback para python do sistema (pode não ter dependências)
-            logger.warning("⚠️  Nem uv nem virtualenv encontrados. Tentando python do sistema...")
+            logger.warning("⚠️  Nem uv nem virtualenv encontrados. Usando python3 do sistema...")
             cmd = ["python3", "main.py"]
-            logger.info(f"🔄 Iniciando busca com python do sistema: {' '.join(cmd)}")
+            logger.info(f"✓ Comando selecionado: python3 main.py")
 
+        logger.info(f"📂 Diretório de execução: {BASE_DIR}")
+        logger.info(f"⏱️  Timeout configurado: 600s (10 minutos)")
+        logger.info("🔄 Executando subprocess...")
+
+        # Executar comando
         result = subprocess.run(
             cmd,
             cwd=BASE_DIR,
@@ -256,23 +285,91 @@ def run_event_search():
             timeout=600  # 10 minutos
         )
 
-        if result.returncode == 0:
-            logger.info("✓ Busca de eventos concluída com sucesso!")
-            if result.stdout:
-                logger.info(f"stdout: {result.stdout[:500]}")
-        else:
-            logger.error(f"❌ Erro na busca de eventos (code {result.returncode})")
-            if result.stderr:
-                logger.error(f"stderr: {result.stderr[:1000]}")
-            if result.stdout:
-                logger.error(f"stdout: {result.stdout[:1000]}")
+        duration = time.time() - start_time
+        job_status["last_duration_seconds"] = round(duration, 2)
 
-    except subprocess.TimeoutExpired:
-        logger.error("❌ Busca de eventos excedeu o timeout de 10 minutos")
+        logger.info("-" * 80)
+        logger.info(f"⏱️  Duração total: {duration:.2f}s")
+        logger.info(f"📊 Return code: {result.returncode}")
+
+        if result.returncode == 0:
+            logger.info("=" * 80)
+            logger.info("✅ BUSCA DE EVENTOS CONCLUÍDA COM SUCESSO!")
+            logger.info("=" * 80)
+
+            # Logar stdout completo (primeiros 5000 chars)
+            if result.stdout:
+                logger.info("📝 STDOUT (primeiros 5000 chars):")
+                logger.info(result.stdout[:5000])
+
+            job_status["last_result"] = "success"
+            job_status["last_error"] = None
+        else:
+            error_msg = f"Subprocess retornou código {result.returncode}"
+            logger.error("=" * 80)
+            logger.error(f"❌ ERRO NA BUSCA DE EVENTOS")
+            logger.error("=" * 80)
+            logger.error(f"Return code: {result.returncode}")
+
+            # Logar stderr completo (primeiros 5000 chars)
+            if result.stderr:
+                logger.error("📝 STDERR (primeiros 5000 chars):")
+                logger.error(result.stderr[:5000])
+
+            # Logar stdout também (pode conter mensagens úteis)
+            if result.stdout:
+                logger.error("📝 STDOUT (primeiros 5000 chars):")
+                logger.error(result.stdout[:5000])
+
+            job_status["last_result"] = "error"
+            job_status["last_error"] = error_msg
+
+    except subprocess.TimeoutExpired as e:
+        duration = time.time() - start_time
+        job_status["last_duration_seconds"] = round(duration, 2)
+
+        error_msg = f"Timeout de 10 minutos excedido (executou por {duration:.2f}s)"
+        logger.error("=" * 80)
+        logger.error("❌ TIMEOUT NA BUSCA DE EVENTOS")
+        logger.error("=" * 80)
+        logger.error(error_msg)
+
+        # Tentar capturar output parcial
+        if hasattr(e, 'stdout') and e.stdout:
+            logger.error("📝 STDOUT parcial (primeiros 5000 chars):")
+            logger.error(e.stdout[:5000])
+        if hasattr(e, 'stderr') and e.stderr:
+            logger.error("📝 STDERR parcial (primeiros 5000 chars):")
+            logger.error(e.stderr[:5000])
+
+        job_status["last_result"] = "error"
+        job_status["last_error"] = error_msg
+
     except Exception as e:
-        logger.error(f"❌ Erro ao executar busca: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()[:1000]}")
+        duration = time.time() - start_time
+        job_status["last_duration_seconds"] = round(duration, 2)
+
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        logger.error("=" * 80)
+        logger.error("❌ EXCEÇÃO NÃO TRATADA NA BUSCA DE EVENTOS")
+        logger.error("=" * 80)
+        logger.error(f"Tipo: {type(e).__name__}")
+        logger.error(f"Mensagem: {str(e)}")
+        logger.error("📝 Traceback completo:")
+        logger.error(traceback.format_exc())
+
+        job_status["last_result"] = "error"
+        job_status["last_error"] = error_msg
+
+    finally:
+        # Marcar fim da execução
+        job_status["is_running"] = False
+        job_status["last_completed"] = datetime.now().isoformat()
+
+        logger.info("=" * 80)
+        logger.info(f"🏁 EXECUÇÃO FINALIZADA - Status: {job_status['last_result']}")
+        logger.info(f"📅 Horário de término: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 80)
 
 
 @app.on_event("startup")
@@ -432,6 +529,24 @@ async def trigger_refresh():
     except Exception as e:
         logger.error(f"❌ Erro ao agendar atualização: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/refresh/status")
+async def get_refresh_status():
+    """
+    Retorna o status atual do job de atualização de eventos.
+
+    Response:
+        {
+            "is_running": bool,
+            "last_started": str | null,
+            "last_completed": str | null,
+            "last_result": "success" | "error" | null,
+            "last_error": str | null,
+            "last_duration_seconds": float | null
+        }
+    """
+    return JSONResponse(content=job_status)
 
 
 @app.get("/api/stats")

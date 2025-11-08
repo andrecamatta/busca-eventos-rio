@@ -175,24 +175,77 @@ async function refreshEvents() {
             return;
         }
 
-        // Sucesso
-        showToast('✓ Atualização iniciada! Aguarde alguns minutos...', 'info');
-
-        // Aguardar 30 segundos e recarregar
-        setTimeout(() => {
-            calendar.refetchEvents();
-            updateStats();
-        }, 30000);
+        // Sucesso - iniciar polling de status
+        showToast('✓ Atualização iniciada! Acompanhando progresso...', 'info');
+        pollRefreshStatus();
 
     } catch (error) {
         console.error('Erro ao atualizar:', error);
         showToast('Erro de conexão ao iniciar atualização', 'error');
-    } finally {
+        // Restaurar botão em caso de erro
         setTimeout(() => {
             btn.classList.remove('spinning');
             btn.disabled = false;
         }, 2000);
     }
+}
+
+// Fazer polling do status da atualização
+async function pollRefreshStatus() {
+    const btn = document.getElementById('refresh-btn');
+    let pollCount = 0;
+    const maxPolls = 120; // 10 minutos (120 * 5s = 600s)
+
+    const interval = setInterval(async () => {
+        pollCount++;
+
+        try {
+            const response = await fetch('/api/refresh/status');
+            const status = await response.json();
+
+            console.log(`[Polling ${pollCount}/${maxPolls}]`, status);
+
+            // Se ainda está rodando, continuar polling
+            if (status.is_running) {
+                // Atualizar mensagem de progresso
+                if (pollCount % 6 === 0) { // A cada 30s
+                    const elapsed = status.last_started ?
+                        Math.floor((new Date() - new Date(status.last_started)) / 1000) : 0;
+                    showToast(`⏳ Atualização em andamento... (${elapsed}s)`, 'info');
+                }
+                return; // Continuar polling
+            }
+
+            // Job terminou - parar polling
+            clearInterval(interval);
+            btn.classList.remove('spinning');
+            btn.disabled = false;
+
+            // Verificar resultado
+            if (status.last_result === 'success') {
+                showToast(`✅ Atualização concluída com sucesso! (${status.last_duration_seconds}s)`, 'success');
+                // Recarregar eventos
+                calendar.refetchEvents();
+                updateStats();
+            } else if (status.last_result === 'error') {
+                showToast(`❌ Erro na atualização: ${status.last_error || 'Erro desconhecido'}`, 'error');
+                console.error('Detalhes do erro:', status);
+            } else {
+                // Resultado desconhecido
+                showToast('⚠️ Atualização finalizada com status desconhecido', 'warning');
+            }
+
+        } catch (error) {
+            console.error('Erro ao consultar status:', error);
+            // Continuar tentando por algumas vezes
+            if (pollCount >= maxPolls) {
+                clearInterval(interval);
+                btn.classList.remove('spinning');
+                btn.disabled = false;
+                showToast('⚠️ Timeout ao aguardar atualização', 'warning');
+            }
+        }
+    }, 5000); // Polling a cada 5 segundos
 }
 
 // Atualizar estatísticas
