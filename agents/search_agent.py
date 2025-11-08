@@ -400,11 +400,11 @@ VALIDAÇÃO:
             month_str=month_str
         )
 
-        # MICRO-SEARCH 2: Teatro-Comédia
+        # MICRO-SEARCH 2: Comédia
         prompt_comedia = self._build_focused_prompt(
-            categoria="Teatro-Comédia",
+            categoria="Comédia",
             tipo_busca="categoria",
-            descricao="Teatro de comédia e stand-up ADULTO no Rio de Janeiro (EXCLUIR eventos infantis)",
+            descricao="Stand-up comedy e espetáculos de humor ADULTO no Rio de Janeiro (EXCLUIR eventos infantis)",
             tipos_evento=[
                 "Peças teatrais de comédia (adulto)",
                 "Stand-up comedy",
@@ -448,22 +448,22 @@ ATENÇÃO - EXCLUSÕES CRÍTICAS (VALIDAÇÃO RIGOROSA):
             month_str=month_str
         )
 
-        # MICRO-SEARCH 3: Outdoor-FimDeSemana
+        # MICRO-SEARCH 3: Outdoor/Parques
         prompt_outdoor = self._build_focused_prompt(
-            categoria="Outdoor-FimDeSemana",
+            categoria="Outdoor/Parques",
             tipo_busca="categoria",
-            descricao="Eventos ao ar livre APENAS em sábados e domingos no Rio de Janeiro (FOCO: culturais/nichados)",
+            descricao="Eventos culturais ao ar livre APENAS em sábados e domingos no Rio de Janeiro (EXCLUIR feiras gastronômicas e artesanato)",
             tipos_evento=[
                 "Festivais culturais ao ar livre (sábado/domingo)",
-                "Feiras gastronômicas e culturais (fim de semana)",
                 "Eventos comunitários em parques",
-                "Festivais independentes e alternativos"
+                "Festivais independentes e alternativos",
+                "Shows e performances ao ar livre"
             ],
             palavras_chave=[
                 f"festival cultural Rio fim de semana {month_str}",
-                "feira gastronômica Rio sábado domingo",
                 "evento comunitário parque Rio",
-                "festival independente Rio"
+                "festival independente Rio",
+                "show ao ar livre Rio"
             ],
             venues_sugeridos=[
                 "Aterro do Flamengo",
@@ -479,11 +479,12 @@ ATENÇÃO - DIAS ESPECÍFICOS:
 - Verificar dia da semana da data do evento
 
 ATENÇÃO - EXCLUSÕES CRÍTICAS:
+- NÃO incluir: feiras gastronômicas, feiras de artesanato (são categorias separadas)
 - NÃO incluir: shows mainstream de grandes artistas (Ivete Sangalo, Thiaguinho, Luan Santana, etc.)
 - NÃO incluir: samba, pagode, roda de samba, axé, forró
 - NÃO incluir: eventos com tags: "turnê", "show nacional", "mega show"
-- FOCO EXCLUSIVO: eventos culturais nichados, festivais independentes, feiras gastronômicas/culturais
-- Preferir: festivais alternativos, eventos comunitários, arte urbana, cultura underground
+- FOCO EXCLUSIVO: festivais culturais nichados, performances, eventos comunitários
+- Preferir: festivais alternativos, arte urbana, cultura underground
 """,
             start_date_str=start_date_str,
             end_date_str=end_date_str,
@@ -491,7 +492,214 @@ ATENÇÃO - EXCLUSÕES CRÍTICAS:
             month_str=month_str
         )
 
-        # MICRO-SEARCH 4: Casa do Choro
+        # MICRO-SEARCH 4: Música Clássica
+        prompt_musica_classica = self._build_focused_prompt(
+            categoria="Música Clássica",
+            tipo_busca="categoria",
+            descricao="Concertos e apresentações de música clássica/erudita no Rio de Janeiro",
+            tipos_evento=[
+                "Concertos de orquestra",
+                "Recitais de música erudita",
+                "Música de câmara",
+                "Apresentações sinfônicas",
+                "Coral e ópera"
+            ],
+            palavras_chave=[
+                f"concerto música clássica Rio {month_str}",
+                f"orquestra sinfônica Rio {month_year_str}",
+                "Theatro Municipal música clássica",
+                "Sala Cecília Meireles concerto",
+                f"recital piano violino Rio {month_str}",
+                "música erudita Rio de Janeiro"
+            ],
+            venues_sugeridos=[
+                "Theatro Municipal",
+                "Sala Cecília Meireles",
+                "Sala São Paulo",
+                "Auditórios e salas de concerto"
+            ],
+            instrucoes_especiais=f"""
+ESTRATÉGIA:
+1. Buscar concertos em venues tradicionais (Theatro Municipal, Sala Cecília Meireles)
+2. Orquestras: OSB (Orquestra Sinfônica Brasileira), OSESP
+3. Festivais de música clássica
+4. Recitais de instrumentos clássicos
+
+VALIDAÇÃO:
+- Data ENTRE {start_date_str} e {end_date_str}
+- EXCLUIR: música popular, jazz, MPB (apenas clássico/erudito)
+""",
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            month_year_str=month_year_str,
+            month_str=month_str
+        )
+
+        # MICRO-SEARCH 5: Teatro (não-comédia)
+        prompt_teatro = self._build_focused_prompt(
+            categoria="Teatro",
+            tipo_busca="categoria",
+            descricao="Peças teatrais dramáticas, experimentais e textos clássicos (EXCLUIR comédia)",
+            tipos_evento=[
+                "Teatro dramático",
+                "Teatro experimental",
+                "Textos clássicos",
+                "Monólogos e performances"
+            ],
+            palavras_chave=[
+                f"peça teatral Rio {month_str}",
+                f"teatro dramático Rio {month_year_str}",
+                "espetáculo teatral Rio",
+                "montagem teatral adulto Rio"
+            ],
+            venues_sugeridos=[
+                "Teatro Cacilda Becker",
+                "Teatro Glauce Rocha",
+                "Centro Cultural Banco do Brasil",
+                "Teatros independentes"
+            ],
+            instrucoes_especiais=f"""
+IMPORTANTE - EXCLUSÕES:
+- EXCLUIR: comédia, stand-up, humor (são categoria separada)
+- EXCLUIR: infantil, família
+- FOCO: drama, experimental, clássicos, performances artísticas
+
+VALIDAÇÃO:
+- Data ENTRE {start_date_str} e {end_date_str}
+""",
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            month_year_str=month_year_str,
+            month_str=month_str
+        )
+
+        # MICRO-SEARCH 6: Cinema
+        prompt_cinema = self._build_focused_prompt(
+            categoria="Cinema",
+            tipo_busca="categoria",
+            descricao="Sessões de cinema, mostras e festivais de filmes no Rio de Janeiro",
+            tipos_evento=[
+                "Mostras de cinema",
+                "Festivais de filmes",
+                "Cineclubes",
+                "Sessões especiais e retrospectivas"
+            ],
+            palavras_chave=[
+                f"mostra de cinema Rio {month_str}",
+                f"festival de filmes Rio {month_year_str}",
+                "cineclube Rio",
+                "sessão especial cinema Rio",
+                "retrospectiva cinema"
+            ],
+            venues_sugeridos=[
+                "Estação NET Rio",
+                "Centro Cultural Justiça Federal",
+                "MAM Cinema",
+                "Cinemas de arte"
+            ],
+            instrucoes_especiais=f"""
+FOCO:
+- Mostras temáticas
+- Festivais de cinema
+- Cineclubes e sessões comentadas
+- Retrospectivas de diretores
+
+EXCLUIR:
+- Filmes comerciais em cartaz normal
+- APENAS eventos especiais/culturais
+
+VALIDAÇÃO:
+- Data ENTRE {start_date_str} e {end_date_str}
+""",
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            month_year_str=month_year_str,
+            month_str=month_str
+        )
+
+        # MICRO-SEARCH 7: Feira Gastronômica
+        prompt_feira_gastronomica = self._build_focused_prompt(
+            categoria="Feira Gastronômica",
+            tipo_busca="categoria",
+            descricao="Feiras gastronômicas, food festivals e mercados de comida APENAS em sábados/domingos",
+            tipos_evento=[
+                "Feiras gastronômicas",
+                "Food festivals",
+                "Mercados de comida de rua",
+                "Festivais de gastronomia"
+            ],
+            palavras_chave=[
+                f"feira gastronômica Rio fim de semana {month_str}",
+                f"food festival Rio sábado domingo {month_year_str}",
+                "mercado gastronômico Rio",
+                "festival gastronomia Rio"
+            ],
+            venues_sugeridos=[
+                "Aterro do Flamengo",
+                "Jockey Club",
+                "Marina da Glória",
+                "Parques e espaços abertos"
+            ],
+            instrucoes_especiais=f"""
+CRÍTICO: APENAS SÁBADOS E DOMINGOS
+
+FOCO:
+- Feiras de comida
+- Food trucks e mercados
+- Festivais gastronômicos
+
+VALIDAÇÃO:
+- Data ENTRE {start_date_str} e {end_date_str}
+- DIA DA SEMANA: sábado OU domingo
+""",
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            month_year_str=month_year_str,
+            month_str=month_str
+        )
+
+        # MICRO-SEARCH 8: Feira de Artesanato
+        prompt_feira_artesanato = self._build_focused_prompt(
+            categoria="Feira de Artesanato",
+            tipo_busca="categoria",
+            descricao="Feiras de artesanato, arte e design APENAS em sábados/domingos",
+            tipos_evento=[
+                "Feiras de artesanato",
+                "Feiras de arte",
+                "Mercados de design",
+                "Bazares culturais"
+            ],
+            palavras_chave=[
+                f"feira de artesanato Rio fim de semana {month_str}",
+                f"feira de arte Rio sábado domingo {month_year_str}",
+                "bazar cultural Rio",
+                "feira de design Rio"
+            ],
+            venues_sugeridos=[
+                "Praça General Osório (Ipanema)",
+                "Parques",
+                "Centros culturais",
+                "Espaços abertos"
+            ],
+            instrucoes_especiais=f"""
+CRÍTICO: APENAS SÁBADOS E DOMINGOS
+
+FOCO:
+- Artesanato
+- Arte local
+- Design independente
+
+VALIDAÇÃO:
+- Data ENTRE {start_date_str} e {end_date_str}
+- DIA DA SEMANA: sábado OU domingo
+""",
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            month_year_str=month_year_str,
+            month_str=month_str
+        )
+
+        # MICRO-SEARCH 9: Casa do Choro
         prompt_casa_choro = self._build_focused_prompt(
             categoria="Casa do Choro",
             tipo_busca="venue",
@@ -909,131 +1117,6 @@ FOCO: Programação cultural variada (arte, música, teatro)
             month_str=month_str
         )
 
-        # MICRO-SEARCH 13: Sesc Copacabana
-        prompt_sesc_copa = self._build_focused_prompt(
-            categoria="Sesc Copacabana",
-            tipo_busca="venue",
-            descricao="Programação cultural multidisciplinar do Sesc Copacabana",
-            tipos_evento=[
-                "Shows musicais (MPB, jazz, rock, eletrônico)",
-                "Teatro e espetáculos",
-                "Cinema e sessões de filme",
-                "Dança e performances",
-                "Workshops e oficinas culturais"
-            ],
-            palavras_chave=[
-                f"Sesc Copacabana programação {month_year_str}",
-                f"site:sescrio.org.br copacabana {month_str}",
-                f"Sesc Rio Copacabana eventos {month_str}",
-                f"show Sesc Copacabana {month_year_str}"
-            ],
-            venues_sugeridos=[
-                "Sesc Copacabana - Rua Domingos Ferreira, 160, Copacabana"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site oficial: "site:sescrio.org.br copacabana agenda {month_str}"
-2. Sympla/Eventbrite: eventos pagos
-3. Muitos eventos GRATUITOS ou baixo custo
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 14: Sesc Flamengo
-        prompt_sesc_flamengo = self._build_focused_prompt(
-            categoria="Sesc Flamengo",
-            tipo_busca="venue",
-            descricao="Programação cultural multidisciplinar do Sesc Flamengo",
-            tipos_evento=[
-                "Shows musicais",
-                "Teatro",
-                "Cinema",
-                "Dança",
-                "Workshops culturais"
-            ],
-            palavras_chave=[
-                f"Sesc Flamengo programação {month_year_str}",
-                f"site:sescrio.org.br flamengo {month_str}",
-                f"Sesc Rio Flamengo eventos {month_str}"
-            ],
-            venues_sugeridos=[
-                "Sesc Flamengo - Rua Marquês de Abrantes, 99, Flamengo"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site oficial: "site:sescrio.org.br flamengo agenda {month_str}"
-2. Programação variada: música, teatro, cinema, dança
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 15: Sesc Tijuca
-        prompt_sesc_tijuca = self._build_focused_prompt(
-            categoria="Sesc Tijuca",
-            tipo_busca="venue",
-            descricao="Programação cultural multidisciplinar do Sesc Tijuca",
-            tipos_evento=[
-                "Shows musicais",
-                "Teatro",
-                "Cinema",
-                "Dança",
-                "Workshops culturais"
-            ],
-            palavras_chave=[
-                f"Sesc Tijuca programação {month_year_str}",
-                f"site:sescrio.org.br tijuca {month_str}",
-                f"Sesc Rio Tijuca eventos {month_str}"
-            ],
-            venues_sugeridos=[
-                "Sesc Tijuca - Rua Barão de Mesquita, 539, Tijuca"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site oficial: "site:sescrio.org.br tijuca agenda {month_str}"
-2. Programação variada: música, teatro, cinema, dança
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 16: Sesc Engenho de Dentro
-        prompt_sesc_engenho = self._build_focused_prompt(
-            categoria="Sesc Engenho de Dentro",
-            tipo_busca="venue",
-            descricao="Programação cultural multidisciplinar do Sesc Engenho de Dentro",
-            tipos_evento=[
-                "Shows musicais",
-                "Teatro",
-                "Cinema",
-                "Dança",
-                "Workshops culturais"
-            ],
-            palavras_chave=[
-                f"Sesc Engenho de Dentro programação {month_year_str}",
-                f"site:sescrio.org.br engenho-de-dentro {month_str}",
-                f"Sesc Rio Engenho eventos {month_str}"
-            ],
-            venues_sugeridos=[
-                "Sesc Engenho de Dentro - Rua Borja Reis, 291, Engenho de Dentro"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site oficial: "site:sescrio.org.br engenho-de-dentro agenda {month_str}"
-2. Programação variada: música, teatro, cinema, dança
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
 
         # MICRO-SEARCH 17: Casa Natura Musical
         prompt_casa_natura = self._build_focused_prompt(
@@ -1164,19 +1247,24 @@ ESTRATÉGIA:
             month_str=month_str
         )
 
-        logger.info(f"{self.log_prefix} ✅ 20 prompts criados com sucesso")
+        logger.info(f"{self.log_prefix} ✅ 21 prompts criados com sucesso")
 
         try:
             # ═══════════════════════════════════════════════════════════
-            # EXECUÇÃO PARALELA DAS 20 MICRO-SEARCHES
+            # EXECUÇÃO PARALELA DAS 21 MICRO-SEARCHES
             # ═══════════════════════════════════════════════════════════
-            logger.info(f"{self.log_prefix} Executando 20 micro-searches em paralelo...")
+            logger.info(f"{self.log_prefix} Executando 21 micro-searches em paralelo...")
 
-            # Executar as 20 buscas em paralelo
+            # Executar as 21 buscas em paralelo (8 categorias + 13 venues)
             results = await asyncio.gather(
                 self._run_micro_search(prompt_jazz, "Jazz"),
-                self._run_micro_search(prompt_comedia, "Teatro-Comédia"),
-                self._run_micro_search(prompt_outdoor, "Outdoor-FimDeSemana"),
+                self._run_micro_search(prompt_comedia, "Comédia"),
+                self._run_micro_search(prompt_outdoor, "Outdoor/Parques"),
+                self._run_micro_search(prompt_musica_classica, "Música Clássica"),
+                self._run_micro_search(prompt_teatro, "Teatro"),
+                self._run_micro_search(prompt_cinema, "Cinema"),
+                self._run_micro_search(prompt_feira_gastronomica, "Feira Gastronômica"),
+                self._run_micro_search(prompt_feira_artesanato, "Feira de Artesanato"),
                 self._run_micro_search(prompt_casa_choro, "Casa do Choro"),
                 self._run_micro_search(prompt_sala_cecilia, "Sala Cecília Meireles"),
                 self._run_micro_search(prompt_teatro_municipal, "Teatro Municipal"),
@@ -1186,10 +1274,6 @@ ESTRATÉGIA:
                 self._run_micro_search(prompt_ims, "IMS"),
                 self._run_micro_search(prompt_parque_lage, "Parque Lage"),
                 self._run_micro_search(prompt_ccjf, "CCJF"),
-                self._run_micro_search(prompt_sesc_copa, "Sesc Copacabana"),
-                self._run_micro_search(prompt_sesc_flamengo, "Sesc Flamengo"),
-                self._run_micro_search(prompt_sesc_tijuca, "Sesc Tijuca"),
-                self._run_micro_search(prompt_sesc_engenho, "Sesc Engenho de Dentro"),
                 self._run_micro_search(prompt_casa_natura, "Casa Natura Musical"),
                 self._run_micro_search(prompt_mam_cinema, "MAM Cinema"),
                 self._run_micro_search(prompt_theatro_net, "Theatro Net Rio"),
@@ -1201,6 +1285,11 @@ ESTRATÉGIA:
                 result_jazz,
                 result_comedia,
                 result_outdoor,
+                result_musica_classica,
+                result_teatro,
+                result_cinema,
+                result_feira_gastronomica,
+                result_feira_artesanato,
                 result_casa_choro,
                 result_sala_cecilia,
                 result_teatro_municipal,
@@ -1210,17 +1299,13 @@ ESTRATÉGIA:
                 result_ims,
                 result_parque_lage,
                 result_ccjf,
-                result_sesc_copa,
-                result_sesc_flamengo,
-                result_sesc_tijuca,
-                result_sesc_engenho,
                 result_casa_natura,
                 result_mam_cinema,
                 result_theatro_net,
                 result_ccbb_teatro_cinema,
             ) = results
 
-            logger.info("✓ Todas as 20 micro-searches concluídas")
+            logger.info("✓ Todas as 21 micro-searches concluídas")
 
             # ═══════════════════════════════════════════════════════════
             # MERGE INTELIGENTE DOS RESULTADOS COM PYDANTIC
@@ -1396,14 +1481,38 @@ ESTRATÉGIA:
 
                 logger.info(f"✓ Total de eventos Jazz após merge: {len(eventos_jazz)}")
 
-            eventos_comedia = safe_parse_categoria(result_comedia, "Teatro-Comédia")
-            logger.debug(f"Teatro-Comédia parsed - {len(eventos_comedia)} eventos")
+            eventos_comedia = safe_parse_categoria(result_comedia, "Comédia")
+            logger.debug(f"Comédia parsed - {len(eventos_comedia)} eventos")
 
-            eventos_outdoor = safe_parse_categoria(result_outdoor, "Outdoor-FimDeSemana")
-            logger.debug(f"Outdoor parsed - {len(eventos_outdoor)} eventos")
+            eventos_outdoor = safe_parse_categoria(result_outdoor, "Outdoor/Parques")
+            logger.debug(f"Outdoor/Parques parsed - {len(eventos_outdoor)} eventos")
 
-            # Merge eventos gerais (categorias)
-            todos_eventos_gerais = eventos_jazz + eventos_comedia + eventos_outdoor
+            eventos_musica_classica = safe_parse_categoria(result_musica_classica, "Música Clássica")
+            logger.debug(f"Música Clássica parsed - {len(eventos_musica_classica)} eventos")
+
+            eventos_teatro = safe_parse_categoria(result_teatro, "Teatro")
+            logger.debug(f"Teatro parsed - {len(eventos_teatro)} eventos")
+
+            eventos_cinema = safe_parse_categoria(result_cinema, "Cinema")
+            logger.debug(f"Cinema parsed - {len(eventos_cinema)} eventos")
+
+            eventos_feira_gastronomica = safe_parse_categoria(result_feira_gastronomica, "Feira Gastronômica")
+            logger.debug(f"Feira Gastronômica parsed - {len(eventos_feira_gastronomica)} eventos")
+
+            eventos_feira_artesanato = safe_parse_categoria(result_feira_artesanato, "Feira de Artesanato")
+            logger.debug(f"Feira de Artesanato parsed - {len(eventos_feira_artesanato)} eventos")
+
+            # Merge eventos gerais (todas as 8 categorias)
+            todos_eventos_gerais = (
+                eventos_jazz +
+                eventos_comedia +
+                eventos_outdoor +
+                eventos_musica_classica +
+                eventos_teatro +
+                eventos_cinema +
+                eventos_feira_gastronomica +
+                eventos_feira_artesanato
+            )
 
             # Criar estrutura de eventos gerais
             eventos_gerais_merged = {"eventos": todos_eventos_gerais}
@@ -1436,18 +1545,6 @@ ESTRATÉGIA:
             eventos_ccjf = safe_parse_venue(result_ccjf, "CCJF - Centro Cultural Justiça Federal")
             logger.debug(f"CCJF parsed - {len(eventos_ccjf)} eventos")
 
-            eventos_sesc_copa = safe_parse_venue(result_sesc_copa, "Sesc Copacabana")
-            logger.debug(f"Sesc Copacabana parsed - {len(eventos_sesc_copa)} eventos")
-
-            eventos_sesc_flamengo = safe_parse_venue(result_sesc_flamengo, "Sesc Flamengo")
-            logger.debug(f"Sesc Flamengo parsed - {len(eventos_sesc_flamengo)} eventos")
-
-            eventos_sesc_tijuca = safe_parse_venue(result_sesc_tijuca, "Sesc Tijuca")
-            logger.debug(f"Sesc Tijuca parsed - {len(eventos_sesc_tijuca)} eventos")
-
-            eventos_sesc_engenho = safe_parse_venue(result_sesc_engenho, "Sesc Engenho de Dentro")
-            logger.debug(f"Sesc Engenho de Dentro parsed - {len(eventos_sesc_engenho)} eventos")
-
             eventos_casa_natura = safe_parse_venue(result_casa_natura, "Casa Natura Musical")
             logger.debug(f"Casa Natura Musical parsed - {len(eventos_casa_natura)} eventos")
 
@@ -1471,10 +1568,6 @@ ESTRATÉGIA:
                 "IMS - Instituto Moreira Salles": eventos_ims,
                 "Parque Lage": eventos_parque_lage,
                 "CCJF - Centro Cultural Justiça Federal": eventos_ccjf,
-                "Sesc Copacabana": eventos_sesc_copa,
-                "Sesc Flamengo": eventos_sesc_flamengo,
-                "Sesc Tijuca": eventos_sesc_tijuca,
-                "Sesc Engenho de Dentro": eventos_sesc_engenho,
                 "Casa Natura Musical": eventos_casa_natura,
                 "MAM Cinema": eventos_mam_cinema,
                 "Theatro Net Rio": eventos_theatro_net,

@@ -142,18 +142,24 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
             local = event.get("local", "")
             venue = extract_venue_from_local(local)
 
-        # Cores por categoria
+        # Cores por categoria (granular)
         color_map = {
             "Jazz": "#3498db",  # Azul
-            "Teatro-Comédia": "#e74c3c",  # Vermelho
-            "Outdoor-FimDeSemana": "#2ecc71",  # Verde
+            "Música Clássica": "#9b59b6",  # Roxo
+            "Teatro": "#e67e22",  # Laranja
+            "Comédia": "#e74c3c",  # Vermelho
+            "Cinema": "#34495e",  # Cinza escuro
+            "Feira Gastronômica": "#f39c12",  # Amarelo/ouro
+            "Feira de Artesanato": "#16a085",  # Verde-azulado
+            "Outdoor/Parques": "#2ecc71",  # Verde
+            "Cursos de Café": "#795548",  # Marrom
         }
 
-        # Se tem venue, usar cor específica
+        # Venues usam cor separada (mais suave)
         if venue:
-            color = "#9b59b6"  # Roxo para venues
+            color = "#7f8c8d"  # Cinza médio para venues
         else:
-            color = color_map.get(categoria, "#95a5a6")  # Cinza default
+            color = color_map.get(categoria, "#95a5a6")  # Cinza claro default
 
         return {
             "id": hash(event.get("titulo", "") + data_str + horario_str),

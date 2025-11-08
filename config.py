@@ -28,52 +28,53 @@ SEARCH_CONFIG: Final[dict] = {
     "end_date": datetime.now() + timedelta(days=21),
 }
 
-# Categorias de eventos
+# Categorias de eventos (categorização granular por tipo de evento)
 EVENT_CATEGORIES: Final[dict[str, dict]] = {
     "jazz": {
-        "keywords": ["jazz", "show jazz", "música jazz", "jazz ao vivo"],
+        "keywords": ["jazz", "show jazz", "música jazz", "jazz ao vivo", "jam session jazz"],
         "description": "Shows de jazz",
+        "min_events": 4,  # Mínimo de 4 eventos de jazz por execução
     },
-    "comedia_teatro": {
-        "keywords": ["teatro comédia", "stand-up", "humor", "peça cômica"],
+    "musica_classica": {
+        "keywords": ["música clássica", "musica classica", "concerto", "orquestra", "sinfônica", "sinfonia", "música erudita", "coral", "recital"],
+        "description": "Música clássica e erudita",
+        "min_events": 2,
+    },
+    "teatro": {
+        "keywords": ["teatro", "peça teatral", "espetáculo teatral", "montagem teatral"],
+        "exclude": ["comédia", "stand-up", "humor"],
+        "description": "Teatro (exceto comédia)",
+    },
+    "comedia": {
+        "keywords": ["stand-up", "humor", "comédia", "peça cômica", "show de humor"],
+        "description": "Comédia e stand-up",
+    },
+    "cinema": {
+        "keywords": ["cinema", "filme", "mostra de cinema", "sessão de cinema", "exibição de filme", "cineclube"],
+        "description": "Cinema e mostras de filmes",
+    },
+    "feira_gastronomica": {
+        "keywords": ["feira gastronômica", "feira de comida", "food festival", "festival gastronômico", "mercado gastronômico"],
+        "days": ["saturday", "sunday"],
+        "description": "Feiras gastronômicas e food festivals",
+    },
+    "feira_artesanato": {
+        "keywords": ["feira de artesanato", "feira de arte", "feira cultural", "artesanato", "feira de design"],
+        "days": ["saturday", "sunday"],
+        "description": "Feiras de artesanato e arte",
+    },
+    "outdoor_parques": {
+        "keywords": ["ao ar livre", "outdoor", "parque", "praia", "jardim botânico", "aterro", "quinta da boa vista"],
         "exclude": [
-            # Conteúdo infantil/familiar
-            "infantil", "criança", "crianças", "kids", "criancas",
-            "infanto-juvenil", "infanto juvenil",
-            "família", "familia", "family",
-            "para toda família", "para toda a família",
-            "sessão infantil", "sessao infantil",
-            "indicado para crianças", "indicado para criancas",
-            "filme infantil", "filmes infantis", "cinema infantil",
-            "sessão dupla", "sessao dupla",
-            # Conteúdo LGBTQIAPN+
-            "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn",
-            "pride", "parada gay", "parada lgbtq",
-            "diversidade sexual", "queer", "drag queen", "drag king",
-        ],
-        "description": "Teatro gênero comédia (exceto infantil e LGBTQIAPN+)",
-    },
-    "venues_especiais": {
-        "venues": [
-            "Casa do Choro",
-            "Sala Cecília Meirelles",
-            "Teatro Municipal",
-        ],
-        "description": "Eventos em locais específicos",
-    },
-    "outdoor_weekend": {
-        "keywords": ["ao ar livre", "outdoor", "parque", "praia", "feira gastronômica", "feira de comida", "food festival", "mercado", "gastronomia"],
-        "exclude": [
-            # Gêneros musicais específicos
+            # Gêneros musicais específicos (excluir do outdoor)
             "samba", "pagode", "roda de samba", "axé", "forró",
-            # Shows mainstream/grandes artistas
+            # Shows mainstream
             "ivete sangalo", "thiaguinho", "alexandre pires", "luan santana",
             "gusttavo lima", "wesley safadão", "simone mendes",
-            # Termos genéricos de shows pop comerciais
             "turnê", "show nacional", "mega show", "tour brasil",
         ],
         "days": ["saturday", "sunday"],
-        "description": "Eventos ao ar livre em fim de semana (foco: culturais/nichados, sem shows mainstream)",
+        "description": "Eventos ao ar livre em fim de semana (culturais/nichados)",
     },
     "cursos_cafe": {
         "keywords": ["curso café", "workshop café", "barista", "degustação café", "coffee tasting"],
@@ -101,6 +102,9 @@ GLOBAL_EXCLUDE_KEYWORDS: Final[list[str]] = [
     "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn",
     "pride", "parada gay", "parada lgbtq",
     "diversidade sexual", "queer", "drag queen", "drag king",
+    # Eventos conversacionais/educativos não-desejados
+    "roda de conversa", "mediação cultural", "mediacao cultural",
+    "bate-papo", "palestra", "debate",
 ]
 
 # Venues obrigatórios (deve ter pelo menos 1 evento de cada)

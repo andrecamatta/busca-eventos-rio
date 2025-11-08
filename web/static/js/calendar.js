@@ -26,13 +26,13 @@ function initCalendar() {
 
     calendar = new FullCalendar.Calendar(calendarEl, {
         // Forçar modo lista em mobile, calendário em desktop
-        initialView: isMobile ? 'listWeek' : 'dayGridMonth',
+        initialView: isMobile ? 'listMonth' : 'dayGridMonth',
         locale: 'pt-br',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
             // Em mobile, apenas lista; em desktop, todas as opções
-            right: isMobile ? '' : 'dayGridMonth,dayGridWeek,listWeek'
+            right: isMobile ? '' : 'dayGridMonth,dayGridWeek,listMonth'
         },
         buttonText: {
             today: 'Hoje',
@@ -40,6 +40,9 @@ function initCalendar() {
             week: 'Semana',
             list: 'Lista'
         },
+        // Configurar listMonth para mostrar período mais longo
+        listDayFormat: { weekday: 'long', month: 'long', day: 'numeric' },
+        listDaySideFormat: false,
         // Formato de horário melhorado (20:00 em vez de número quebrado)
         eventTimeFormat: {
             hour: '2-digit',
