@@ -1,0 +1,101 @@
+[
+  {
+    "category": "Jazz",
+    "model": "perplexity/sonar-pro",
+    "success": true,
+    "events_count": 2,
+    "events": [
+      {
+        "titulo": "Josiel Konrad",
+        "data": "29/11/2025",
+        "horario": "20:00",
+        "local": "Teatro João Caetano",
+        "preco": "Não informado",
+        "link_ingresso": "https://www.bandsintown.com/e/1036469203-josiel-konrad-at-teatro-joao-caetano",
+        "descricao": "Apresentação de Josiel Konrad, trombonista referência do jazz carioca, em noite dedicada ao jazz instrumental brasileiro."
+      },
+      {
+        "titulo": "Belo - Jazz Show",
+        "data": "29/11/2025",
+        "horario": "15:00",
+        "local": "Ilha Itanhangá - Rio de Janeiro",
+        "preco": "R$54",
+        "link_ingresso": "https://concerts50.com/brazil/rio-de-janeiro/g/jazz",
+        "descricao": "Show de jazz com Belo em evento especial de música ao ar livre na Ilha Itanhangá, misturando ritmos brasileiros e improvisos de jazz."
+      }
+    ],
+    "raw_response": "[  {\n    \"titulo\": \"Josiel Konrad\",\n    \"data\": \"29/11/2025\",\n    \"horario\": \"20:00\",\n    \"local\": \"Teatro João Caetano\",\n    \"preco\": \"Não informado\",\n    \"link_ingresso\": \"https://www.bandsintown.com/e/1036469203-josiel-konrad-at-teatro-joao-caetano\",\n    \"descricao\": \"Apresentação de Josiel Konrad, trombonista referência do jazz carioca, em noite dedicada ao jazz instrumental brasileiro.\"\n  },\n  {\n    \"titulo\": \"Belo - Jazz Show\",\n    \"data\": \"29/11/2025\",\n    \"horario\": \"15:00\",\n    \"local\":"
+  },
+  {
+    "category": "Teatro-Comédia",
+    "model": "perplexity/sonar-pro",
+    "success": true,
+    "events_count": 5,
+    "events": [
+      {
+        "titulo": "Igor Guimarães - Show Solo de Stand Up de Humor",
+        "data": "29/11/2025",
+        "horario": "20:00",
+        "local": "Teatro Opus Città",
+        "preco": "Consultar site de ingressos",
+        "link_ingresso": "https://teatroopuscitta.com.br",
+        "descricao": "Solo de stand up do humorista Igor Guimarães, conhecido pelo humor nonsense e pelas tiradas rápidas, um dos grandes nomes da nova geração da comédia nacional."
+      },
+      {
+        "titulo": "Fabrício Lins em: 'Comecei Bem' Show Solo - Stand-Up Comedy",
+        "data": "29/11/2025",
+        "horario": "20:30",
+        "local": "Recife Comedy Club",
+        "preco": "Consultar site de ingressos",
+        "link_ingresso": "https://www.ingresso.com/espetaculos/categorias/stand-up",
+        "descricao": "Show solo do comediante Fabrício Lins, com histórias autênticas sobre o começo da carreira, situações cotidianas e muita interação com o público adulto."
+      },
+      {
+        "titulo": "Alex Alves em: Fulano de Talkshow - Stand-Up + Entrevista + Notícias",
+        "data": "15/11/2025",
+        "horario": "20:30",
+        "local": "Recife Comedy Club",
+        "preco": "Consultar site de ingressos",
+        "link_ingresso": "https://www.ingresso.com/espetaculos/categorias/stand-up",
+        "descricao": "Mistura de stand-up, talkshow e comentários de notícias com Alex Alves trazendo bom humor e crítica social para o palco em formato descontraído."
+      },
+      {
+        "titulo": "Aniversário de 1 Ano - Recife Comedy Club (Flávio Andradde, Carlos Santos e Alex Alves)",
+        "data": "23/11/2025",
+        "horario": "19:00",
+        "local": "Recife Comedy Club",
+        "preco": "Consultar site de ingressos",
+        "link_ingresso": "https://www.ingresso.com/espetaculos/categorias/stand-up",
+        "descricao": "Show especial comemorativo com os comediantes Flávio Andradde, Carlos Santos e Alex Alves, garantindo muita risada em uma noite de celebração adulta."
+      },
+      {
+        "titulo": "Caio Martins 'Segredo Revelado' Stand-Up Magic",
+        "data": "16/11/2025",
+        "horario": "19:00",
+        "local": "Marte Hall",
+        "preco": "Consultar site de ingressos",
+        "link_ingresso": "https://www.ingresso.com/espetaculos/categorias/stand-up",
+        "descricao": "Show que mistura stand-up comedy com mágica, apresentado por Caio Martins. Indicado para adultos que gostam de ilusionismo e humor afiado."
+      }
+    ],
+    "raw_response": "[  {\n    \"titulo\": \"Igor Guimarães - Show Solo de Stand Up de Humor\",\n    \"data\": \"29/11/2025\",\n    \"horario\": \"20:00\",\n    \"local\": \"Teatro Opus Città\",\n    \"preco\": \"Consultar site de ingressos\",\n    \"link_ingresso\": \"https://teatroopuscitta.com.br\",\n    \"descricao\": \"Solo de stand up do humorista Igor Guimarães, conhecido pelo humor nonsense e pelas tiradas rápidas, um dos grandes nomes da nova geração da comédia nacional.\"\n  },\n  {\n    \"titulo\": \"Fabrício Lins em: 'Comecei Bem' Show Solo - S"
+  },
+  {
+    "category": "Casa-do-Choro",
+    "model": "perplexity/sonar-pro",
+    "success": true,
+    "events_count": 1,
+    "events": [
+      {
+        "titulo": "Áurea Martins e Cristovão Bastos",
+        "data": "12/11/2025",
+        "horario": "20:00",
+        "local": "Casa do Choro",
+        "preco": "R$ 30,00 (meia-entrada) + R$ 3,00 taxa",
+        "link_ingresso": "https://www.sympla.com.br/evento/aurea-martins-e-cristovao-bastos-casa-do-choro/3190985",
+        "descricao": "Show com duas referências da música brasileira: a cantora Áurea Martins e o pianista Cristovão Bastos em apresentação especial na Casa do Choro."
+      }
+    ],
+    "raw_response": "[  {\n    \"titulo\": \"Áurea Martins e Cristovão Bastos\",\n    \"data\": \"12/11/2025\",\n    \"horario\": \"20:00\",\n    \"local\": \"Casa do Choro\",\n    \"preco\": \"R$ 30,00 (meia-entrada) + R$ 3,00 taxa\",\n    \"link_ingresso\": \"https://www.sympla.com.br/evento/aurea-martins-e-cristovao-bastos-casa-do-choro/3190985\",\n    \"descricao\": \"Show com duas referências da música brasileira: a cantora Áurea Martins e o pianista Cristovão Bastos em apresentação especial na Casa do Choro.\"\n  }\n]"
+  }
+]

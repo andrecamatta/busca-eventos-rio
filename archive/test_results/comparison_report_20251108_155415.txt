@@ -1,0 +1,51 @@
+================================================================================
+RELATÓRIO COMPARATIVO: Perplexity Sonar vs Sonar Pro
+================================================================================
+
+Data do teste: 08/11/2025 15:54:15
+Período de eventos: 08/11/2025 a 29/11/2025
+
+RESUMO POR CATEGORIA
+--------------------------------------------------------------------------------
+
+📂 Jazz
+   Sonar:       4 eventos
+   Sonar Pro:   2 eventos
+   Diferença:  +2 eventos (+100.0%)
+
+📂 Teatro-Comédia
+   Sonar:       3 eventos
+   Sonar Pro:   5 eventos
+   Diferença:  -2 eventos (-40.0%)
+
+📂 Casa-do-Choro
+   Sonar:       0 eventos
+   Sonar Pro:   1 eventos
+   Diferença:  -1 eventos (-100.0%)
+   ⚠️  Sonar FALHOU: JSON parsing error: Expecting value: line 1 column 1 (char 0)
+
+--------------------------------------------------------------------------------
+TOTAIS
+--------------------------------------------------------------------------------
+
+Sonar:     7 eventos totais
+Sonar Pro: 8 eventos totais
+Diferença: -1 eventos (-12.5%)
+
+--------------------------------------------------------------------------------
+ANÁLISE DE CUSTO (ESTIMATIVA)
+--------------------------------------------------------------------------------
+
+Custo estimado Sonar:     $0.0013 (3 buscas)
+Custo estimado Sonar Pro: $0.0063 (3 buscas)
+Economia:                 $0.0050 (80.0%)
+
+--------------------------------------------------------------------------------
+RECOMENDAÇÃO
+--------------------------------------------------------------------------------
+
+✅ RECOMENDADO: Migrar para Sonar
+
+   Sonar mantém 87.5% dos eventos
+   Economia estimada: 80.0% (~$0.0050 por execução)
+   Qualidade: ACEITÁVEL (perda de 12.5%)
