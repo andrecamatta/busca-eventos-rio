@@ -506,6 +506,46 @@ async def get_events(
             and e.get("link_status_code") != 404
         ]
 
+    # FILTRO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos 3 horas
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    hora_minima = now + timedelta(hours=3)
+
+    eventos_filtrados = []
+    for evento in eventos:
+        data_str = evento.get("data", "")
+        horario_str = evento.get("horario", "00:00")
+
+        try:
+            # Parse data (formato DD/MM/YYYY)
+            event_date = datetime.strptime(data_str, "%d/%m/%Y").date()
+
+            # Se não é hoje, manter o evento
+            if event_date != now.date():
+                eventos_filtrados.append(evento)
+                continue
+
+            # Se é hoje, verificar horário
+            hora_partes = horario_str.split(":")
+            if len(hora_partes) >= 2:
+                hora = int(hora_partes[0])
+                minuto = int(hora_partes[1])
+                event_datetime = datetime.combine(event_date, datetime.min.time()).replace(hour=hora, minute=minuto)
+
+                # Só adicionar se faltam pelo menos 3 horas
+                if event_datetime >= hora_minima:
+                    eventos_filtrados.append(evento)
+                # Senão, evento muito próximo/passado - filtrar silenciosamente
+            else:
+                # Horário inválido - manter por segurança (modo permissivo)
+                eventos_filtrados.append(evento)
+
+        except (ValueError, IndexError):
+            # Erro de parsing - manter evento por segurança (modo permissivo)
+            eventos_filtrados.append(evento)
+
+    eventos = eventos_filtrados
+
     # Converter para formato FullCalendar
     calendar_events = []
     for evento in eventos:
