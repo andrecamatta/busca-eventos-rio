@@ -11,58 +11,14 @@ import httpx
 from bs4 import BeautifulSoup
 
 import config
+from utils.date_helpers import DateParser
+from utils.text_helpers import normalize_string
 
 logger = logging.getLogger(__name__)
 
 
 class EventimScraper:
     """Scraper para páginas do Eventim que não são indexadas por search engines."""
-
-    @staticmethod
-    def _parse_month(month_str: str) -> str:
-        """Converte mês abreviado para número."""
-        months = {
-            'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04',
-            'mai': '05', 'jun': '06', 'jul': '07', 'ago': '08',
-            'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
-        }
-        return months.get(month_str.lower()[:3], '01')
-
-    @staticmethod
-    def _normalize_time(time_str: str) -> str:
-        """Converte formato de hora: '20H00' ou '20h00' → '20:00'."""
-        if not time_str:
-            return "20:00"
-
-        # Substituir H ou h por :
-        normalized = time_str.upper().replace('H', ':').replace('h', ':')
-
-        # Garantir formato HH:MM
-        parts = normalized.split(':')
-        if len(parts) == 2:
-            hour = parts[0].zfill(2)
-            minute = parts[1][:2].zfill(2)
-            return f"{hour}:{minute}"
-
-        return "20:00"  # Fallback
-
-    @staticmethod
-    def _determine_year(month: str, day: str) -> str:
-        """Determina o ano do evento baseado no mês/dia."""
-        current_date = datetime.now()
-        current_year = current_date.year
-        current_month = current_date.month
-
-        event_month = int(month)
-        event_day = int(day)
-
-        # Se o mês já passou este ano, usar próximo ano
-        if event_month < current_month:
-            return str(current_year + 1)
-        elif event_month == current_month and event_day < current_date.day:
-            return str(current_year + 1)
-        else:
-            return str(current_year)
 
     @staticmethod
     def scrape_blue_note_events() -> List[Dict[str, str]]:
@@ -113,8 +69,8 @@ class EventimScraper:
                     if not day or not month_text:
                         continue
 
-                    month = EventimScraper._parse_month(month_text)
-                    year = EventimScraper._determine_year(month, day)
+                    month = DateParser.parse_month(month_text)
+                    year = DateParser.determine_year(month, day)
                     data = f"{day.zfill(2)}/{month}/{year}"
 
                     # Verificar se data está no range
@@ -130,7 +86,7 @@ class EventimScraper:
                     # Extrair horário: <p class='post-time'>20H00</p>
                     time_elem = article.find('p', class_='post-time')
                     horario_raw = time_elem.get_text(strip=True) if time_elem else "20H00"
-                    horario = EventimScraper._normalize_time(horario_raw)
+                    horario = DateParser.normalize_time(horario_raw)
 
                     # Extrair título: <h2 class="blog-shortcode-post-title entry-title"><a>TÍTULO</a></h2>
                     title_elem = article.find('h2', class_='blog-shortcode-post-title')
@@ -194,22 +150,12 @@ class EventimScraper:
         if not scraped_events:
             return None
 
-        # Normalizar título para comparação
-        def normalize(text: str) -> str:
-            import unicodedata
-            text = text.lower()
-            text = unicodedata.normalize('NFKD', text)
-            text = text.encode('ascii', 'ignore').decode('ascii')
-            # Remover pontuação
-            text = ''.join(c if c.isalnum() or c.isspace() else ' ' for c in text)
-            return ' '.join(text.split())
-
-        event_normalized = normalize(event_title)
+        event_normalized = normalize_string(event_title)
 
         # Tentar match exato primeiro
         for scraped in scraped_events:
             scraped_title = scraped.get('titulo', '')
-            if normalize(scraped_title) == event_normalized:
+            if normalize_string(scraped_title) == event_normalized:
                 logger.info(f"✓ Match exato: '{event_title}' → {scraped['link']}")
                 return scraped['link']
 
@@ -219,7 +165,7 @@ class EventimScraper:
 
         if significant_words:
             for scraped in scraped_events:
-                scraped_title_norm = normalize(scraped.get('titulo', ''))
+                scraped_title_norm = normalize_string(scraped.get('titulo', ''))
                 # Se pelo menos 2 palavras significativas aparecem no título scrapado
                 matches = sum(1 for w in significant_words if w in scraped_title_norm)
                 if matches >= min(2, len(significant_words)):

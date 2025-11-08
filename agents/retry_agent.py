@@ -13,6 +13,7 @@ from config import (
 )
 from utils.agent_factory import AgentFactory
 from utils.json_helpers import clean_json_response
+from utils.date_helpers import DateParser
 
 logger = logging.getLogger(__name__)
 
@@ -44,17 +45,7 @@ class RetryAgent:
             True se evento é sábado ou domingo, False caso contrário
         """
         data_str = event.get("data", "")
-        if not data_str:
-            return False
-
-        try:
-            # Parse data no formato DD/MM/YYYY
-            data = datetime.strptime(data_str, "%d/%m/%Y")
-            # weekday(): 0=segunda, 1=terça, ..., 5=sábado, 6=domingo
-            return data.weekday() in [5, 6]
-        except ValueError:
-            logger.warning(f"Data inválida no evento: {data_str}")
-            return False
+        return DateParser.is_weekend(data_str)
 
     def _check_saturday_coverage(self, verified_events: list[dict]) -> list[str]:
         """Verifica se cada sábado tem pelo menos 1 evento outdoor.

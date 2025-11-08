@@ -8,6 +8,8 @@ import re
 from datetime import datetime
 from difflib import SequenceMatcher
 from typing import Any
+from utils.text_helpers import clean_location_name
+from utils.date_helpers import DateParser
 
 
 class EventConsolidator:
@@ -140,14 +142,7 @@ class EventConsolidator:
         Returns:
             Local normalizado
         """
-        # Lowercase e remover acentos
-        normalized = location.lower().strip()
-
-        # Remover pontuação extra
-        normalized = re.sub(r"\s+", " ", normalized)
-        normalized = re.sub(r"[,.]$", "", normalized)
-
-        return normalized
+        return clean_location_name(location)
 
     def _calculate_similarity(self, str1: str, str2: str) -> float:
         """Calcula similaridade entre duas strings.
@@ -238,9 +233,7 @@ class EventConsolidator:
         Returns:
             Data como datetime (ou datetime.min se inválido)
         """
-        try:
-            # Remove horário se presente
-            date_only = date_str.split()[0] if " " in date_str else date_str
-            return datetime.strptime(date_only, "%d/%m/%Y")
-        except (ValueError, AttributeError):
-            return datetime.min
+        # Remove horário se presente
+        date_only = date_str.split()[0] if " " in date_str else date_str
+        parsed = DateParser.parse_date(date_only)
+        return parsed if parsed else datetime.min

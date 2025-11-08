@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from config import SEARCH_CONFIG, MAX_EVENTS_PER_VENUE
 from models.event_models import ResultadoBuscaCategoria
 from utils.agent_factory import AgentFactory
+from utils.prompt_templates import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -249,19 +250,78 @@ IMPORTANTE:
 - Busque o MÁXIMO de eventos possível (objetivo: pelo menos 3 eventos)
 - INCLUA TODOS os eventos que encontrar com data, horário, local e descrição
 
-REGRAS CRÍTICAS PARA LINKS:
-- Links devem ser ESPECÍFICOS do evento (não páginas de busca/categoria/listagem)
-- ✅ LINKS VÁLIDOS (com ID/nome único do evento):
-  * sympla.com.br/evento/nome-do-evento/123456
-  * eventbrite.com.br/e/nome-do-evento-tickets-123456
-  * ingresso.com/evento/nome-do-evento-123456
-  * bluenote.com.br/evento/nome-do-show/
-- ❌ LINKS INVÁLIDOS (genéricos - NÃO USAR):
-  * ingresso.com/eventos/stand-up?city=rio-de-janeiro (página de categoria)
-  * sympla.com.br/eventos/rio-de-janeiro (página de busca)
-  * eventbrite.com.br/d/brazil--rio-de-janeiro/events/ (listagem)
-  * Qualquer URL com query params de cidade/categoria (?city=, &partnership=)
-- Se não encontrar link ESPECÍFICO, use null (busca complementar preencherá depois)
+⚠️ REGRAS CRÍTICAS PARA LINKS (leia com atenção - links inválidos serão rejeitados):
+
+1. NÃO RETORNE HOMEPAGES/SITES INSTITUCIONAIS:
+   ❌ NUNCA retornar sites de ARTISTAS (ex: raphaelghanem.com.br, fabriciolins.com.br)
+   ❌ NUNCA retornar homepages de VENUES (ex: casadochoro.com.br, teatroopuscitta.com.br)
+   ❌ NUNCA retornar homepages de PLATAFORMAS (ex: sympla.com.br, ingresso.com)
+   ❌ NUNCA retornar AGREGADORES genéricos (ex: shazam.com/events, concerts50.com, songkick.com)
+   ❌ NUNCA retornar páginas de PROGRAMAÇÃO GERAL (ex: /programacao, /agenda, /calendario)
+
+2. O link DEVE conter IDENTIFICADOR ÚNICO do evento (um destes formatos):
+   - ID numérico: /evento/nome-do-evento/123456
+   - Slug com data: /evento-nome-18-11-2025
+   - Hash alfanumérico: /shows/nome__abc123de/
+   - Parâmetro único: ?event_id=789 ou ?eve_cod=15246
+
+3. PLATAFORMAS DE BUSCA (nesta ordem de prioridade):
+   🥇 PRIORITÁRIAS (sempre buscar primeiro):
+   a) Sympla: sympla.com.br/evento/[nome]/[ID-numerico]
+   b) Eventbrite: eventbrite.com.br/e/[nome]-tickets-[ID]
+   c) Ticketmaster: ticketmaster.com.br/event/[ID]
+   d) Fever: feverup.com/rio-de-janeiro/events/[nome-evento]
+
+   🥈 SECUNDÁRIAS (se prioritárias não tiverem):
+   e) Ingresso.com: ingresso.com/evento/[nome]/[ID]
+   f) Bileto: bileto.sympla.com.br/event/[ID]
+
+   🥉 VENUES ESPECÍFICOS (apenas com página do evento):
+   g) Blue Note: bluenoterio.com.br/shows/[nome-show]__[hash]/
+   h) Sites oficiais com link ESPECÍFICO do evento (NÃO homepage)
+
+✅ EXEMPLOS DE LINKS VÁLIDOS:
+   ✅ https://www.sympla.com.br/evento/raphael-ghanem-stand-up/2345678
+   ✅ https://www.eventbrite.com.br/e/quarteto-de-cordas-da-osb-tickets-987654321
+   ✅ https://bluenoterio.com.br/shows/irma-you-and-my-guitar__22hz624n/
+   ✅ https://www.ingresso.com/evento/caio-martins-segredo-revelado/15246
+
+❌ EXEMPLOS DE LINKS INVÁLIDOS (NUNCA RETORNAR):
+   HOMEPAGES E SITES INSTITUCIONAIS:
+   ❌ https://raphaelghanem.com.br (site oficial do artista)
+   ❌ https://casadochoro.com.br (homepage do venue)
+   ❌ https://teatroopuscitta.com.br (homepage do teatro)
+   ❌ https://www.sympla.com.br (homepage da plataforma)
+
+   AGREGADORES GENÉRICOS (não vendem ingressos):
+   ❌ https://shazam.com/events/rio-de-janeiro (apenas lista eventos)
+   ❌ https://concerts50.com/brazil/rio-de-janeiro (agregador de terceiros)
+
+   PÁGINAS DE CATEGORIA/BUSCA/LISTAGEM:
+   ❌ https://www.ingresso.com/espetaculos/categorias/stand-up (categoria genérica)
+   ❌ https://www.sympla.com.br/eventos/rio-de-janeiro (listagem por cidade)
+   ❌ https://eventbrite.com.br/d/brazil--rio-de-janeiro/events/ (listagem)
+   ❌ https://bluenoterio.com.br/shows (listagem de todos os shows - falta ID específico)
+
+   PROGRAMAÇÃO GERAL DE VENUES:
+   ❌ https://salaceliciameireles.rj.gov.br/programacao (calendário mensal)
+   ❌ https://casadochoro.com.br/programacao (agenda geral)
+
+📋 CHECKLIST ANTES DE RETORNAR UM LINK:
+   ✅ O link contém ID/identificador único? (numérico, slug, hash, ou parâmetro)
+   ✅ O link é de uma PLATAFORMA de venda (Sympla, Eventbrite, etc) OU página específica do venue?
+   ✅ O link aponta para UMA página específica de evento (não listagem/categoria)?
+   ✅ O link NÃO é homepage do artista/venue/plataforma?
+   ✅ O link NÃO é de agregador genérico (Shazam, Concerts50, etc)?
+
+   SE TODAS AS RESPOSTAS FOREM ✅ → retornar link
+   SE QUALQUER RESPOSTA FOR ❌ → retornar null
+
+4. SE NÃO ENCONTRAR link específico:
+   - Busque em TODAS as plataformas prioritárias (Sympla, Eventbrite, Ticketmaster, Fever)
+   - Busque em plataformas secundárias (Ingresso.com, Bileto)
+   - APENAS APÓS TENTAR TODAS AS FONTES: retorne null
+   - NÃO retorne links genéricos "por garantia" (null é MELHOR que link inválido)
 """
         else:  # venue
             return_format = f"""
@@ -303,19 +363,78 @@ OBJETIVO:
 - Busque o MÁXIMO de eventos possível (objetivo: pelo menos 1 evento)
 - INCLUA TODOS os eventos que encontrar com data, horário, local e descrição
 
-REGRAS CRÍTICAS PARA LINKS:
-- Links devem ser ESPECÍFICOS do evento (não páginas de busca/categoria/listagem)
-- ✅ LINKS VÁLIDOS (com ID/nome único do evento):
-  * sympla.com.br/evento/nome-do-evento/123456
-  * eventbrite.com.br/e/nome-do-evento-tickets-123456
-  * ingresso.com/evento/nome-do-evento-123456
-  * bluenote.com.br/evento/nome-do-show/
-- ❌ LINKS INVÁLIDOS (genéricos - NÃO USAR):
-  * ingresso.com/eventos/stand-up?city=rio-de-janeiro (página de categoria)
-  * sympla.com.br/eventos/rio-de-janeiro (página de busca)
-  * eventbrite.com.br/d/brazil--rio-de-janeiro/events/ (listagem)
-  * Qualquer URL com query params de cidade/categoria (?city=, &partnership=)
-- Se não encontrar link ESPECÍFICO, use null (busca complementar preencherá depois)
+⚠️ REGRAS CRÍTICAS PARA LINKS (leia com atenção - links inválidos serão rejeitados):
+
+1. NÃO RETORNE HOMEPAGES/SITES INSTITUCIONAIS:
+   ❌ NUNCA retornar sites de ARTISTAS (ex: raphaelghanem.com.br, fabriciolins.com.br)
+   ❌ NUNCA retornar homepages de VENUES (ex: casadochoro.com.br, teatroopuscitta.com.br)
+   ❌ NUNCA retornar homepages de PLATAFORMAS (ex: sympla.com.br, ingresso.com)
+   ❌ NUNCA retornar AGREGADORES genéricos (ex: shazam.com/events, concerts50.com, songkick.com)
+   ❌ NUNCA retornar páginas de PROGRAMAÇÃO GERAL (ex: /programacao, /agenda, /calendario)
+
+2. O link DEVE conter IDENTIFICADOR ÚNICO do evento (um destes formatos):
+   - ID numérico: /evento/nome-do-evento/123456
+   - Slug com data: /evento-nome-18-11-2025
+   - Hash alfanumérico: /shows/nome__abc123de/
+   - Parâmetro único: ?event_id=789 ou ?eve_cod=15246
+
+3. PLATAFORMAS DE BUSCA (nesta ordem de prioridade):
+   🥇 PRIORITÁRIAS (sempre buscar primeiro):
+   a) Sympla: sympla.com.br/evento/[nome]/[ID-numerico]
+   b) Eventbrite: eventbrite.com.br/e/[nome]-tickets-[ID]
+   c) Ticketmaster: ticketmaster.com.br/event/[ID]
+   d) Fever: feverup.com/rio-de-janeiro/events/[nome-evento]
+
+   🥈 SECUNDÁRIAS (se prioritárias não tiverem):
+   e) Ingresso.com: ingresso.com/evento/[nome]/[ID]
+   f) Bileto: bileto.sympla.com.br/event/[ID]
+
+   🥉 VENUES ESPECÍFICOS (apenas com página do evento):
+   g) Blue Note: bluenoterio.com.br/shows/[nome-show]__[hash]/
+   h) Sites oficiais com link ESPECÍFICO do evento (NÃO homepage)
+
+✅ EXEMPLOS DE LINKS VÁLIDOS:
+   ✅ https://www.sympla.com.br/evento/raphael-ghanem-stand-up/2345678
+   ✅ https://www.eventbrite.com.br/e/quarteto-de-cordas-da-osb-tickets-987654321
+   ✅ https://bluenoterio.com.br/shows/irma-you-and-my-guitar__22hz624n/
+   ✅ https://www.ingresso.com/evento/caio-martins-segredo-revelado/15246
+
+❌ EXEMPLOS DE LINKS INVÁLIDOS (NUNCA RETORNAR):
+   HOMEPAGES E SITES INSTITUCIONAIS:
+   ❌ https://raphaelghanem.com.br (site oficial do artista)
+   ❌ https://casadochoro.com.br (homepage do venue)
+   ❌ https://teatroopuscitta.com.br (homepage do teatro)
+   ❌ https://www.sympla.com.br (homepage da plataforma)
+
+   AGREGADORES GENÉRICOS (não vendem ingressos):
+   ❌ https://shazam.com/events/rio-de-janeiro (apenas lista eventos)
+   ❌ https://concerts50.com/brazil/rio-de-janeiro (agregador de terceiros)
+
+   PÁGINAS DE CATEGORIA/BUSCA/LISTAGEM:
+   ❌ https://www.ingresso.com/espetaculos/categorias/stand-up (categoria genérica)
+   ❌ https://www.sympla.com.br/eventos/rio-de-janeiro (listagem por cidade)
+   ❌ https://eventbrite.com.br/d/brazil--rio-de-janeiro/events/ (listagem)
+   ❌ https://bluenoterio.com.br/shows (listagem de todos os shows - falta ID específico)
+
+   PROGRAMAÇÃO GERAL DE VENUES:
+   ❌ https://salaceliciameireles.rj.gov.br/programacao (calendário mensal)
+   ❌ https://casadochoro.com.br/programacao (agenda geral)
+
+📋 CHECKLIST ANTES DE RETORNAR UM LINK:
+   ✅ O link contém ID/identificador único? (numérico, slug, hash, ou parâmetro)
+   ✅ O link é de uma PLATAFORMA de venda (Sympla, Eventbrite, etc) OU página específica do venue?
+   ✅ O link aponta para UMA página específica de evento (não listagem/categoria)?
+   ✅ O link NÃO é homepage do artista/venue/plataforma?
+   ✅ O link NÃO é de agregador genérico (Shazam, Concerts50, etc)?
+
+   SE TODAS AS RESPOSTAS FOREM ✅ → retornar link
+   SE QUALQUER RESPOSTA FOR ❌ → retornar null
+
+4. SE NÃO ENCONTRAR link específico:
+   - Busque em TODAS as plataformas prioritárias (Sympla, Eventbrite, Ticketmaster, Fever)
+   - Busque em plataformas secundárias (Ingresso.com, Bileto)
+   - APENAS APÓS TENTAR TODAS AS FONTES: retorne null
+   - NÃO retorne links genéricos "por garantia" (null é MELHOR que link inválido)
 """
 
         # Montar prompt completo
@@ -1694,62 +1813,69 @@ ESTRATÉGIA:
             local = event.get("local", "")
             eventos_texto.append(f"{i}. {titulo} | Data: {data} | Local: {local}")
 
-        prompt = f"""MISSÃO CRÍTICA: Encontrar links ESPECÍFICOS de venda/informações para estes {len(events_batch)} eventos no Rio de Janeiro.
-
-EVENTOS:
-{chr(10).join(eventos_texto)}
-
-ESTRATÉGIA DE BUSCA OBRIGATÓRIA (siga esta ordem):
-
-Para CADA evento:
-
-1️⃣ **PRIORIDADE MÁXIMA - Site Oficial do Venue**:
+        # Usar PromptBuilder para construir prompt estruturado
+        prompt = (
+            PromptBuilder()
+            .add_header(
+                "MISSÃO CRÍTICA",
+                f"Encontrar links ESPECÍFICOS de venda/informações para estes {len(events_batch)} eventos no Rio de Janeiro."
+            )
+            .add_section("EVENTOS", "\n".join(eventos_texto))
+            .add_raw("\nESTRATÉGIA DE BUSCA OBRIGATÓRIA (siga esta ordem):\n\nPara CADA evento:")
+            .add_numbered_list(
+                "",
+                [
+                    """**PRIORIDADE MÁXIMA - Site Oficial do Venue**:
    - Blue Note Rio → acesse bluenoterio.com e busque na agenda/programação
    - Teatro Municipal → acesse theatromunicipal.rj.gov.br
    - Sala Cecília Meirelles → acesse salaceliciameireles.com.br
    - Casa do Choro → acesse casadochoro.com.br/agenda
-   - Outros venues → busque "[nome venue] agenda programação"
-
-2️⃣ **Plataformas de Ingressos** (use termos EXATOS):
+   - Outros venues → busque "[nome venue] agenda programação\"""",
+                    """**Plataformas de Ingressos** (use termos EXATOS):
    - Sympla: busque "site:sympla.com.br [titulo evento completo] rio"
    - Ingresso.com: busque "site:ingresso.com [titulo evento completo]"
    - Eventbrite: busque "site:eventbrite.com.br [titulo evento completo]"
-   - Bilheteria Digital, Ticket360, Uhuu
-
-3️⃣ **Redes Sociais/Instagram** (último recurso):
+   - Bilheteria Digital, Ticket360, Uhuu""",
+                    """**Redes Sociais/Instagram** (último recurso):
    - Busque Instagram oficial do venue com link na bio ou stories
-   - Posts recentes sobre o evento específico
-
-CRITÉRIOS DE ACEITAÇÃO (seja RIGOROSO):
-
-✅ ACEITE APENAS:
-   - URLs que levam DIRETAMENTE à página do evento específico
-   - URLs com ID único, slug do evento, ou data na URL
-   - Exemplos válidos:
+   - Posts recentes sobre o evento específico"""
+                ],
+                emoji_prefix=True
+            )
+            .add_criteria({
+                "ACEITE APENAS": [
+                    "URLs que levam DIRETAMENTE à página do evento específico",
+                    "URLs com ID único, slug do evento, ou data na URL",
+                    """Exemplos válidos:
      * sympla.com.br/evento/nome-evento-123456
      * bluenoterio.com/shows/artista-data-20250115
-     * eventbrite.com.br/e/titulo-evento-tickets-789012
-
-❌ REJEITE ABSOLUTAMENTE:
-   - Homepages: bluenoterio.com, casadochoro.com.br
-   - Páginas de listagem: /agenda, /shows, /eventos, /programacao
-   - URLs genéricas sem identificador do evento
-   - Links de redes sociais (exceto se for o ÚNICO link disponível)
-
-VALIDAÇÃO FINAL:
-Antes de retornar cada link:
-1. Confirme que a URL contém elemento único (ID, nome, data)
-2. Verifique que não é página genérica
-3. Se tiver dúvida, retorne null
-
-FORMATO JSON (sem comentários):
-{{
-  "1": "https://url-especifica-evento-1.com/..." ou null,
-  "2": "https://url-especifica-evento-2.com/..." ou null
-}}
-
-⚠️ IMPORTANTE: Prefira retornar null do que um link genérico. Links ruins serão rejeitados na validação.
-"""
+     * eventbrite.com.br/e/titulo-evento-tickets-789012"""
+                ],
+                "REJEITE ABSOLUTAMENTE": [
+                    "Homepages: bluenoterio.com, casadochoro.com.br",
+                    "Páginas de listagem: /agenda, /shows, /eventos, /programacao",
+                    "URLs genéricas sem identificador do evento",
+                    "Links de redes sociais (exceto se for o ÚNICO link disponível)"
+                ]
+            }, title="CRITÉRIOS DE ACEITAÇÃO (seja RIGOROSO)")
+            .add_numbered_list(
+                "VALIDAÇÃO FINAL:\nAntes de retornar cada link",
+                [
+                    "Confirme que a URL contém elemento único (ID, nome, data)",
+                    "Verifique que não é página genérica",
+                    "Se tiver dúvida, retorne null"
+                ]
+            )
+            .add_json_example(
+                {
+                    "1": "https://url-especifica-evento-1.com/... ou null",
+                    "2": "https://url-especifica-evento-2.com/... ou null"
+                },
+                "FORMATO JSON (sem comentários)"
+            )
+            .add_raw("⚠️ IMPORTANTE: Prefira retornar null do que um link genérico. Links ruins serão rejeitados na validação.")
+            .build()
+        )
 
         try:
             response = self.search_agent.run(prompt)

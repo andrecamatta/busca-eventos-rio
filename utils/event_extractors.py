@@ -1,5 +1,7 @@
 """Utilitários para extração de eventos de estruturas JSON complexas."""
 
+from utils.event_identity import EventIdentity
+
 
 def extract_event_list(events_data: dict | list) -> list[dict]:
     """Extrai lista plana de eventos de estruturas JSON variadas.
@@ -123,13 +125,14 @@ def filter_duplicate_events(events: list[dict]) -> list[dict]:
     unique_events = []
 
     for event in events:
-        title = get_event_title(event).lower().strip()
-        date = event.get("data", "").strip()
+        # Usar EventIdentity para gerar chave de filtro
+        # Determinar qual chave de título usar
+        title_key = "titulo" if "titulo" in event else "titulo_evento"
+        key = EventIdentity.get_filter_key(event, title_key=title_key)
 
-        # Criar chave única
-        key = f"{title}|{date}"
-
-        if key not in seen and title:  # Ignora eventos sem título
+        # Ignora eventos sem título
+        title = get_event_title(event)
+        if key not in seen and title:
             seen.add(key)
             unique_events.append(event)
 

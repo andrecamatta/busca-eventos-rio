@@ -7,7 +7,6 @@ import re
 from datetime import datetime
 from typing import Any
 
-import httpx
 from bs4 import BeautifulSoup
 
 from config import (
@@ -17,6 +16,7 @@ from config import (
     VENUE_ADDRESSES,
 )
 from utils.agent_factory import AgentFactory
+from utils.http_client import HttpClientWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class ValidationAgent:
 
     def __init__(self):
         self.log_prefix = "[ValidationAgent] ⚖️"
+        self.http_client = HttpClientWrapper()
 
         self.agent = AgentFactory.create_agent(
             name="Event Validation Agent",
@@ -47,6 +48,7 @@ class ValidationAgent:
         """Determina se um evento precisa de validação individual via LLM.
 
         Eventos com informações completas e link válido podem pular validação (otimização).
+        Eventos de venues conhecidos/confiáveis também são auto-aprovados (economia de API).
         """
         # Sempre validar se não tiver campos essenciais
         has_complete_fields = all([
@@ -59,13 +61,33 @@ class ValidationAgent:
         if not has_complete_fields:
             return True  # Precisa validar
 
-        # Se tiver link válido E campos completos, pode pular
-        has_valid_link = event.get('link_ingresso') and event.get('link_valid')
+        # OTIMIZAÇÃO: Auto-aprovar eventos de venues conhecidos e confiáveis
+        # Estes venues têm programação curada e eventos sempre válidos
+        local = event.get('local', '').lower()
+
+        TRUSTED_VENUES = [
+            'teatro municipal', 'theatro municipal',
+            'sala cecília meireles', 'cecilia meireles',
+            'blue note', 'bluenote',
+            'casa do choro',
+            'ccbb', 'centro cultural banco do brasil',
+            'oi futuro', 'centro cultural oi futuro',
+            'cidade das artes',
+        ]
+
+        is_trusted_venue = any(venue in local for venue in TRUSTED_VENUES)
+
+        # Auto-aprovar venues confiáveis com campos completos (mesmo sem link validado)
+        if is_trusted_venue and has_complete_fields:
+            return False  # Pode pular validação LLM (venue confiável)
+
+        # Se tiver link válido (explicitamente marcado como True) E campos completos, pode pular
+        has_valid_link = event.get('link_ingresso') and event.get('link_valid') is True
 
         if has_valid_link and has_complete_fields:
             return False  # Pode pular validação
 
-        # Se não tiver link OU link não foi validado, precisa validar
+        # Se não tiver link OU link não foi validado (None ou False), precisa validar
         return True
 
     async def validate_events_batch(self, events: list[dict]) -> dict[str, Any]:
@@ -85,9 +107,16 @@ class ValidationAgent:
                 events_to_validate.append(event)
             else:
                 auto_approved_events.append(event)
+                # Determinar razão da auto-aprovação para log
+                local = event.get('local', '').lower()
+                is_trusted = any(v in local for v in [
+                    'teatro municipal', 'sala cecília', 'blue note', 'casa do choro',
+                    'ccbb', 'oi futuro', 'cidade das artes'
+                ])
+                reason = "venue confiável" if is_trusted else "link válido"
                 logger.info(
-                    f"✓ Auto-aprovado (campos completos + link válido): "
-                    f"{event.get('titulo', 'Sem título')}"
+                    f"✓ Auto-aprovado ({reason}): "
+                    f"{event.get('titulo', 'Sem título')} @ {event.get('local', 'N/A')}"
                 )
 
         logger.info(
@@ -265,94 +294,91 @@ class ValidationAgent:
             link: URL para validar
             event: Dados do evento (opcional, para validação de qualidade)
         """
-        try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, follow_redirects=True) as client:
-                response = await client.get(link, timeout=15)
+        # Usar HttpClientWrapper para fetch + parsing
+        result = await self.http_client.fetch_and_parse(
+            link,
+            extract_text=True,
+            text_max_length=3000,
+            clean_html=True
+        )
 
-                if response.status_code == 200:
-                    # Extrair texto relevante da página
-                    try:
-                        soup = BeautifulSoup(response.text, "html.parser")
-                        # Remover scripts e styles
-                        for script in soup(["script", "style"]):
-                            script.decompose()
-                        page_text = soup.get_text()
-                        # Limpar e pegar primeiros 3000 caracteres
-                        page_text = " ".join(page_text.split())[:3000]
-                    except Exception as e:
-                        logger.warning(f"Erro ao extrair texto da página: {e}")
-                        page_text = ""
-                        soup = None
+        # Se não teve sucesso, retornar erro apropriado
+        if not result["success"]:
+            status_code = result["status_code"]
 
-                    # Extrair datas do conteúdo
-                    extracted_date = self._extract_date_from_content(page_text)
+            if status_code == 404:
+                return {
+                    "status": "not_found",
+                    "status_code": 404,
+                    "reason": "Link retorna 404 (não encontrado)",
+                }
+            elif status_code == 403:
+                return {
+                    "status": "forbidden",
+                    "status_code": 403,
+                    "reason": "Link bloqueado (403 Forbidden)",
+                }
+            elif result["error"] == "Timeout":
+                return {
+                    "status": "timeout",
+                    "reason": "Timeout ao acessar link",
+                }
+            elif status_code:
+                return {
+                    "status": "error",
+                    "status_code": status_code,
+                    "reason": f"Link retorna status {status_code}",
+                }
+            else:
+                return {
+                    "status": "error",
+                    "reason": f"Erro ao acessar link: {result['error']}",
+                }
 
-                    # Extrair dados estruturados (novo)
-                    structured_data = {}
-                    if soup:
-                        try:
-                            structured_data = self._extract_structured_data(soup, page_text)
-                            # Adicionar data extraída aos dados estruturados
-                            structured_data["extracted_date"] = extracted_date
-                        except Exception as e:
-                            logger.warning(f"{self.log_prefix} Erro ao extrair dados estruturados: {e}")
+        # Sucesso - processar conteúdo
+        page_text = result["text"]
+        soup = result["soup"]
 
-                    # Validar qualidade do link (novo)
-                    quality_validation = None
-                    if event and structured_data:
-                        try:
-                            # Combinar dados estruturados com extração de data
-                            validation_data = {**structured_data, "extracted_date": extracted_date}
-                            quality_validation = self._validate_link_quality(validation_data, event)
+        # Extrair datas do conteúdo
+        extracted_date = self._extract_date_from_content(page_text)
 
-                            logger.info(
-                                f"{self.log_prefix} Link quality score: {quality_validation['score']}/100 "
-                                f"({'✅ APROVADO' if quality_validation['is_quality'] else '❌ REJEITADO'})"
-                            )
+        # Extrair dados estruturados
+        structured_data = {}
+        if soup:
+            try:
+                structured_data = self._extract_structured_data(soup, page_text)
+                # Adicionar data extraída aos dados estruturados
+                structured_data["extracted_date"] = extracted_date
+            except Exception as e:
+                logger.warning(f"{self.log_prefix} Erro ao extrair dados estruturados: {e}")
 
-                            if quality_validation['issues']:
-                                logger.debug(f"{self.log_prefix} Issues: {', '.join(quality_validation['issues'])}")
+        # Validar qualidade do link
+        quality_validation = None
+        if event and structured_data:
+            try:
+                # Combinar dados estruturados com extração de data
+                validation_data = {**structured_data, "extracted_date": extracted_date}
+                quality_validation = self._validate_link_quality(validation_data, event)
 
-                        except Exception as e:
-                            logger.warning(f"{self.log_prefix} Erro ao validar qualidade do link: {e}")
+                logger.info(
+                    f"{self.log_prefix} Link quality score: {quality_validation['score']}/100 "
+                    f"({'✅ APROVADO' if quality_validation['is_quality'] else '❌ REJEITADO'})"
+                )
 
-                    return {
-                        "status": "accessible",
-                        "status_code": 200,
-                        "content_preview": page_text,
-                        "extracted_date": extracted_date,
-                        "structured_data": structured_data,  # Novo
-                        "quality_validation": quality_validation,  # Novo
-                    }
-                elif response.status_code == 404:
-                    return {
-                        "status": "not_found",
-                        "status_code": 404,
-                        "reason": "Link retorna 404 (não encontrado)",
-                    }
-                elif response.status_code == 403:
-                    return {
-                        "status": "forbidden",
-                        "status_code": 403,
-                        "reason": "Link bloqueado (403 Forbidden)",
-                    }
-                else:
-                    return {
-                        "status": "error",
-                        "status_code": response.status_code,
-                        "reason": f"Link retorna status {response.status_code}",
-                    }
+                if quality_validation['issues']:
+                    logger.debug(f"{self.log_prefix} Issues: {', '.join(quality_validation['issues'])}")
 
-        except httpx.TimeoutException:
-            return {
-                "status": "timeout",
-                "reason": "Timeout ao acessar link",
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "reason": f"Erro ao acessar link: {str(e)}",
-            }
+            except Exception as e:
+                logger.warning(f"{self.log_prefix} Erro ao validar qualidade do link: {e}")
+
+        return {
+            "status": "accessible",
+            "status_code": 200,
+            "content_preview": page_text,
+            "extracted_date": extracted_date,
+            "structured_data": structured_data,
+            "quality_validation": quality_validation,
+        }
 
     def _extract_date_from_content(self, content: str) -> dict[str, Any]:
         """Extrai datas estruturadas do conteúdo HTML."""
@@ -531,6 +557,51 @@ class ValidationAgent:
 
         return data
 
+    def _is_artist_or_venue_site(self, url: str, event_title: str) -> bool:
+        """Detecta se URL é site institucional de artista/venue (não venda).
+
+        Args:
+            url: URL a verificar
+            event_title: Título do evento
+
+        Returns:
+            True se for site genérico que deve ser rejeitado
+        """
+        from urllib.parse import urlparse
+
+        # Extrair domínio
+        domain = urlparse(url).netloc.lower()
+
+        # Lista de plataformas conhecidas (estas NÃO são sites de artistas)
+        known_platforms = [
+            'sympla', 'eventbrite', 'ticketmaster', 'ingresso', 'ticket',
+            'bluenoterio', 'eleventickets', 'ingressodigital',
+            'gov.br', # Sites governamentais geralmente têm páginas de eventos
+        ]
+
+        # Se é plataforma conhecida, não é site de artista
+        if any(platform in domain for platform in known_platforms):
+            return False
+
+        # Heurística: domínio contém nome do evento = provável site do artista
+        # Remover palavras comuns/stop words para comparação
+        stop_words = {'e', 'de', 'da', 'do', 'para', 'com', 'ao', 'a', 'o', 'no', 'na'}
+
+        event_words = set(w.lower() for w in event_title.split() if len(w) > 3 and w.lower() not in stop_words)
+        domain_cleaned = domain.replace('.com', '').replace('.br', '').replace('.', ' ').replace('-', ' ')
+        domain_words = set(w for w in domain_cleaned.split() if len(w) > 3 and w not in stop_words)
+
+        # Se domínio tem >40% das palavras do título = provável site do artista
+        if event_words and domain_words:
+            common = event_words & domain_words
+            match_ratio = len(common) / len(event_words)
+
+            if match_ratio > 0.4:
+                logger.info(f"🚫 Site de artista detectado: {domain} (match: {match_ratio:.0%} com '{event_title}')")
+                return True
+
+        return False
+
     def _validate_link_quality(self, extracted_data: dict, event: dict) -> dict[str, Any]:
         """Valida qualidade do link baseado nos dados extraídos.
 
@@ -541,6 +612,13 @@ class ValidationAgent:
 
         score = 0
         issues = []
+
+        # PENALIDADE CRÍTICA: Site de artista/venue (-50 pontos)
+        url = extracted_data.get("url", "")
+        event_title = event.get("titulo", "")
+        if url and self._is_artist_or_venue_site(url, event_title):
+            score -= 50
+            issues.append("⚠️ Link é site institucional do artista/venue (não é plataforma de venda)")
 
         # Peso: Título específico (30 pontos)
         if extracted_data.get("title"):

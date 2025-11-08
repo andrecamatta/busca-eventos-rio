@@ -7,6 +7,7 @@ from typing import Any
 
 from config import MAX_DESCRIPTION_LENGTH
 from utils.agent_factory import AgentFactory
+from utils.date_helpers import DateParser
 
 logger = logging.getLogger(__name__)
 
@@ -197,13 +198,7 @@ Não inclua explicações adicionais.
         if not date_str:
             return datetime.max
 
-        try:
-            # Tentar formatos comuns
-            for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"]:
-                try:
-                    return datetime.strptime(date_str.split()[0], fmt)
-                except ValueError:
-                    continue
-            return datetime.max
-        except Exception:
-            return datetime.max
+        # Remove horário se presente
+        date_only = date_str.split()[0] if " " in date_str else date_str
+        parsed = DateParser.parse_date(date_only)
+        return parsed if parsed else datetime.max

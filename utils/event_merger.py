@@ -1,6 +1,7 @@
 """Utilitário para merge e deduplicação de eventos."""
 
 import logging
+from utils.event_identity import EventIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +20,7 @@ class EventMerger:
         Returns:
             String no formato "titulo|data|local" (normalizado)
         """
-        titulo = event.get("titulo") or event.get("titulo_evento", "")
-        data = event.get("data", "")
-        local = event.get("local", "")
-        return f"{titulo.lower().strip()}|{data}|{local.lower().strip()}"
+        return EventIdentity.get_merge_key(event)
 
     def merge_events(self, events1: dict, events2: dict) -> dict:
         """

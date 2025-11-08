@@ -14,8 +14,8 @@ OPENROUTER_BASE_URL: Final[str] = "https://openrouter.ai/api/v1"
 
 # Modelos OpenRouter por função (otimização de custo vs performance)
 MODELS: Final[dict[str, str]] = {
-    "search": "perplexity/sonar-pro",           # Busca web em tempo real (casos complexos)
-    "search_simple": "perplexity/sonar",        # Busca web simples (redução de custo ~50%)
+    "search": "perplexity/sonar",               # Busca web em tempo real (otimizado, 80% economia vs Pro)
+    "search_simple": "perplexity/sonar",        # Busca web simples (mesmo modelo)
     "light": "google/gemini-2.5-flash",         # QueryOptimizer, FormatAgent (10-20x mais rápido, ~90% menor custo)
     "important": "google/gemini-2.5-flash",     # Verify, Validation, Enrichment, Retry (teste de qualidade)
 }
@@ -285,7 +285,7 @@ VENUE_ALIASES: Final[dict[str, str]] = {
 
 # Configurações de validação de qualidade de links
 LINK_QUALITY_THRESHOLD: Final[int] = 50  # score mínimo (0-100) para aceitar link (reduzido para aceitar mais links válidos)
-LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 3  # máximo de tentativas de busca inteligente (aumentado para mais chances)
+LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 3  # máximo de tentativas de busca inteligente
 REQUIRE_SPECIFIC_ARTISTS: Final[bool] = True  # rejeitar eventos sem artistas específicos
 ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "roda de choro",
@@ -293,6 +293,30 @@ ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "open mic",
     "sarau",
 ]  # tipos de eventos que aceitam "músicos da casa"
+
+# Configurações de eventos contínuos (temporadas, exposições, mostras)
+CONTINUOUS_EVENT_KEYWORDS: Final[list[str]] = [
+    "exposição",
+    "exposicao",
+    "mostra",
+    "exibição",
+    "exibicao",
+    "temporada",
+    "em cartaz",
+    "visitação",
+    "visitacao",
+    "aberto ao público",
+    "aberto ao publico",
+]
+
+CONTINUOUS_EVENT_TYPES: Final[dict[str, str]] = {
+    "exposição": "Exposição",
+    "exposicao": "Exposição",
+    "mostra": "Mostra",
+    "exibição": "Exibição",
+    "exibicao": "Exibição",
+    "temporada": "Temporada",
+}
 
 # Limitação de eventos por venue
 MAX_EVENTS_PER_VENUE: Final[int] = 7  # máximo de eventos por venue individual

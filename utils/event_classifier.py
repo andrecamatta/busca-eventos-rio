@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from utils.agent_factory import AgentFactory
+from utils.json_helpers import safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +60,12 @@ IMPORTANTE: IDs devem corresponder à ordem dos eventos na lista de entrada.
 """
 
 
-async def classify_events(events: list[dict[str, Any]], batch_size: int = 8) -> list[dict[str, Any]]:
+async def classify_events(events: list[dict[str, Any]], batch_size: int = 25) -> list[dict[str, Any]]:
     """Reclassifica todos os eventos em uma das 9 categorias válidas.
 
     Args:
         events: Lista de eventos a classificar
-        batch_size: Quantos eventos processar por chamada LLM (default: 8)
+        batch_size: Quantos eventos processar por chamada LLM (default: 25)
 
     Returns:
         Lista de eventos com campo 'categoria' atualizado
@@ -203,16 +204,5 @@ def _extract_json(text: str) -> dict:
     Raises:
         json.JSONDecodeError: Se não conseguir parsear JSON
     """
-    # Tentar extrair de code block markdown
-    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
-    if match:
-        text = match.group(1)
-
-    # Tentar encontrar JSON diretamente (sem code block)
-    if not match:
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            text = match.group(0)
-
-    # Parse JSON
-    return json.loads(text.strip())
+    # Usar json_helpers que já implementa essa lógica
+    return safe_json_parse(text, default={})

@@ -8,9 +8,13 @@ Utiliza Agno + OpenRouter para buscar, verificar e formatar eventos culturais.
 import asyncio
 import json
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# Desabilitar telemetria da biblioteca Agno (reduz 1000+ chamadas HTTP desnecessárias)
+os.environ['AGNO_TELEMETRY'] = 'false'
 
 from agents.enrichment_agent import EnrichmentAgent
 from agents.format_agent import FormatAgent
