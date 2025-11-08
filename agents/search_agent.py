@@ -370,17 +370,14 @@ REGRAS CRÍTICAS PARA LINKS:
                 "Jazz em bares, casas de jazz especializadas"
             ],
             palavras_chave=[
+                f"Blue Note Rio {month_str} {month_year_str}",
                 f"site:eventim.com.br/artist/blue-note-rio/ {month_str}",
-                f"site:eventim.com.br/artist/blue-note-rio/alegria-tribute",
-                f"site:eventim.com.br/artist/blue-note-rio/irma-you-and-my-guitar",
-                f"site:eventim.com.br/artist/blue-note-rio/fourplusone",
-                f"site:eventim.com.br/artist/blue-note-rio/sete-cabecas",
-                f"site:eventim.com.br/artist/blue-note-rio/u2-rio-experience",
-                f"site:eventim.com.br/artist/blue-note-rio/zanna",
+                f"Blue Note Rio agenda {month_str}",
+                f"Blue Note Rio shows {month_year_str}",
                 f"jazz Rio Janeiro {month_year_str}",
                 f"shows jazz {month_str}",
-                "Blue Note Rio",
-                "Maze Jazz Club"
+                f"Maze Jazz Club {month_str}",
+                f"jazz ao vivo Rio {month_str}"
             ],
             venues_sugeridos=[
                 "Blue Note Rio",
@@ -402,18 +399,18 @@ ESTRATÉGIA DE BUSCA COMPLETA:
 
 1. 🎫 BUSCA ABRANGENTE NO EVENTIM (PRIORIDADE):
    - "Blue Note Rio {month_str} {month_year_str} eventim"
-   - "site:eventim.com.br/artist/blue-note-rio/ novembro 2025"
-   - "Blue Note Rio agenda completa novembro 2025"
+   - "site:eventim.com.br/artist/blue-note-rio/ {month_year_str}"
+   - "Blue Note Rio agenda completa {month_year_str}"
    - Objetivo: capturar TODOS os shows disponíveis, não apenas alguns
 
 2. 🌐 SITE OFICIAL Blue Note:
-   - "site:bluenoterio.com.br/shows/ novembro 2025"
+   - "site:bluenoterio.com.br/shows/ {month_year_str}"
    - Verificar agenda completa no site oficial
 
 3. 🔍 PORTAIS CULTURAIS:
-   - "Blue Note Rio novembro 2025 TimeOut"
+   - "Blue Note Rio {month_year_str} TimeOut"
    - "Blue Note Rio shows {month_str} Veja Rio"
-   - "Blue Note Rio programação completa novembro"
+   - "Blue Note Rio programação completa {month_str}"
 
 IMPORTANTE - RETORNAR NO MÁXIMO 7 EVENTOS (limite por venue):
 - Se encontrar mais de 7 eventos, priorize:
