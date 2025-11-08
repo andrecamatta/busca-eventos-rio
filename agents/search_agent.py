@@ -358,7 +358,7 @@ REGRAS CRÍTICAS PARA LINKS:
         # ═══════════════════════════════════════════════════════════
         logger.info(f"{self.log_prefix} Criando 7 prompts micro-focados...")
 
-        # MICRO-SEARCH 1: Jazz
+        # MICRO-SEARCH 1: Jazz (Blue Note via scraper direto, Perplexity para outros venues)
         prompt_jazz = self._build_focused_prompt(
             categoria="Jazz",
             tipo_busca="categoria",
@@ -370,64 +370,49 @@ REGRAS CRÍTICAS PARA LINKS:
                 "Jazz em bares, casas de jazz especializadas"
             ],
             palavras_chave=[
-                f"Blue Note Rio {month_str} {month_year_str}",
-                f"site:eventim.com.br/artist/blue-note-rio/ {month_str}",
-                f"Blue Note Rio agenda {month_str}",
-                f"Blue Note Rio shows {month_year_str}",
                 f"jazz Rio Janeiro {month_year_str}",
                 f"shows jazz {month_str}",
                 f"Maze Jazz Club {month_str}",
-                f"jazz ao vivo Rio {month_str}"
+                f"Clube do Jazz Rio {month_str}",
+                f"jazz ao vivo Rio {month_str}",
+                f"casa de jazz Rio {month_year_str}"
             ],
             venues_sugeridos=[
-                "Blue Note Rio",
                 "Maze Jazz Club",
                 "Clube do Jazz",
                 "Jazz nos Fundos",
+                "Casa do Choro",
                 "Bares e hotéis com jazz ao vivo"
             ],
             instrucoes_especiais=f"""
-🎯 OBJETIVO: Buscar TODOS os shows do Blue Note Rio entre {start_date_str} e {end_date_str}
+🎯 OBJETIVO: Buscar shows de jazz no Rio de Janeiro entre {start_date_str} e {end_date_str}
 
-⚠️ IMPORTANTE: Blue Note Rio usa Eventim para venda de ingressos!
-   Blue Note é a PRINCIPAL casa de jazz do Rio - espera-se 10-15 eventos por mês
+OBSERVAÇÃO: Blue Note Rio é extraído via scraper direto (não buscar aqui).
+Focar em OUTROS venues de jazz e shows de jazz em bares/hotéis.
 
-✅ FORMATO CORRETO DE LINKS EVENTIM:
-eventim.com.br/artist/blue-note-rio/{{evento-normalizado}}-{{id}}/
+ESTRATÉGIA DE BUSCA:
 
-ESTRATÉGIA DE BUSCA COMPLETA:
+1. 🎷 CASAS DE JAZZ ESPECIALIZADAS:
+   - Maze Jazz Club
+   - Clube do Jazz
+   - Jazz nos Fundos
+   - Casa do Choro (choro e jazz)
 
-1. 🎫 BUSCA ABRANGENTE NO EVENTIM (PRIORIDADE):
-   - "Blue Note Rio {month_str} {month_year_str} eventim"
-   - "site:eventim.com.br/artist/blue-note-rio/ {month_year_str}"
-   - "Blue Note Rio agenda completa {month_year_str}"
-   - Objetivo: capturar TODOS os shows disponíveis, não apenas alguns
-
-2. 🌐 SITE OFICIAL Blue Note:
-   - "site:bluenoterio.com.br/shows/ {month_year_str}"
-   - Verificar agenda completa no site oficial
+2. 🏨 BARES E HOTÉIS COM JAZZ:
+   - Hotéis com jazz ao vivo
+   - Bares especializados em jazz
+   - Espaços culturais com programação jazz
 
 3. 🔍 PORTAIS CULTURAIS:
-   - "Blue Note Rio {month_year_str} TimeOut"
-   - "Blue Note Rio shows {month_str} Veja Rio"
-   - "Blue Note Rio programação completa {month_str}"
-
-IMPORTANTE - RETORNAR NO MÁXIMO 7 EVENTOS (limite por venue):
-- Se encontrar mais de 7 eventos, priorize:
-  1. Shows de jazz autêntico (não tributos)
-  2. Artistas internacionais e renomados
-  3. Eventos com data/horário mais próximos
-  4. Eventos com links Eventim completos
-
-REGRAS PARA LINKS:
-- ✅ ACEITAR: eventim.com.br/artist/blue-note-rio/{{evento}}-{{id}}/
-- ✅ ACEITAR: bluenoterio.com.br/shows/
-- ❌ REJEITAR: Links genéricos sem ID do evento
+   - TimeOut Rio - categoria Jazz
+   - Veja Rio - shows de jazz
+   - Agendas culturais locais
 
 VALIDAÇÃO:
 - Data ENTRE {start_date_str} e {end_date_str}
 - Horário obrigatório (padrão 20:00 se não encontrado)
-- Sempre priorize links Eventim específicos com ID numérico
+- Links de compra/informação quando disponíveis
+- Priorizar jazz autêntico sobre tributos
 """,
             start_date_str=start_date_str,
             end_date_str=end_date_str,
