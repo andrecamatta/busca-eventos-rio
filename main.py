@@ -18,6 +18,7 @@ from agents.retry_agent import RetryAgent
 from agents.search_agent import SearchAgent
 from agents.verify_agent import VerifyAgent
 from config import ENRICHMENT_ENABLED, MIN_EVENTS_THRESHOLD, OPENROUTER_API_KEY, SEARCH_CONFIG
+from utils.deduplicator import deduplicate_events
 from utils.event_merger import EventMerger
 from utils.file_manager import EventFileManager
 
@@ -155,6 +156,14 @@ class EventSearchOrchestrator:
                     logger.warning("Nenhum evento complementar encontrado")
             else:
                 logger.info(f"✓ Threshold atingido ({stats['total_verified']} eventos)")
+
+            # Deduplicação final (remover eventos duplicados por titulo + data + horario)
+            logger.info("\n[FASE 3.7/5] 🗑️  Removendo eventos duplicados...")
+            verified_events["verified_events"] = deduplicate_events(
+                verified_events.get("verified_events", [])
+            )
+            final_count = len(verified_events["verified_events"])
+            logger.info(f"✓ Total após deduplicação: {final_count} eventos únicos")
 
             # Salvar eventos verificados finais
             self.file_manager.save_json(verified_events, "verified_events.json")

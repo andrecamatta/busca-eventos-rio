@@ -1805,7 +1805,7 @@ FORMATO JSON (sem comentários):
         exclude_keywords = list(GLOBAL_EXCLUDE_KEYWORDS)
 
         # Adicionar exclusões específicas de outdoor (shows mainstream) se aplicável
-        outdoor_exclude = EVENT_CATEGORIES.get("outdoor_weekend", {}).get("exclude", [])
+        outdoor_exclude = EVENT_CATEGORIES.get("outdoor_parques", {}).get("exclude", [])
         if outdoor_exclude:
             exclude_keywords.extend(outdoor_exclude)
 
