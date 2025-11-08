@@ -259,16 +259,21 @@ def run_event_search():
             return
 
         # Determinar comando para executar main.py
+        # No container Docker, venv está no PATH via ENV VIRTUAL_ENV=/app/.venv
+        # Usar 'python' diretamente aproveita o venv ativo
         venv_python = BASE_DIR / ".venv" / "bin" / "python"
 
-        if shutil.which("uv"):
+        if venv_python.exists():
+            # Venv existe (container Docker ou dev local) - usar diretamente
+            cmd = ["python", "main.py"]
+            logger.info(f"✓ Comando selecionado: python main.py (venv em {venv_python})")
+        elif shutil.which("uv"):
+            # Ambiente dev com uv mas sem venv
             cmd = ["uv", "run", "python", "main.py"]
             logger.info(f"✓ Comando selecionado: uv run python main.py")
-        elif venv_python.exists():
-            cmd = [str(venv_python), "main.py"]
-            logger.info(f"✓ Comando selecionado: {venv_python} main.py")
         else:
-            logger.warning("⚠️  Nem uv nem virtualenv encontrados. Usando python3 do sistema...")
+            # Fallback: python do sistema
+            logger.warning("⚠️  Nem venv nem uv encontrados. Usando python do sistema...")
             cmd = ["python3", "main.py"]
             logger.info(f"✓ Comando selecionado: python3 main.py")
 
