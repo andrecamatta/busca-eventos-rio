@@ -897,12 +897,20 @@ CRITÉRIOS DE APROVAÇÃO:
 
 2. TEATRO COMÉDIA / STAND-UP - VALIDAÇÃO RIGOROSA:
    - APROVAR: comédia adulta, stand-up, humor para adultos, "indicado para maiores de 14/16/18"
-   - REJEITAR SEMPRE se contém QUALQUER termo infantil/familiar:
+   - REJEITAR SEMPRE se contém QUALQUER termo:
+
+     INFANTIL/FAMILIAR:
      * "infantil", "criança(s)", "kids", "criancas"
      * "infanto-juvenil", "infanto juvenil"
      * "família", "familia", "family", "para toda família"
-     * "sessão infantil", "sessao infantil"
-     * "indicado para crianças", "para crianças"
+     * "sessão infantil", "sessao infantil", "sessão dupla", "sessao dupla"
+     * "indicado para crianças", "filme infantil", "filmes infantis", "cinema infantil"
+
+     LGBTQIAPN+:
+     * "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn"
+     * "pride", "parada gay", "parada lgbtq"
+     * "diversidade sexual", "queer", "drag queen", "drag king"
+
    - Se menciona "todas as idades" SEM clareza de ser adulto → REJEITAR (preferir segurança)
 
 3. EVENTOS AO AR LIVRE:

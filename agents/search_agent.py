@@ -426,11 +426,19 @@ VALIDAÇÃO:
             instrucoes_especiais="""
 ATENÇÃO - EXCLUSÕES CRÍTICAS (VALIDAÇÃO RIGOROSA):
 - REJEITAR IMEDIATAMENTE qualquer evento contendo:
+
+  INFANTIL/FAMILIAR:
   * "infantil", "criança(s)", "kids", "criancas"
   * "infanto-juvenil", "infanto juvenil"
   * "família", "familia", "family", "para toda família"
-  * "sessão infantil", "sessao infantil"
-  * "indicado para crianças", "para crianças"
+  * "sessão infantil", "sessao infantil", "sessão dupla", "sessao dupla"
+  * "indicado para crianças", "filme infantil", "filmes infantis", "cinema infantil"
+
+  LGBTQIAPN+:
+  * "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn"
+  * "pride", "parada gay", "parada lgbtq"
+  * "diversidade sexual", "queer", "drag queen", "drag king"
+
 - Se menciona "todas as idades" sem clareza de ser adulto → REJEITAR
 - APENAS comédia explicitamente para público adulto/maiores de 14/16/18
 """,

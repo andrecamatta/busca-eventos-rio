@@ -3,8 +3,7 @@
 let calendar;
 let currentEvent = null;
 let currentFilters = {
-    categoria: '',
-    venue: ''
+    categoria: ''
 };
 
 // Detectar dispositivo móvel
@@ -41,6 +40,13 @@ function initCalendar() {
             week: 'Semana',
             list: 'Lista'
         },
+        // Formato de horário melhorado (20:00 em vez de número quebrado)
+        eventTimeFormat: {
+            hour: '2-digit',
+            minute: '2-digit',
+            meridiem: false,
+            hour12: false
+        },
         events: fetchEvents,
         eventClick: handleEventClick,
         eventDidMount: function(info) {
@@ -69,9 +75,6 @@ async function fetchEvents(info, successCallback, failureCallback) {
         const params = new URLSearchParams();
         if (currentFilters.categoria) {
             params.append('categoria', currentFilters.categoria);
-        }
-        if (currentFilters.venue) {
-            params.append('venue', currentFilters.venue);
         }
 
         const response = await fetch(`/api/events?${params.toString()}`);
@@ -107,18 +110,6 @@ async function loadFilters() {
             catSelect.appendChild(option);
         });
 
-        // Carregar venues
-        const venueResponse = await fetch('/api/venues');
-        const venues = await venueResponse.json();
-
-        const venueSelect = document.getElementById('filter-venue');
-        venues.forEach(venue => {
-            const option = document.createElement('option');
-            option.value = venue;
-            option.textContent = venue;
-            venueSelect.appendChild(option);
-        });
-
     } catch (error) {
         console.error('Erro ao carregar filtros:', error);
     }
@@ -127,7 +118,6 @@ async function loadFilters() {
 // Aplicar filtros
 function applyFilters() {
     currentFilters.categoria = document.getElementById('filter-categoria').value;
-    currentFilters.venue = document.getElementById('filter-venue').value;
 
     calendar.refetchEvents();
     showToast('Filtros aplicados', 'success');
@@ -136,8 +126,7 @@ function applyFilters() {
 // Limpar filtros
 function clearFilters() {
     document.getElementById('filter-categoria').value = '';
-    document.getElementById('filter-venue').value = '';
-    currentFilters = { categoria: '', venue: '' };
+    currentFilters = { categoria: '' };
 
     calendar.refetchEvents();
     showToast('Filtros removidos', 'info');

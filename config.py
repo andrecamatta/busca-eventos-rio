@@ -37,14 +37,21 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
     "comedia_teatro": {
         "keywords": ["teatro comédia", "stand-up", "humor", "peça cômica"],
         "exclude": [
+            # Conteúdo infantil/familiar
             "infantil", "criança", "crianças", "kids", "criancas",
             "infanto-juvenil", "infanto juvenil",
             "família", "familia", "family",
             "para toda família", "para toda a família",
             "sessão infantil", "sessao infantil",
             "indicado para crianças", "indicado para criancas",
+            "filme infantil", "filmes infantis", "cinema infantil",
+            "sessão dupla", "sessao dupla",
+            # Conteúdo LGBTQIAPN+
+            "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn",
+            "pride", "parada gay", "parada lgbtq",
+            "diversidade sexual", "queer", "drag queen", "drag king",
         ],
-        "description": "Teatro gênero comédia (exceto infantil)",
+        "description": "Teatro gênero comédia (exceto infantil e LGBTQIAPN+)",
     },
     "venues_especiais": {
         "venues": [
