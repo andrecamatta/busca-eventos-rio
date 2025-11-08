@@ -454,16 +454,24 @@ OBJETIVO:
         logger.info(f"{self.log_prefix} Iniciando busca de eventos com Perplexity Sonar Pro...")
 
         # ═══════════════════════════════════════════════════════════
-        # PRIORIDADE 1: SCRAPER EVENTIM (Blue Note)
+        # PRIORIDADE 1: SCRAPERS CUSTOMIZADOS (Blue Note + Sala Cecília Meireles)
         # ═══════════════════════════════════════════════════════════
-        logger.info(f"{self.log_prefix} 🎫 Buscando eventos Blue Note via Eventim Scraper...")
+        logger.info(f"{self.log_prefix} 🎫 Buscando eventos via scrapers customizados...")
         from utils.eventim_scraper import EventimScraper
 
+        # Blue Note
         blue_note_scraped = EventimScraper.scrape_blue_note_events()
         if blue_note_scraped:
             logger.info(f"✓ Encontrados {len(blue_note_scraped)} eventos Blue Note no Eventim")
         else:
             logger.warning("⚠️  Nenhum evento Blue Note encontrado no scraper")
+
+        # Sala Cecília Meireles
+        cecilia_meireles_scraped = EventimScraper.scrape_cecilia_meireles_events()
+        if cecilia_meireles_scraped:
+            logger.info(f"✓ Encontrados {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles")
+        else:
+            logger.warning("⚠️  Nenhum evento Sala Cecília Meireles encontrado no scraper")
 
         # Gerar strings de data dinâmicas
         start_date_str = SEARCH_CONFIG['start_date'].strftime('%d/%m/%Y')
@@ -1649,6 +1657,32 @@ ESTRATÉGIA:
 
             eventos_musica_classica = safe_parse_categoria(result_musica_classica, "Música Clássica")
             logger.debug(f"Música Clássica parsed - {len(eventos_musica_classica)} eventos")
+
+            # ═══════════════════════════════════════════════════════════
+            # MERGE: Adicionar eventos Sala Cecília Meireles scrapados
+            # ═══════════════════════════════════════════════════════════
+            if cecilia_meireles_scraped:
+                logger.info(f"🎼 Adicionando {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles do scraper...")
+                for scraped_event in cecilia_meireles_scraped:
+                    # Converter para formato EventoCategoria
+                    classical_event = {
+                        "titulo": scraped_event["titulo"],
+                        "data": scraped_event["data"],
+                        "horario": scraped_event["horario"],
+                        "local": "Sala Cecília Meireles - Rua da Lapa, 47, Centro, Rio de Janeiro",
+                        "preco": "Consultar link",
+                        "link_ingresso": scraped_event["link"],
+                        "descricao": None,  # Será enriquecido depois
+                        "categoria": "Música Clássica"
+                    }
+                    # Adicionar à lista de música clássica (evitando duplicatas por título)
+                    if not any(e.get("titulo", "").lower() == classical_event["titulo"].lower() for e in eventos_musica_classica):
+                        eventos_musica_classica.append(classical_event)
+                        logger.debug(f"   ✓ Adicionado: {classical_event['titulo']}")
+                    else:
+                        logger.debug(f"   ⏭️  Duplicata ignorada: {classical_event['titulo']}")
+
+                logger.info(f"✓ Total de eventos Música Clássica após merge: {len(eventos_musica_classica)}")
 
             eventos_teatro = safe_parse_categoria(result_teatro, "Teatro")
             logger.debug(f"Teatro parsed - {len(eventos_teatro)} eventos")

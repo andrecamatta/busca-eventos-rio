@@ -18,7 +18,140 @@ logger = logging.getLogger(__name__)
 
 
 class EventimScraper:
-    """Scraper para páginas do Eventim que não são indexadas por search engines."""
+    """Scraper para páginas do Eventim e outros sites que não são indexadas por search engines."""
+
+    @staticmethod
+    def scrape_cecilia_meireles_events() -> List[Dict[str, str]]:
+        """
+        Scrape eventos da Sala Cecília Meireles diretamente do site usando BeautifulSoup.
+
+        Returns:
+            Lista de eventos: [{"titulo": str, "data": str, "horario": str, "link": str}, ...]
+        """
+        url = "https://salaceciliameireles.rj.gov.br/programacao/"
+
+        try:
+            logger.info(f"🎼 Scraping Sala Cecília Meireles: {url}")
+
+            # Request HTTP
+            headers = {
+                "User-Agent": config.USER_AGENT
+            }
+
+            response = httpx.get(url, headers=headers, timeout=15.0, follow_redirects=True)
+
+            if response.status_code != 200:
+                logger.error(f"❌ Erro HTTP {response.status_code} ao acessar {url}")
+                return []
+
+            # Parse HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+            event_divs = soup.find_all('div', class_='event')
+
+            logger.info(f"📄 Encontrados {len(event_divs)} eventos no HTML")
+
+            eventos = []
+            start_date = config.SEARCH_CONFIG['start_date']
+            end_date = config.SEARCH_CONFIG['end_date']
+            max_events = config.MAX_EVENTS_PER_VENUE
+
+            for event_div in event_divs:
+                try:
+                    # Extrair título: <div class='title'>Título</div>
+                    title_elem = event_div.find('div', class_='title')
+                    if not title_elem:
+                        continue
+
+                    titulo = title_elem.get_text(strip=True)
+                    if not titulo:
+                        continue
+
+                    # Extrair data: <span class="day">8 nov</span> sáb 17H
+                    date_elem = event_div.find('span', class_='day')
+                    if not date_elem:
+                        continue
+
+                    date_text = date_elem.get_text(strip=True)  # "8 nov"
+                    date_parts = date_text.split()
+                    if len(date_parts) < 2:
+                        continue
+
+                    day = date_parts[0]
+                    month_text = date_parts[1]
+
+                    # Parse mês e ano
+                    month = DateParser.parse_month(month_text)
+                    year = DateParser.determine_year(month, day)
+                    data = f"{day.zfill(2)}/{month}/{year}"
+
+                    # Verificar se data está no range
+                    try:
+                        event_date = datetime.strptime(data, "%d/%m/%Y")
+                        if event_date < start_date or event_date > end_date:
+                            logger.debug(f"⏭️  Evento fora do range: {data}")
+                            continue
+                    except ValueError:
+                        logger.warning(f"⚠️  Data inválida: {data}")
+                        continue
+
+                    # Extrair horário do texto completo da data (ex: "8 nov sáb 17H")
+                    date_full_elem = event_div.find('div', class_='date')
+                    horario_raw = "20H00"  # Default
+                    if date_full_elem:
+                        date_full_text = date_full_elem.get_text(strip=True)
+                        # Procurar padrão de hora (ex: "17H", "19H30")
+                        import re
+                        time_match = re.search(r'(\d{1,2}H\d{0,2})', date_full_text)
+                        if time_match:
+                            horario_raw = time_match.group(1)
+
+                    horario = DateParser.normalize_time(horario_raw)
+
+                    # Extrair link de ingresso: <a class="button button-rounded" href="...">comprar ingressos</a>
+                    ticket_link = None
+                    ticket_elem = event_div.find('a', class_='button-rounded')
+                    if ticket_elem and ticket_elem.get('href'):
+                        ticket_link = ticket_elem.get('href')
+
+                    # Se não tiver link de ingresso, usar página do evento
+                    if not ticket_link:
+                        event_link_elem = event_div.find('a', href=True)
+                        if event_link_elem:
+                            ticket_link = event_link_elem.get('href')
+
+                    # Garantir URL completa
+                    if ticket_link and not ticket_link.startswith('http'):
+                        ticket_link = f"https://salaceciliameireles.rj.gov.br{ticket_link}"
+
+                    # Construir evento
+                    evento = {
+                        "titulo": titulo,
+                        "data": data,
+                        "horario": horario,
+                        "link": ticket_link or url,
+                    }
+
+                    eventos.append(evento)
+                    logger.debug(f"✓ {titulo} - {data} às {horario}")
+
+                    # Limitar eventos por venue
+                    if len(eventos) >= max_events:
+                        logger.info(f"⚠️  Limite de {max_events} eventos atingido para Sala Cecília Meireles")
+                        break
+
+                except Exception as e:
+                    logger.warning(f"⚠️  Erro ao processar evento: {e}")
+                    continue
+
+            logger.info(f"✅ {len(eventos)} eventos Sala Cecília Meireles extraídos com sucesso")
+            return eventos
+
+        except httpx.TimeoutException:
+            logger.error(f"⏱️  Timeout ao acessar {url}")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Erro ao scraping Sala Cecília Meireles: {e}")
+            return []
 
     @staticmethod
     def scrape_blue_note_events() -> List[Dict[str, str]]:
