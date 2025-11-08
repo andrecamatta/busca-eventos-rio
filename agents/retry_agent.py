@@ -2,10 +2,11 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from config import (
+    EVENT_CATEGORIES,
     MIN_EVENTS_THRESHOLD,
     REQUIRED_VENUES,
     SEARCH_CONFIG,
@@ -110,6 +111,49 @@ class RetryAgent:
 
         return saturdays_uncovered
 
+    def _check_category_minimums(self, verified_events: list[dict]) -> dict[str, int]:
+        """Verifica se categorias atingiram seus mínimos configurados.
+
+        Returns:
+            Dict com categorias que não atingiram mínimo: {categoria: faltam}
+        """
+        categories_missing = {}
+
+        for category_key, category_config in EVENT_CATEGORIES.items():
+            min_events = category_config.get("min_events")
+            if not min_events:
+                continue  # Categoria sem mínimo configurado
+
+            # Mapear nome de config para nome de categoria usado nos eventos
+            category_name_map = {
+                "jazz": "Jazz",
+                "musica_classica": "Música Clássica",
+                "teatro": "Teatro",
+                "comedia": "Comédia",
+                "cinema": "Cinema",
+                "feira_gastronomica": "Feira Gastronômica",
+                "feira_artesanato": "Feira de Artesanato",
+                "outdoor_parques": "Outdoor/Parques",
+                "cursos_cafe": "Cursos de Café",
+            }
+
+            category_display_name = category_name_map.get(category_key, category_key)
+
+            # Contar eventos desta categoria
+            count = sum(
+                1 for event in verified_events
+                if event.get("categoria") == category_display_name
+            )
+
+            if count < min_events:
+                categories_missing[category_display_name] = min_events - count
+                logger.warning(
+                    f"⚠️  Categoria '{category_display_name}': {count}/{min_events} eventos "
+                    f"(faltam {min_events - count})"
+                )
+
+        return categories_missing
+
     def needs_retry(self, verified_data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
         """Verifica se precisa de retry e retorna análise dos gaps."""
         verified_events = verified_data.get("verified_events", [])
@@ -129,40 +173,64 @@ class RetryAgent:
         # Verificar cobertura de outdoor por sábado
         saturdays_uncovered = self._check_saturday_coverage(verified_events)
 
+        # Verificar se categorias atingiram seus mínimos
+        categories_missing = self._check_category_minimums(verified_events)
+
         # Precisa retry se:
         # 1. Não atingir mínimo de eventos de fim de semana, OU
         # 2. Faltar venue obrigatório, OU
-        # 3. Algum sábado sem evento outdoor
-        if weekend_count >= MIN_EVENTS_THRESHOLD and not missing_required_venues and not saturdays_uncovered:
+        # 3. Algum sábado sem evento outdoor, OU
+        # 4. Alguma categoria não atingiu seu mínimo configurado
+        if (weekend_count >= MIN_EVENTS_THRESHOLD and
+            not missing_required_venues and
+            not saturdays_uncovered and
+            not categories_missing):
             return False, {}
 
-        # Analisar gaps por categoria
-        verified_events = verified_data.get("verified_events", [])
+        # Analisar gaps por categoria (para backwards compatibility do prompt)
         rejected_events = verified_data.get("rejected_events", [])
 
         categories = {
             "jazz": 0,
+            "musica_classica": 0,
             "comedia": 0,
             "outdoor": 0,
+            "teatro": 0,
+            "cinema": 0,
+            "feira_gastronomica": 0,
+            "feira_artesanato": 0,
             "casa_choro": 0,
             "sala_cecilia": 0,
             "teatro_municipal": 0,
         }
 
-        # Contar eventos aprovados por categoria
+        # Contar eventos aprovados por categoria (atualizado para categorias granulares)
         for event in verified_events:
-            categoria = event.get("categoria", "").lower()
-            if "jazz" in categoria:
+            categoria = event.get("categoria", "")
+            if categoria == "Jazz":
                 categories["jazz"] += 1
-            elif "comédia" in categoria or "stand-up" in categoria:
+            elif categoria == "Música Clássica":
+                categories["musica_classica"] += 1
+            elif categoria == "Comédia":
                 categories["comedia"] += 1
-            elif "outdoor" in categoria or "ar livre" in categoria:
+            elif categoria == "Outdoor/Parques":
                 categories["outdoor"] += 1
-            elif "casa do choro" in str(event.get("local", "")).lower():
+            elif categoria == "Teatro":
+                categories["teatro"] += 1
+            elif categoria == "Cinema":
+                categories["cinema"] += 1
+            elif categoria == "Feira Gastronômica":
+                categories["feira_gastronomica"] += 1
+            elif categoria == "Feira de Artesanato":
+                categories["feira_artesanato"] += 1
+
+            # Venues (verificar local)
+            local_lower = str(event.get("local", "")).lower()
+            if "casa do choro" in local_lower:
                 categories["casa_choro"] += 1
-            elif "cecília meirelles" in str(event.get("local", "")).lower():
+            elif "cecília meirelles" in local_lower:
                 categories["sala_cecilia"] += 1
-            elif "municipal" in str(event.get("local", "")).lower():
+            elif "municipal" in local_lower:
                 categories["teatro_municipal"] += 1
 
         # Identificar eventos rejeitados recuperáveis
@@ -178,6 +246,7 @@ class RetryAgent:
         analysis = {
             "events_needed": MIN_EVENTS_THRESHOLD - weekend_count,
             "categories": categories,
+            "categories_missing": categories_missing,  # {categoria: faltam}
             "recoverable_events": recoverable,
             "gaps": [k for k, v in categories.items() if v == 0],
             "missing_required_venues": missing_required_venues,
@@ -189,6 +258,9 @@ class RetryAgent:
 
         if saturdays_uncovered:
             logger.warning(f"⚠️  {len(saturdays_uncovered)} sábados sem outdoor: {', '.join(saturdays_uncovered)}")
+
+        if categories_missing:
+            logger.warning(f"⚠️  Categorias abaixo do mínimo: {categories_missing}")
 
         logger.info(f"Análise de gaps: {json.dumps(analysis, indent=2, ensure_ascii=False)}")
         return True, analysis
@@ -229,10 +301,34 @@ class RetryAgent:
         gaps = analysis.get("gaps", [])
         events_needed = analysis.get("events_needed", 0)
         categories = analysis.get("categories", {})
+        categories_missing = analysis.get("categories_missing", {})  # {categoria: faltam}
         missing_required_venues = analysis.get("missing_required_venues", [])
 
         # Montar prompt direcionado para gaps
         gap_descriptions = []
+
+        # PRIORIDADE ALTÍSSIMA: Categorias abaixo do mínimo configurado
+        if "Jazz" in categories_missing:
+            faltam = categories_missing["Jazz"]
+            gap_descriptions.append(f"""
+🚨 CATEGORIA ABAIXO DO MÍNIMO: JAZZ (FALTAM {faltam} EVENTOS)
+- Mínimo configurado: {EVENT_CATEGORIES['jazz']['min_events']} eventos
+- Atual: {categories.get('jazz', 0)} eventos
+- NECESSÁRIO: Encontrar mais {faltam} eventos de jazz
+- Buscar em: Blue Note Rio, Maze Jazz Club, Clube do Jazz, Jazz nos Fundos, bares com jazz ao vivo
+- Palavras-chave: "jazz Rio Janeiro {month_year_str}", "shows jazz Copacabana", "jazz ao vivo"
+""")
+
+        if "Música Clássica" in categories_missing:
+            faltam = categories_missing["Música Clássica"]
+            gap_descriptions.append(f"""
+🚨 CATEGORIA ABAIXO DO MÍNIMO: MÚSICA CLÁSSICA (FALTAM {faltam} EVENTOS)
+- Mínimo configurado: {EVENT_CATEGORIES['musica_classica']['min_events']} eventos
+- Atual: {categories.get('musica_classica', 0)} eventos
+- NECESSÁRIO: Encontrar mais {faltam} eventos de música clássica
+- Buscar em: Sala Cecília Meirelles, Teatro Municipal, OSB, concertos de câmara
+- Palavras-chave: "música clássica Rio {month_year_str}", "concerto orquestra", "recital"
+""")
 
         # PRIORIDADE MÁXIMA: Venues obrigatórios faltantes
         if "blue_note" in missing_required_venues:
