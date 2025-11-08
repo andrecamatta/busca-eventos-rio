@@ -580,28 +580,29 @@ class ValidationAgent:
             )
 
             if is_acceptable_generic:
-                score += 15  # Aceita sem artistas específicos, mas com penalidade
+                score += 20  # Aumentado de 15 para 20 - eventos genéricos aceitáveis têm menos penalidade
                 issues.append("Evento sem artistas específicos (aceitável para este tipo)")
             else:
-                issues.append("Página não menciona artistas/músicos específicos")
+                score += 10  # Novo: dar crédito parcial mesmo sem artistas (reduz rigor)
+                issues.append("Artistas não identificados (crédito parcial concedido)")
 
-        # Peso: Data encontrada (15 pontos)
+        # Peso: Data encontrada (10 pontos, reduzido de 15)
         if extracted_data.get("extracted_date", {}).get("found"):
-            score += 15
+            score += 10
         else:
             issues.append("Data não encontrada na página")
 
-        # Peso: Horário específico (10 pontos)
+        # Peso: Horário específico (5 pontos, reduzido de 10)
         if extracted_data.get("time"):
-            score += 10
+            score += 5
         else:
             issues.append("Horário não encontrado")
 
-        # Peso: Preço ou indicação de valor (10 pontos)
+        # Peso: Preço ou indicação de valor (5 pontos, reduzido de 10)
         if extracted_data.get("price"):
-            score += 10
+            score += 5
         elif "consultar" in event.get("preco", "").lower():
-            score += 5  # Aceita "consultar" com penalidade
+            score += 3  # Aceita "consultar" com penalidade (reduzido de 5 para 3)
 
         # Peso: Link de compra funcional (10 pontos)
         if extracted_data.get("purchase_links") and len(extracted_data["purchase_links"]) > 0:

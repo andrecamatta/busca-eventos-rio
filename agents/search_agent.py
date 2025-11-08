@@ -390,41 +390,47 @@ REGRAS CRÍTICAS PARA LINKS:
                 "Bares e hotéis com jazz ao vivo"
             ],
             instrucoes_especiais=f"""
+🎯 OBJETIVO: Buscar TODOS os shows do Blue Note Rio entre {start_date_str} e {end_date_str}
+
 ⚠️ IMPORTANTE: Blue Note Rio usa Eventim para venda de ingressos!
+   Blue Note é a PRINCIPAL casa de jazz do Rio - espera-se 10-15 eventos por mês
 
 ✅ FORMATO CORRETO DE LINKS EVENTIM:
 eventim.com.br/artist/blue-note-rio/{{evento-normalizado}}-{{id}}/
 
-Exemplos de eventos encontrados:
-- eventim.com.br/artist/blue-note-rio/alegria-tribute-to-sade-3977676/
-- eventim.com.br/artist/blue-note-rio/irma-you-and-my-guitar-3895518/
-- eventim.com.br/artist/blue-note-rio/fourplusone-divas-strong-women-3956417/
-- eventim.com.br/artist/blue-note-rio/sete-cabecas-revisitando-acusticos-3973442/
+ESTRATÉGIA DE BUSCA COMPLETA:
 
-ESTRATÉGIA DE BUSCA (em ordem de prioridade):
+1. 🎫 BUSCA ABRANGENTE NO EVENTIM (PRIORIDADE):
+   - "Blue Note Rio {month_str} {month_year_str} eventim"
+   - "site:eventim.com.br/artist/blue-note-rio/ novembro 2025"
+   - "Blue Note Rio agenda completa novembro 2025"
+   - Objetivo: capturar TODOS os shows disponíveis, não apenas alguns
 
-1. 🎫 PRIORIDADE MÁXIMA - Busca por evento específico:
-   Para CADA show do Blue Note, busque:
-   - "site:eventim.com.br/artist/blue-note-rio/{{nome-normalizado}}"
-   - Nome normalizado: sem acentos, tudo minúsculo, hífens no lugar de espaços
-   - Ex: "Alegria – Tribute to Sade" → "site:eventim.com.br/artist/blue-note-rio/alegria-tribute"
+2. 🌐 SITE OFICIAL Blue Note:
+   - "site:bluenoterio.com.br/shows/ novembro 2025"
+   - Verificar agenda completa no site oficial
 
-2. 🎺 BUSCA GERAL NA PÁGINA DO ARTISTA:
-   - "site:eventim.com.br/artist/blue-note-rio/ {month_str}"
-   - Retorna lista completa de eventos do Blue Note
+3. 🔍 PORTAIS CULTURAIS:
+   - "Blue Note Rio novembro 2025 TimeOut"
+   - "Blue Note Rio shows {month_str} Veja Rio"
+   - "Blue Note Rio programação completa novembro"
 
-3. 🎺 SITE OFICIAL (último recurso):
-   - "site:bluenoterio.com.br/shows/"
-   - Use APENAS se não encontrar NENHUM link Eventim
+IMPORTANTE - RETORNAR NO MÁXIMO 7 EVENTOS (limite por venue):
+- Se encontrar mais de 7 eventos, priorize:
+  1. Shows de jazz autêntico (não tributos)
+  2. Artistas internacionais e renomados
+  3. Eventos com data/horário mais próximos
+  4. Eventos com links Eventim completos
 
 REGRAS PARA LINKS:
 - ✅ ACEITAR: eventim.com.br/artist/blue-note-rio/{{evento}}-{{id}}/
-- ✅ ACEITAR: bluenoterio.com.br/shows/ (se Eventim falhar)
-- ❌ REJEITAR: Links sem identificação do evento
+- ✅ ACEITAR: bluenoterio.com.br/shows/
+- ❌ REJEITAR: Links genéricos sem ID do evento
 
 VALIDAÇÃO:
 - Data ENTRE {start_date_str} e {end_date_str}
-- Sempre priorize links Eventim específicos com ID
+- Horário obrigatório (padrão 20:00 se não encontrado)
+- Sempre priorize links Eventim específicos com ID numérico
 """,
             start_date_str=start_date_str,
             end_date_str=end_date_str,

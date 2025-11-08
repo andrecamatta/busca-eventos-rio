@@ -15,75 +15,16 @@ class EventimScraper:
     @staticmethod
     def scrape_blue_note_events() -> List[Dict[str, str]]:
         """
-        Scrape eventos do Blue Note Rio diretamente do Eventim usando MCP Playwright.
+        Scrape eventos do Blue Note Rio usando Perplexity (não usa scraping direto).
+
+        IMPORTANTE: Esta função foi desativada pois o SearchAgent já busca Blue Note
+        via Perplexity Sonar Pro nas micro-searches de Jazz e venues específicos.
 
         Returns:
-            Lista de dicionários com: {titulo, data, link, horario}
+            Lista vazia (busca delegada ao SearchAgent)
         """
-        try:
-            logger.info("🌐 Iniciando scraping: Blue Note no Eventim via MCP Playwright...")
-
-            # Importação dinâmica (não falha se MCP não disponível)
-            try:
-                # Simular navegação via subprocess ao MCP
-                import subprocess
-
-                # Como o MCP é externo, vamos fazer uma abordagem alternativa:
-                # Retornar lista hardcoded dos eventos conhecidos do Eventim
-                # (Esta é uma solução temporária até implementar chamada MCP correta)
-
-                logger.warning("⚠️  MCP Playwright não integrado diretamente. Usando fallback com lista conhecida.")
-
-                # Lista de eventos conhecidos no Eventim (atualizada manualmente)
-                events = [
-                    {
-                        "titulo": "ALEGRIA – TRIBUTE TO SADE",
-                        "data": "08/11/2025",
-                        "link": "https://www.eventim.com.br/artist/blue-note-rio/alegria-tribute-to-sade-3977676/",
-                        "horario": "20:00"
-                    },
-                    {
-                        "titulo": "IRMA – YOU AND MY GUITAR",
-                        "data": "14/11/2025",
-                        "link": "https://www.eventim.com.br/artist/blue-note-rio/irma-you-and-my-guitar-3895518/",
-                        "horario": "20:00"
-                    },
-                    {
-                        "titulo": "FOURPLUSONE - DIVAS - STRONG WOMEN",
-                        "data": "07/11/2025",
-                        "link": "https://www.eventim.com.br/artist/blue-note-rio/fourplusone-divas-strong-women-3956417/",
-                        "horario": "20:00"
-                    },
-                    {
-                        "titulo": "SETE CABEÇAS REVISITANDO ACÚSTICOS",
-                        "data": "09/11/2025",
-                        "link": "https://www.eventim.com.br/artist/blue-note-rio/sete-cabecas-revisitando-acusticos-3973442/",
-                        "horario": "20:00"
-                    },
-                    {
-                        "titulo": "U2 RIO EXPERIENCE",
-                        "data": "15/11/2025",
-                        "link": "https://www.eventim.com.br/artist/blue-note-rio/u2-rio-experience-3961630/",
-                        "horario": "20:00"
-                    },
-                    {
-                        "titulo": "ZANNA",
-                        "data": "12/11/2025",
-                        "link": "https://www.eventim.com.br/artist/blue-note-rio/zanna-e-banda-lancamento-do-album-reflexo-3961634/",
-                        "horario": "20:00"
-                    }
-                ]
-
-                logger.info(f"✓ Fallback retornou {len(events)} eventos conhecidos do Eventim")
-                return events
-
-            except ImportError:
-                logger.error("❌ MCP Playwright não disponível")
-                return []
-
-        except Exception as e:
-            logger.error(f"❌ Erro no scraping Eventim: {e}")
-            return []
+        logger.info("⚠️  Blue Note scraper desativado - eventos buscados via Perplexity no SearchAgent")
+        return []
 
 
     @staticmethod

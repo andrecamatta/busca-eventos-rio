@@ -589,7 +589,7 @@ NÃO retorne:
 
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
-                event["link"] = new_link
+                event["link_ingresso"] = new_link
                 event["link_updated_by_ai"] = True
                 event["link_added_by_ai"] = True  # Novo campo para indicar que foi adicionado (não apenas corrigido)
                 event["link_quality_score"] = link_result.get("quality_score")
@@ -623,7 +623,7 @@ NÃO retorne:
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
                 event["link_original"] = link
-                event["link"] = new_link
+                event["link_ingresso"] = new_link
                 event["link_updated_by_ai"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
                 event["link_quality_validation"] = link_result.get("validation")
@@ -657,7 +657,7 @@ NÃO retorne:
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
                 event["link_original"] = link
-                event["link"] = new_link
+                event["link_ingresso"] = new_link
                 event["link_updated_by_ai"] = True
                 event["link_was_generic"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
@@ -734,7 +734,7 @@ NÃO retorne:
                     if link_result and link_result.get("link") and link_result["link"] != original_link:
                         new_link = link_result["link"]
                         event["link_original"] = original_link
-                        event["link"] = new_link
+                        event["link_ingresso"] = new_link
                         event["link_updated_by_ai"] = True
                         event["link_quality_score"] = link_result.get("quality_score")
                         event["link_quality_validation"] = link_result.get("validation")
@@ -769,7 +769,7 @@ NÃO retorne:
             if link_result and link_result.get("link") and link_result["link"] != original_link:
                 new_link = link_result["link"]
                 event["link_original"] = original_link
-                event["link"] = new_link
+                event["link_ingresso"] = new_link
                 event["link_updated_by_ai"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
                 event["link_quality_validation"] = link_result.get("validation")

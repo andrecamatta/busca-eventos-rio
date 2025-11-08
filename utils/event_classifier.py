@@ -41,6 +41,7 @@ REGRAS:
 - Se o evento se encaixa em múltiplas categorias, escolha a MAIS ESPECÍFICA
 - Se NÃO se encaixa em nenhuma, use "Geral"
 - Considere: título, descrição E local/venue do evento
+- PRIORIZE jazz autêntico sobre tributos quando houver dúvida
 
 EVENTOS PARA CLASSIFICAR:
 {eventos_json}

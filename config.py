@@ -284,8 +284,8 @@ VENUE_ALIASES: Final[dict[str, str]] = {
 }
 
 # Configurações de validação de qualidade de links
-LINK_QUALITY_THRESHOLD: Final[int] = 70  # score mínimo (0-100) para aceitar link
-LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 2  # máximo de tentativas de busca inteligente
+LINK_QUALITY_THRESHOLD: Final[int] = 50  # score mínimo (0-100) para aceitar link (reduzido para aceitar mais links válidos)
+LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 3  # máximo de tentativas de busca inteligente (aumentado para mais chances)
 REQUIRE_SPECIFIC_ARTISTS: Final[bool] = True  # rejeitar eventos sem artistas específicos
 ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "roda de choro",
@@ -295,4 +295,4 @@ ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
 ]  # tipos de eventos que aceitam "músicos da casa"
 
 # Limitação de eventos por venue
-MAX_EVENTS_PER_VENUE: Final[int] = 5  # máximo de eventos por venue individual
+MAX_EVENTS_PER_VENUE: Final[int] = 7  # máximo de eventos por venue individual
