@@ -870,11 +870,24 @@ Retorne JSON:
         if not date_str:
             return {"valid": False, "reason": "Data não fornecida"}
 
-        # Validar formato DD/MM/YYYY
+        # Validação RIGOROSA: Rejeitar datas descritivas
+        # Detectar palavras que indicam data inválida
+        invalid_indicators = ["última", "primeira", "edição", "temporada", "confirmar", "a definir", "tbd", "novembro de"]
+        if any(indicator in date_str.lower() for indicator in invalid_indicators):
+            return {"valid": False, "reason": f"Data descritiva não aceita (deve ser DD/MM/YYYY): {date_str}"}
+
+        # Validar formato DD/MM/YYYY (estrito - não aceitar texto extra)
         try:
-            event_date = datetime.strptime(date_str.split()[0], "%d/%m/%Y")
+            # Extrair apenas a parte da data (primeira palavra se houver espaços)
+            date_part = date_str.split()[0] if ' ' in date_str else date_str
+
+            # Validar formato exato DD/MM/YYYY
+            if not date_part or len(date_part) != 10 or date_part.count('/') != 2:
+                return {"valid": False, "reason": f"Formato de data inválido (esperado DD/MM/YYYY): {date_str}"}
+
+            event_date = datetime.strptime(date_part, "%d/%m/%Y")
         except (ValueError, IndexError):
-            return {"valid": False, "reason": f"Formato de data inválido: {date_str}"}
+            return {"valid": False, "reason": f"Formato de data inválido (esperado DD/MM/YYYY): {date_str}"}
 
         # Verificar se está no período válido
         # Normalizar para comparar apenas datas (sem horário)
@@ -887,6 +900,63 @@ Retorne JSON:
                 "valid": False,
                 "reason": f"Data fora do período válido ({start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')})",
             }
+
+        # VALIDAÇÃO RIGOROSA: Horário
+        horario_str = event.get("horario", "")
+
+        if not horario_str:
+            return {"valid": False, "reason": "Horário não fornecido"}
+
+        # Rejeitar placeholders de horário
+        invalid_time_indicators = ["xx:xx", "x:x", "tbd", "confirmar", "a definir"]
+        if any(indicator in horario_str.lower() for indicator in invalid_time_indicators):
+            return {"valid": False, "reason": f"Horário placeholder não aceito (deve ser HH:MM): {horario_str}"}
+
+        # Validar formato HH:MM estrito
+        if ":" not in horario_str:
+            return {"valid": False, "reason": f"Formato de horário inválido (esperado HH:MM): {horario_str}"}
+
+        try:
+            hora_partes = horario_str.strip().split(":")
+            if len(hora_partes) != 2:
+                return {"valid": False, "reason": f"Formato de horário inválido (esperado HH:MM): {horario_str}"}
+
+            hora = int(hora_partes[0])
+            minuto = int(hora_partes[1])
+
+            # Validar ranges válidos
+            if not (0 <= hora <= 23):
+                return {"valid": False, "reason": f"Hora inválida (deve ser 00-23): {horario_str}"}
+            if not (0 <= minuto <= 59):
+                return {"valid": False, "reason": f"Minuto inválido (deve ser 00-59): {horario_str}"}
+
+        except (ValueError, IndexError):
+            return {"valid": False, "reason": f"Formato de horário inválido (esperado HH:MM): {horario_str}"}
+
+        # VALIDAÇÃO GEOGRÁFICA: Apenas eventos no Rio de Janeiro
+        local_str = event.get("local", "")
+
+        if not local_str:
+            return {"valid": False, "reason": "Local não fornecido"}
+
+        local_lower = local_str.lower()
+
+        # Lista de cidades FORA do Rio de Janeiro que devem ser rejeitadas
+        invalid_cities = [
+            "paraty", "parati",  # Paraty/Parati
+            "niterói", "niteroi",  # Niterói
+            "são gonçalo", "sao goncalo",  # São Gonçalo
+            "duque de caxias",  # Duque de Caxias
+            "nova iguaçu", "nova iguacu",  # Nova Iguaçu
+            "são paulo", "sao paulo", "sp",  # São Paulo
+            "belo horizonte",  # BH
+            "brasília", "brasilia",  # Brasília
+        ]
+
+        # Verificar se o local contém alguma cidade inválida
+        for city in invalid_cities:
+            if city in local_lower:
+                return {"valid": False, "reason": f"Evento fora do Rio de Janeiro (cidade: {city})"}
 
         # VALIDAÇÃO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos MIN_HOURS_ADVANCE horas
         now = datetime.now()

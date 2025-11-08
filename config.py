@@ -179,11 +179,6 @@ VENUE_ADDRESSES: Final[dict[str, list[str]]] = {
         "Borja Reis, 291, Engenho de Dentro",
         "Engenho de Dentro, Rio de Janeiro",
     ],
-    "casa_natura": [
-        "Shopping Leblon, Av. Afrânio de Melo Franco, 290, Leblon, Rio de Janeiro",
-        "Shopping Leblon, Leblon",
-        "Leblon, Rio de Janeiro",
-    ],
     "mam_cinema": [
         "Av. Infante Dom Henrique, 85, Parque do Flamengo, Rio de Janeiro",
         "Parque do Flamengo",

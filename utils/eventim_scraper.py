@@ -267,6 +267,153 @@ class EventimScraper:
             logger.error(f"❌ Erro ao scraping Blue Note: {e}")
             return []
 
+    @staticmethod
+    def scrape_ccbb_events() -> List[Dict[str, str]]:
+        """
+        Scrape eventos do CCBB Rio diretamente do site usando BeautifulSoup.
+
+        Returns:
+            Lista de eventos: [{"titulo": str, "data": str, "horario": str, "link": str}, ...]
+        """
+        url = "https://ccbb.com.br/rio-de-janeiro/programacao/"
+
+        try:
+            logger.info(f"🎨 Scraping CCBB Rio: {url}")
+
+            # Request HTTP
+            headers = {
+                "User-Agent": config.USER_AGENT
+            }
+
+            response = httpx.get(url, headers=headers, timeout=15.0, follow_redirects=True)
+
+            if response.status_code != 200:
+                logger.error(f"❌ Erro HTTP {response.status_code} ao acessar {url}")
+                return []
+
+            # Parse HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            eventos = []
+            start_date = config.SEARCH_CONFIG['start_date']
+            end_date = config.SEARCH_CONFIG['end_date']
+            max_events = config.MAX_EVENTS_PER_VENUE
+
+            # Abordagem simplificada: buscar todos os headings (títulos de eventos)
+            headings = soup.find_all(['h2', 'h3', 'h4'])
+            logger.info(f"📄 Encontrados {len(headings)} headings no HTML")
+
+            processed_titles = set()  # Evitar duplicatas
+            import re
+
+            for heading in headings:
+                try:
+                    titulo = heading.get_text(strip=True)
+
+                    # Filtros básicos de qualidade
+                    if not titulo or len(titulo) < 3:
+                        continue
+                    if titulo.lower() in ['saiba mais', 'ingresso', 'comprar', 'ver mais', 'em cartaz', 'buscar', 'resultados']:
+                        continue
+                    if titulo in processed_titles:
+                        continue
+
+                    # Buscar container pai (div/section) que contém o evento
+                    parent = heading.find_parent(['div', 'section', 'article'])
+                    if not parent:
+                        continue
+
+                    # Buscar data no container pai
+                    parent_text = parent.get_text()
+
+                    # Detectar range de datas (exposições de longa duração): "DD/MM/YY a DD/MM/YY"
+                    date_range_match = re.search(r'(\d{2}/\d{2}/\d{2,4})\s*a\s*(\d{2}/\d{2}/\d{2,4})', parent_text)
+
+                    if date_range_match:
+                        # Usar data de TÉRMINO para exposições de longa duração
+                        date_text = date_range_match.group(2)  # Segunda data (término)
+                        logger.debug(f"📅 Range detectado para '{titulo}': {date_range_match.group(1)} a {date_text}")
+                    else:
+                        # Evento pontual - buscar data única
+                        date_match = re.search(r'(\d{2}/\d{2}/\d{2,4})', parent_text)
+                        if not date_match:
+                            logger.debug(f"⏭️  Evento sem data: {titulo}")
+                            continue
+                        date_text = date_match.group(1)
+
+                    # Normalizar data para DD/MM/YYYY
+                    if len(date_text) == 8:  # DD/MM/YY
+                        parts = date_text.split('/')
+                        year = int(parts[2])
+                        if year < 100:
+                            year = 2000 + year
+                        data = f"{parts[0]}/{parts[1]}/{year}"
+                    else:
+                        data = date_text
+
+                    # Verificar se data está no range
+                    try:
+                        event_date = datetime.strptime(data, "%d/%m/%Y")
+                        # Para exposições, aceitar se data de término >= hoje (apenas date, sem hora)
+                        if event_date.date() < start_date.date():
+                            logger.debug(f"⏭️  Evento fora do range (passado): {data}")
+                            continue
+                        if event_date > end_date:
+                            logger.debug(f"⏭️  Evento fora do range (futuro): {data}")
+                            continue
+                    except ValueError:
+                        logger.warning(f"⚠️  Data inválida: {data}")
+                        continue
+
+                    # Buscar link no container pai
+                    link_elem = parent.find('a', href=True)
+                    event_link = url  # Default para página principal
+
+                    if link_elem:
+                        href = link_elem.get('href', '')
+                        if href.startswith('http'):
+                            event_link = href
+                        elif href.startswith('/'):
+                            event_link = f"https://ccbb.com.br{href}"
+
+                    # Horário: usar padrão 10:00 (horário de abertura do CCBB)
+                    horario = "10:00"
+                    time_match = re.search(r'(\d{1,2})[hH:](\d{2})', parent_text)
+                    if time_match:
+                        hora = time_match.group(1).zfill(2)
+                        minuto = time_match.group(2)
+                        horario = f"{hora}:{minuto}"
+
+                    # Construir evento
+                    evento = {
+                        "titulo": titulo,
+                        "data": data,
+                        "horario": horario,
+                        "link": event_link,
+                    }
+
+                    eventos.append(evento)
+                    processed_titles.add(titulo)
+                    logger.debug(f"✓ {titulo} - {data} às {horario}")
+
+                    # Limitar eventos por venue
+                    if len(eventos) >= max_events:
+                        logger.info(f"⚠️  Limite de {max_events} eventos atingido para CCBB")
+                        break
+
+                except Exception as e:
+                    logger.warning(f"⚠️  Erro ao processar heading: {e}")
+                    continue
+
+            logger.info(f"✅ {len(eventos)} eventos CCBB extraídos com sucesso")
+            return eventos
+
+        except httpx.TimeoutException:
+            logger.error(f"⏱️  Timeout ao acessar {url}")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Erro ao scraping CCBB: {e}")
+            return []
 
     @staticmethod
     def match_event_to_scraped(event_title: str, scraped_events: List[Dict]) -> Optional[str]:

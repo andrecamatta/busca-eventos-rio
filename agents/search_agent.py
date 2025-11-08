@@ -473,6 +473,13 @@ OBJETIVO:
         else:
             logger.warning("⚠️  Nenhum evento Sala Cecília Meireles encontrado no scraper")
 
+        # CCBB Rio
+        ccbb_scraped = EventimScraper.scrape_ccbb_events()
+        if ccbb_scraped:
+            logger.info(f"✓ Encontrados {len(ccbb_scraped)} eventos CCBB")
+        else:
+            logger.warning("⚠️  Nenhum evento CCBB encontrado no scraper")
+
         # Gerar strings de data dinâmicas
         start_date_str = SEARCH_CONFIG['start_date'].strftime('%d/%m/%Y')
         end_date_str = SEARCH_CONFIG['end_date'].strftime('%d/%m/%Y')
@@ -660,88 +667,7 @@ ATENÇÃO - EXCLUSÕES CRÍTICAS:
             month_str=month_str
         )
 
-        # MICRO-SEARCH 4: Música Clássica
-        prompt_musica_classica = self._build_focused_prompt(
-            categoria="Música Clássica",
-            tipo_busca="categoria",
-            descricao="Concertos e apresentações de música clássica/erudita no Rio de Janeiro",
-            tipos_evento=[
-                "Concertos de orquestra",
-                "Recitais de música erudita",
-                "Música de câmara",
-                "Apresentações sinfônicas",
-                "Coral e ópera"
-            ],
-            palavras_chave=[
-                f"concerto música clássica Rio {month_str}",
-                f"orquestra sinfônica Rio {month_year_str}",
-                "Theatro Municipal música clássica",
-                "Sala Cecília Meireles concerto",
-                f"recital piano violino Rio {month_str}",
-                "música erudita Rio de Janeiro"
-            ],
-            venues_sugeridos=[
-                "Theatro Municipal",
-                "Sala Cecília Meireles",
-                "Sala São Paulo",
-                "Auditórios e salas de concerto"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Buscar concertos em venues tradicionais (Theatro Municipal, Sala Cecília Meireles)
-2. Orquestras: OSB (Orquestra Sinfônica Brasileira), OSESP
-3. Festivais de música clássica
-4. Recitais de instrumentos clássicos
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- EXCLUIR: música popular, jazz, MPB (apenas clássico/erudito)
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 5: Teatro (não-comédia)
-        prompt_teatro = self._build_focused_prompt(
-            categoria="Teatro",
-            tipo_busca="categoria",
-            descricao="Peças teatrais dramáticas, experimentais e textos clássicos (EXCLUIR comédia)",
-            tipos_evento=[
-                "Teatro dramático",
-                "Teatro experimental",
-                "Textos clássicos",
-                "Monólogos e performances"
-            ],
-            palavras_chave=[
-                f"peça teatral Rio {month_str}",
-                f"teatro dramático Rio {month_year_str}",
-                "espetáculo teatral Rio",
-                "montagem teatral adulto Rio"
-            ],
-            venues_sugeridos=[
-                "Teatro Cacilda Becker",
-                "Teatro Glauce Rocha",
-                "Centro Cultural Banco do Brasil",
-                "Teatros independentes"
-            ],
-            instrucoes_especiais=f"""
-IMPORTANTE - EXCLUSÕES:
-- EXCLUIR: comédia, stand-up, humor (são categoria separada)
-- EXCLUIR: infantil, família
-- FOCO: drama, experimental, clássicos, performances artísticas
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 6: Cinema
+        # MICRO-SEARCH 4: Cinema
         prompt_cinema = self._build_focused_prompt(
             categoria="Cinema",
             tipo_busca="categoria",
@@ -1285,40 +1211,7 @@ FOCO: Programação cultural variada (arte, música, teatro)
             month_str=month_str
         )
 
-
-        # MICRO-SEARCH 17: Casa Natura Musical
-        prompt_casa_natura = self._build_focused_prompt(
-            categoria="Casa Natura Musical",
-            tipo_busca="venue",
-            descricao="Shows de MPB, bossa nova, jazz e música brasileira de qualidade",
-            tipos_evento=[
-                "Shows de MPB",
-                "Bossa nova",
-                "Jazz brasileiro",
-                "Música instrumental brasileira"
-            ],
-            palavras_chave=[
-                f"Casa Natura Musical programação {month_year_str}",
-                f"site:casanaturamusical.com.br agenda {month_str}",
-                f"show Casa Natura {month_year_str}",
-                f"site:sympla.com.br Casa Natura {month_str}"
-            ],
-            venues_sugeridos=[
-                "Casa Natura Musical - Shopping Leblon, Av. Afrânio de Melo Franco, 290, Leblon"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site oficial: "site:casanaturamusical.com.br programacao {month_str}"
-2. Sympla: eventos com ingressos
-3. FOCO: MPB, bossa nova, jazz brasileiro de qualidade
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 18: MAM Cinema
+        # MICRO-SEARCH 17: MAM Cinema
         prompt_mam_cinema = self._build_focused_prompt(
             categoria="MAM Cinema",
             tipo_busca="venue",
@@ -1415,21 +1308,19 @@ ESTRATÉGIA:
             month_str=month_str
         )
 
-        logger.info(f"{self.log_prefix} ✅ 21 prompts criados com sucesso")
+        logger.info(f"{self.log_prefix} ✅ 18 prompts criados com sucesso")
 
         try:
             # ═══════════════════════════════════════════════════════════
-            # EXECUÇÃO PARALELA DAS 21 MICRO-SEARCHES
+            # EXECUÇÃO PARALELA DAS 18 MICRO-SEARCHES
             # ═══════════════════════════════════════════════════════════
-            logger.info(f"{self.log_prefix} Executando 21 micro-searches em paralelo...")
+            logger.info(f"{self.log_prefix} Executando 18 micro-searches em paralelo...")
 
-            # Executar as 21 buscas em paralelo (8 categorias + 13 venues)
+            # Executar as 18 buscas em paralelo (6 categorias + 12 venues)
             results = await asyncio.gather(
                 self._run_micro_search(prompt_jazz, "Jazz"),
                 self._run_micro_search(prompt_comedia, "Comédia"),
                 self._run_micro_search(prompt_outdoor, "Outdoor/Parques"),
-                self._run_micro_search(prompt_musica_classica, "Música Clássica"),
-                self._run_micro_search(prompt_teatro, "Teatro"),
                 self._run_micro_search(prompt_cinema, "Cinema"),
                 self._run_micro_search(prompt_feira_gastronomica, "Feira Gastronômica"),
                 self._run_micro_search(prompt_feira_artesanato, "Feira de Artesanato"),
@@ -1442,7 +1333,6 @@ ESTRATÉGIA:
                 self._run_micro_search(prompt_ims, "IMS"),
                 self._run_micro_search(prompt_parque_lage, "Parque Lage"),
                 self._run_micro_search(prompt_ccjf, "CCJF"),
-                self._run_micro_search(prompt_casa_natura, "Casa Natura Musical"),
                 self._run_micro_search(prompt_mam_cinema, "MAM Cinema"),
                 self._run_micro_search(prompt_theatro_net, "Theatro Net Rio"),
                 self._run_micro_search(prompt_ccbb_teatro_cinema, "CCBB Teatro/Cinema"),
@@ -1453,8 +1343,6 @@ ESTRATÉGIA:
                 result_jazz,
                 result_comedia,
                 result_outdoor,
-                result_musica_classica,
-                result_teatro,
                 result_cinema,
                 result_feira_gastronomica,
                 result_feira_artesanato,
@@ -1467,13 +1355,12 @@ ESTRATÉGIA:
                 result_ims,
                 result_parque_lage,
                 result_ccjf,
-                result_casa_natura,
                 result_mam_cinema,
                 result_theatro_net,
                 result_ccbb_teatro_cinema,
             ) = results
 
-            logger.info("✓ Todas as 21 micro-searches concluídas")
+            logger.info("✓ Todas as 18 micro-searches concluídas")
 
             # ═══════════════════════════════════════════════════════════
             # MERGE INTELIGENTE DOS RESULTADOS COM PYDANTIC
@@ -1655,38 +1542,6 @@ ESTRATÉGIA:
             eventos_outdoor = safe_parse_categoria(result_outdoor, "Outdoor/Parques")
             logger.debug(f"Outdoor/Parques parsed - {len(eventos_outdoor)} eventos")
 
-            eventos_musica_classica = safe_parse_categoria(result_musica_classica, "Música Clássica")
-            logger.debug(f"Música Clássica parsed - {len(eventos_musica_classica)} eventos")
-
-            # ═══════════════════════════════════════════════════════════
-            # MERGE: Adicionar eventos Sala Cecília Meireles scrapados
-            # ═══════════════════════════════════════════════════════════
-            if cecilia_meireles_scraped:
-                logger.info(f"🎼 Adicionando {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles do scraper...")
-                for scraped_event in cecilia_meireles_scraped:
-                    # Converter para formato EventoCategoria
-                    classical_event = {
-                        "titulo": scraped_event["titulo"],
-                        "data": scraped_event["data"],
-                        "horario": scraped_event["horario"],
-                        "local": "Sala Cecília Meireles - Rua da Lapa, 47, Centro, Rio de Janeiro",
-                        "preco": "Consultar link",
-                        "link_ingresso": scraped_event["link"],
-                        "descricao": None,  # Será enriquecido depois
-                        "categoria": "Música Clássica"
-                    }
-                    # Adicionar à lista de música clássica (evitando duplicatas por título)
-                    if not any(e.get("titulo", "").lower() == classical_event["titulo"].lower() for e in eventos_musica_classica):
-                        eventos_musica_classica.append(classical_event)
-                        logger.debug(f"   ✓ Adicionado: {classical_event['titulo']}")
-                    else:
-                        logger.debug(f"   ⏭️  Duplicata ignorada: {classical_event['titulo']}")
-
-                logger.info(f"✓ Total de eventos Música Clássica após merge: {len(eventos_musica_classica)}")
-
-            eventos_teatro = safe_parse_categoria(result_teatro, "Teatro")
-            logger.debug(f"Teatro parsed - {len(eventos_teatro)} eventos")
-
             eventos_cinema = safe_parse_categoria(result_cinema, "Cinema")
             logger.debug(f"Cinema parsed - {len(eventos_cinema)} eventos")
 
@@ -1696,13 +1551,11 @@ ESTRATÉGIA:
             eventos_feira_artesanato = safe_parse_categoria(result_feira_artesanato, "Feira de Artesanato")
             logger.debug(f"Feira de Artesanato parsed - {len(eventos_feira_artesanato)} eventos")
 
-            # Merge eventos gerais (todas as 8 categorias)
+            # Merge eventos gerais (todas as 6 categorias)
             todos_eventos_gerais = (
                 eventos_jazz +
                 eventos_comedia +
                 eventos_outdoor +
-                eventos_musica_classica +
-                eventos_teatro +
                 eventos_cinema +
                 eventos_feira_gastronomica +
                 eventos_feira_artesanato
@@ -1718,6 +1571,32 @@ ESTRATÉGIA:
             eventos_sala_cecilia = safe_parse_venue(result_sala_cecilia, "Sala Cecília Meireles")
             logger.debug(f"Sala Cecília Meireles parsed - {len(eventos_sala_cecilia)} eventos")
 
+            # ═══════════════════════════════════════════════════════════
+            # MERGE: Adicionar eventos Sala Cecília Meireles scrapados
+            # ═══════════════════════════════════════════════════════════
+            if cecilia_meireles_scraped:
+                logger.info(f"🎼 Adicionando {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles do scraper...")
+                for scraped_event in cecilia_meireles_scraped:
+                    # Converter para formato EventoVenue
+                    cecilia_event = {
+                        "titulo": scraped_event["titulo"],
+                        "data": scraped_event["data"],
+                        "horario": scraped_event["horario"],
+                        "local": "Sala Cecília Meireles - Rua da Lapa, 47, Centro, Rio de Janeiro",
+                        "preco": "Consultar link",
+                        "link_ingresso": scraped_event["link"],
+                        "descricao": None,  # Será enriquecido depois
+                        "venue": "Sala Cecília Meireles"
+                    }
+                    # Adicionar à lista (evitando duplicatas por título)
+                    if not any(e.get("titulo", "").lower() == cecilia_event["titulo"].lower() for e in eventos_sala_cecilia):
+                        eventos_sala_cecilia.append(cecilia_event)
+                        logger.debug(f"   ✓ Adicionado: {cecilia_event['titulo']}")
+                    else:
+                        logger.debug(f"   ⏭️  Duplicata ignorada: {cecilia_event['titulo']}")
+
+                logger.info(f"✓ Total de eventos Sala Cecília Meireles após merge: {len(eventos_sala_cecilia)}")
+
             eventos_teatro_municipal = safe_parse_venue(result_teatro_municipal, "Teatro Municipal do Rio de Janeiro")
             logger.debug(f"Teatro Municipal parsed - {len(eventos_teatro_municipal)} eventos")
 
@@ -1726,6 +1605,32 @@ ESTRATÉGIA:
 
             eventos_ccbb = safe_parse_venue(result_ccbb, "CCBB Rio - Centro Cultural Banco do Brasil")
             logger.debug(f"CCBB Rio parsed - {len(eventos_ccbb)} eventos")
+
+            # ═══════════════════════════════════════════════════════════
+            # MERGE: Adicionar eventos CCBB scrapados
+            # ═══════════════════════════════════════════════════════════
+            if ccbb_scraped:
+                logger.info(f"🎨 Adicionando {len(ccbb_scraped)} eventos CCBB do scraper...")
+                for scraped_event in ccbb_scraped:
+                    # Converter para formato EventoCategoria
+                    ccbb_event = {
+                        "titulo": scraped_event["titulo"],
+                        "data": scraped_event["data"],
+                        "horario": scraped_event["horario"],
+                        "local": "CCBB Rio - Centro Cultural Banco do Brasil - Rua Primeiro de Março, 66, Centro, Rio de Janeiro",
+                        "preco": "Consultar link",
+                        "link_ingresso": scraped_event["link"],
+                        "descricao": None,  # Será enriquecido depois
+                        "categoria": "Exposição"  # Categoria padrão para CCBB
+                    }
+                    # Adicionar à lista de CCBB (evitando duplicatas por título)
+                    if not any(e.get("titulo", "").lower() == ccbb_event["titulo"].lower() for e in eventos_ccbb):
+                        eventos_ccbb.append(ccbb_event)
+                        logger.debug(f"   ✓ Adicionado: {ccbb_event['titulo']}")
+                    else:
+                        logger.debug(f"   ⏭️  Duplicata ignorada: {ccbb_event['titulo']}")
+
+                logger.info(f"✓ Total de eventos CCBB após merge: {len(eventos_ccbb)}")
 
             eventos_oi_futuro = safe_parse_venue(result_oi_futuro, "Oi Futuro")
             logger.debug(f"Oi Futuro parsed - {len(eventos_oi_futuro)} eventos")
@@ -1738,9 +1643,6 @@ ESTRATÉGIA:
 
             eventos_ccjf = safe_parse_venue(result_ccjf, "CCJF - Centro Cultural Justiça Federal")
             logger.debug(f"CCJF parsed - {len(eventos_ccjf)} eventos")
-
-            eventos_casa_natura = safe_parse_venue(result_casa_natura, "Casa Natura Musical")
-            logger.debug(f"Casa Natura Musical parsed - {len(eventos_casa_natura)} eventos")
 
             eventos_mam_cinema = safe_parse_venue(result_mam_cinema, "MAM Cinema")
             logger.debug(f"MAM Cinema parsed - {len(eventos_mam_cinema)} eventos")
@@ -1762,7 +1664,6 @@ ESTRATÉGIA:
                 "IMS - Instituto Moreira Salles": eventos_ims,
                 "Parque Lage": eventos_parque_lage,
                 "CCJF - Centro Cultural Justiça Federal": eventos_ccjf,
-                "Casa Natura Musical": eventos_casa_natura,
                 "MAM Cinema": eventos_mam_cinema,
                 "Theatro Net Rio": eventos_theatro_net,
                 "CCBB Teatro e Cinema": eventos_ccbb_teatro_cinema,

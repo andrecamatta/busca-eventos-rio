@@ -477,8 +477,7 @@ async def index(request: Request):
 @app.get("/api/events")
 async def get_events(
     categoria: Optional[str] = None,
-    venue: Optional[str] = None,
-    apenas_com_link: bool = False
+    venue: Optional[str] = None
 ):
     """
     Retorna eventos em formato FullCalendar.
@@ -486,7 +485,6 @@ async def get_events(
     Query params:
     - categoria: filtrar por categoria (Jazz, Teatro-Comédia, Outdoor-FimDeSemana)
     - venue: filtrar por venue específico
-    - apenas_com_link: mostrar apenas eventos com link de ingresso válido
     """
     eventos = load_latest_events()
 
@@ -496,15 +494,6 @@ async def get_events(
 
     if venue:
         eventos = [e for e in eventos if e.get("venue") == venue]
-
-    if apenas_com_link:
-        # Filtrar apenas eventos com link válido (não None, não False, não 404)
-        eventos = [
-            e for e in eventos
-            if e.get("link_ingresso")
-            and e.get("link_valid") is not False
-            and e.get("link_status_code") != 404
-        ]
 
     # FILTRO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos 3 horas
     from datetime import datetime, timedelta

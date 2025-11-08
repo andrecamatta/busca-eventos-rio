@@ -102,7 +102,6 @@ class EventoVenue(EventoBase):
         "Sesc Flamengo",
         "Sesc Tijuca",
         "Sesc Engenho de Dentro",
-        "Casa Natura Musical",
         "MAM Cinema",
         "Theatro Net Rio",
         "CCBB Teatro e Cinema",

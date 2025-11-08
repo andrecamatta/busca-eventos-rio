@@ -20,7 +20,7 @@ Sistema inteligente de busca e visualização de eventos culturais no Rio de Jan
 Busca inteligente em 20 venues e categorias:
 - 🎺 **Jazz** - Blue Note Rio e venues especializados
 - 😂 **Teatro comédia** (exceto infantil)
-- 🏛️ **17 venues culturais**: CCBB, Teatro Municipal, Casa do Choro, Sesc Rio (4 unidades), MAM Cinema, IMS, Parque Lage, CCJF, Casa Natura, Artemis
+- 🏛️ **16 venues culturais**: CCBB, Teatro Municipal, Casa do Choro, Sesc Rio (4 unidades), MAM Cinema, IMS, Parque Lage, CCJF, Artemis
 - 🌳 **Eventos ao ar livre** (fim de semana)
 
 ### Pipeline Multi-Agente
