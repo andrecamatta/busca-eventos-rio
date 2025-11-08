@@ -8,9 +8,16 @@ logger = logging.getLogger(__name__)
 
 
 def normalize_string(text: str) -> str:
-    """Normaliza string para comparação (remove acentos, lowercase, espaços extras)."""
+    """Normaliza string para comparação (remove acentos, normaliza pontuação, lowercase, espaços extras)."""
     if not text:
         return ""
+
+    # Normalizar pontuação: substituir travessões e variantes por hífen simples
+    # U+2013 EN DASH (–), U+2014 EM DASH (—), U+2015 HORIZONTAL BAR (―)
+    text = text.replace('–', '-').replace('—', '-').replace('―', '-')
+
+    # Remover outros caracteres de pontuação problemáticos
+    text = text.replace('|', '-').replace('/', '-')
 
     # Remover acentos (NFD decomposition + remoção de caracteres de combinação)
     text = unicodedata.normalize('NFD', text)
