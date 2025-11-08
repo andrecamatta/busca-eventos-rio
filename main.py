@@ -19,6 +19,7 @@ from agents.search_agent import SearchAgent
 from agents.verify_agent import VerifyAgent
 from config import ENRICHMENT_ENABLED, MIN_EVENTS_THRESHOLD, OPENROUTER_API_KEY, SEARCH_CONFIG
 from utils.deduplicator import deduplicate_events
+from utils.event_classifier import classify_events
 from utils.event_merger import EventMerger
 from utils.file_manager import EventFileManager
 
@@ -164,6 +165,13 @@ class EventSearchOrchestrator:
             )
             final_count = len(verified_events["verified_events"])
             logger.info(f"✓ Total após deduplicação: {final_count} eventos únicos")
+
+            # Classificação automática de categorias (usando Gemini Flash)
+            logger.info("\n[FASE 3.8/5] 🏷️  Classificando eventos em categorias...")
+            verified_events["verified_events"] = await classify_events(
+                verified_events.get("verified_events", [])
+            )
+            logger.info(f"✓ Eventos classificados em categorias")
 
             # Salvar eventos verificados finais
             self.file_manager.save_json(verified_events, "verified_events.json")
