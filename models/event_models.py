@@ -39,9 +39,19 @@ class EventoBase(BaseModel):
 
 
 class EventoCategoria(EventoBase):
-    """Evento baseado em categoria (Jazz, Comédia, Outdoor)."""
+    """Evento baseado em categoria (9 categorias granulares)."""
 
-    categoria: Literal["Jazz", "Teatro-Comédia", "Outdoor-FimDeSemana"] = Field(
+    categoria: Literal[
+        "Jazz",
+        "Música Clássica",
+        "Teatro",
+        "Comédia",
+        "Cinema",
+        "Feira Gastronômica",
+        "Feira de Artesanato",
+        "Outdoor/Parques",
+        "Cursos de Café"
+    ] = Field(
         ..., description="Categoria do evento"
     )
 
