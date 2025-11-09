@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from config import MIN_HOURS_ADVANCE, SEARCH_CONFIG
+from utils.date_helpers import DateParser
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class DateValidator:
     def __init__(self):
         """Inicializa o validador de datas."""
         self.log_prefix = "[DateValidator] 📅"
+        self.parser = DateParser()  # Reutilizar parser existente
         self.validation_stats = {
             "total_validations": 0,
             "approved": 0,
@@ -117,46 +119,20 @@ class DateValidator:
         # Extrair apenas a parte da data (primeira palavra se houver espaços)
         date_part = date_str.split()[0] if " " in date_str else date_str
 
-        # Validar formato exato DD/MM/YYYY
-        if not date_part or len(date_part) != 10 or date_part.count("/") != 2:
+        # Usar DateParser para fazer parsing
+        parsed_date = self.parser.parse_date(date_part, formats=["%d/%m/%Y"])
+
+        if not parsed_date:
             return {
                 "valid": False,
-                "reason": f"Formato de data inválido (esperado DD/MM/YYYY): {date_str}",
+                "reason": f"Formato de data inválido ou data impossível (esperado DD/MM/YYYY): {date_str}",
             }
 
-        # Validar se é uma data válida (detecta impossíveis como 32/13/2025)
-        try:
-            day, month, year = date_part.split("/")
-            day_int = int(day)
-            month_int = int(month)
-            year_int = int(year)
-
-            # Validação preventiva antes de strptime
-            if not (1 <= day_int <= 31):
-                return {
-                    "valid": False,
-                    "reason": f"Dia inválido (deve ser 01-31): {day} em {date_str}",
-                }
-
-            if not (1 <= month_int <= 12):
-                return {
-                    "valid": False,
-                    "reason": f"Mês inválido (deve ser 01-12): {month} em {date_str}",
-                }
-
-            if not (2020 <= year_int <= 2030):
-                return {
-                    "valid": False,
-                    "reason": f"Ano fora do range esperado (2020-2030): {year} em {date_str}",
-                }
-
-            # Fazer parsing completo
-            parsed_date = datetime.strptime(date_part, "%d/%m/%Y")
-
-        except (ValueError, IndexError) as e:
+        # Validar ano (2020-2030)
+        if not (2020 <= parsed_date.year <= 2030):
             return {
                 "valid": False,
-                "reason": f"Data inválida ou impossível: {date_str} (erro: {e})",
+                "reason": f"Ano fora do range esperado (2020-2030): {parsed_date.year} em {date_str}",
             }
 
         return {"valid": True, "reason": "Formato válido", "parsed_date": parsed_date}
@@ -354,13 +330,18 @@ class DateValidator:
         Returns:
             dict com: found (bool), dates (list), primary_date (str, opcional)
         """
-        # Mapa de meses em português
+        # Usar mapeamento centralizado do DateParser
+        # Mapa de meses em português (completos)
         month_map_pt = {
             "janeiro": "01", "fevereiro": "02", "março": "03", "marco": "03",
             "abril": "04", "maio": "05", "junho": "06",
             "julho": "07", "agosto": "08", "setembro": "09",
             "outubro": "10", "novembro": "11", "dezembro": "12",
         }
+        # Adicionar mapeamento abreviado do DateParser
+        month_map_pt.update({
+            k: v for k, v in DateParser.MONTHS.items()
+        })
 
         # Mapa de meses em inglês
         month_map_en = {
