@@ -1,9 +1,14 @@
-"""Teste diagnóstico: Por que Perplexity não encontrou eventos Artemis?"""
+"""Teste diagnostico: Por que Perplexity nao encontrou eventos Artemis?"""
 
 import asyncio
 import logging
+import sys
 from datetime import datetime, timedelta
 from agents.base_agent import BaseAgent
+
+# Fix encoding para Windows
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
 
 # Configurar logging
 logging.basicConfig(
@@ -100,10 +105,8 @@ IMPORTANTE:
     print("-" * 80)
 
     try:
-        response = agent.agent.run(
-            prompt,
-            response_format={"type": "json_object"}
-        )
+        # Nota: response_format sera configurado automaticamente pelo model_type="search"
+        response = agent.agent.run(prompt)
 
         result = response.content
 
@@ -115,8 +118,12 @@ IMPORTANTE:
 
         # Análise do resultado
         import json
+        from utils.json_helpers import clean_json_response
+
         try:
-            data = json.loads(result)
+            # Limpar JSON (remove markdown code blocks)
+            cleaned = clean_json_response(result)
+            data = json.loads(cleaned)
             total = data.get("total_encontrado", 0)
             eventos = data.get("eventos", [])
             observacoes = data.get("observacoes", "")
