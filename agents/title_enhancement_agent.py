@@ -71,121 +71,127 @@ def is_generic_title(title: str) -> bool:
     return has_indicator
 
 
-def extract_detail_from_description(title: str, description: str, local: str) -> str:
-    """Usa Gemini Flash para extrair detalhe específico da descrição.
+def extract_detail_from_description(title: str, description: str, local: str, horario: str = "") -> str:
+    """Usa Gemini Flash com estratégias em cascata para garantir enriquecimento.
+
+    Estratégias (em ordem):
+    1. Artista/Companhia principal
+    2. Tema/Obra específica
+    3. Horário diferenciado (matinê, noturno)
+    4. Sessão numerada
 
     Args:
         title: Título original do evento
         description: Descrição completa do evento
         local: Local do evento
+        horario: Horário do evento
 
     Returns:
-        Detalhe específico extraído ou vazio se não encontrar
+        Detalhe específico extraído (sempre retorna algo)
     """
     agent = AgentFactory.create_agent(
         name="Title Enhancement Agent",
         model_type="light",  # Gemini Flash - rápido e barato
         description="Extrai detalhes específicos de descrições de eventos para enriquecer títulos",
         instructions=[
-            "Você analisa descrições de eventos e extrai o detalhe mais específico e relevante.",
-            "Seu objetivo é identificar O QUE diferencia este evento de outros similares.",
-            "Retorne APENAS o detalhe (máximo 5 palavras), sem explicações.",
-            "Se não houver detalhe relevante, retorne: KEEP_ORIGINAL"
+            "Você analisa descrições de eventos e extrai detalhes que diferenciam cada apresentação.",
+            "Use estratégias em cascata: artista → tema → característica temporal.",
+            "NUNCA retorne KEEP_ORIGINAL - sempre encontre algo para enriquecer.",
+            "Retorne APENAS o detalhe (máximo 5 palavras), sem explicações."
         ],
         markdown=False
     )
 
-    prompt = f"""TÍTULO ATUAL: {title}
+    prompt = f"""TÍTULO: {title}
 LOCAL: {local}
+HORÁRIO: {horario}
 DESCRIÇÃO: {description}
 
-TAREFA:
-Identifique o detalhe específico mais importante que diferencia este evento:
+TAREFA: Extrair detalhe para enriquecer o título usando estratégias em CASCATA:
 
-CATEGORIAS:
-- Festival/Concerto → nome do artista principal ou solista
-- Espetáculo/Peça → nome da companhia OU tema específico da obra
-- Série/Temporada → tema específico do episódio
-- Tributo → apenas "Tributo [Artista]"
+ESTRATÉGIA 1 - ARTISTA/COMPANHIA (prioridade máxima):
+- Nome do artista principal, solista, banda ou companhia
+- Exemplo: "Martha Argerich", "Cia Sutil de Teatro", "Banda Let's Bowie"
 
-REGRAS:
-1. Extraia APENAS 1 detalhe (máximo 4-5 palavras)
-2. NÃO inclua "com", "apresentando", "traz", etc
-3. NÃO repita info já no título
-4. Se não houver detalhe RELEVANTE, retorne: KEEP_ORIGINAL
-5. Priorize nomes próprios (artistas, companhias)
+ESTRATÉGIA 2 - TEMA/OBRA ESPECÍFICA (se não houver artista):
+- Título da obra, tema da apresentação, repertório específico
+- Exemplo: "Movimentos Urbanos", "Repertório Chopin", "Obras Românticas"
+
+ESTRATÉGIA 3 - CARACTERÍSTICA TEMPORAL (se não houver tema):
+- Baseado no horário: "Sessão Matinê" (antes 15h), "Sessão Noturna" (depois 20h)
+- Para múltiplas datas: "1ª Semana", "2ª Semana"
+
+REGRAS IMPORTANTES:
+1. Máximo 4-5 palavras
+2. NÃO repetir informação já no título
+3. NÃO incluir palavras como "com", "apresentando", "traz"
+4. SEMPRE retornar algo - use cascata até encontrar
+5. Priorizar nomes próprios quando possível
 
 EXEMPLOS:
 
 Título: "Festival Internacional de Piano"
-Descrição: "...apresenta a renomada pianista Martha Argerich interpretando obras de Chopin..."
+Descrição: "...apresenta a renomada pianista Martha Argerich..."
 → Martha Argerich
 
 Título: "Atos de Fala"
-Descrição: "...espetáculo teatral da Cia Sutil de Teatro que explora..."
+Descrição: "...espetáculo teatral da Cia Sutil de Teatro..."
 → Cia Sutil de Teatro
 
 Título: "Show de Jazz"
-Descrição: "Noite de jazz com standards e improvisações clássicas do gênero..."
-→ KEEP_ORIGINAL
+Descrição: "Noite de jazz com standards clássicos..."
+Horário: 21:00
+→ Sessão Noturna
 
-Título: "Tributo aos Beatles"
-Descrição: "Banda Let It Be apresenta os maiores sucessos dos Beatles..."
-→ Banda Let It Be
+Título: "Concerto de Natal"
+Descrição: "Apresentação com obras natalinas e músicas sacras..."
+→ Repertório Sacro
 
-Agora analise e retorne APENAS o detalhe ou KEEP_ORIGINAL:"""
+Agora analise e retorne o melhor detalhe possível:"""
 
     try:
         response = agent.run(prompt)
         content = response.content.strip()
 
-        if "KEEP_ORIGINAL" in content:
-            return ""
-
         # Limpar possíveis prefixos
-        content = content.replace("Detalhe:", "").replace("→", "").strip()
+        content = content.replace("Detalhe:", "").replace("→", "").replace("Estratégia", "").strip()
 
         # Validar tamanho
-        if len(content) > 50 or len(content) < 3:
-            return ""
+        if len(content) < 3 or len(content) > 50:
+            # Fallback: usar horário
+            return generate_time_based_suffix(horario)
 
         return content
 
     except Exception as e:
         logger.error(f"{LOG_PREFIX} Erro ao extrair detalhe: {e}")
-        return ""
+        return generate_time_based_suffix(horario)
 
 
-def add_date_suffix_to_duplicates(events: list[dict]) -> list[dict]:
-    """Adiciona sufixo com data curta para títulos ainda duplicados após enhancement.
+def generate_time_based_suffix(horario: str) -> str:
+    """Gera sufixo baseado no horário como último recurso.
 
     Args:
-        events: Lista de eventos
+        horario: Horário no formato HH:MM
 
     Returns:
-        Lista com títulos desambiguados
+        Sufixo descritivo baseado no horário
     """
-    # Contar títulos duplicados
-    titles = [e.get("titulo", "") for e in events]
-    title_counts = Counter(titles)
-    duplicates = {t for t, c in title_counts.items() if c > 1}
+    if not horario or ":" not in horario:
+        return "Sessão Especial"
 
-    if not duplicates:
-        return events
-
-    logger.info(f"{LOG_PREFIX} {len(duplicates)} títulos ainda duplicados, adicionando data...")
-
-    # Adicionar data aos duplicados
-    for event in events:
-        title = event.get("titulo", "")
-        if title in duplicates:
-            data = event.get("data", "")
-            if data:
-                # Formato: DD/MM → (DD/MM)
-                date_short = "/".join(data.split("/")[:2])  # DD/MM
-                event["titulo"] = f"{title} ({date_short})"
-
-    return events
+    try:
+        hora = int(horario.split(":")[0])
+        if hora < 12:
+            return "Sessão Matinal"
+        elif hora < 15:
+            return "Sessão Vespertina"
+        elif hora < 19:
+            return "Sessão Tarde"
+        else:
+            return "Sessão Noturna"
+    except:
+        return "Sessão Especial"
 
 
 async def enhance_event_titles(events: list[dict]) -> list[dict]:
@@ -218,13 +224,14 @@ async def enhance_event_titles(events: list[dict]) -> list[dict]:
             title = event.get("titulo", "")
             description = event.get("descricao", "")
             local = event.get("local", "")
+            horario = event.get("horario", "")
 
             if not description or len(description) < 50:
                 logger.debug(f"{LOG_PREFIX} Descrição muito curta para '{title}', pulando")
                 continue
 
-            # Extrair detalhe
-            detail = extract_detail_from_description(title, description, local)
+            # Extrair detalhe (sempre retorna algo com estratégias em cascata)
+            detail = extract_detail_from_description(title, description, local, horario)
 
             if detail:
                 enhanced_title = f"{title} - {detail}"
@@ -236,10 +243,14 @@ async def enhance_event_titles(events: list[dict]) -> list[dict]:
         if i + batch_size < len(generic_events):
             await asyncio.sleep(0.5)
 
-    logger.info(f"{LOG_PREFIX} ✓ {enhanced_count}/{len(generic_events)} títulos enriquecidos com IA")
+    logger.info(f"{LOG_PREFIX} ✓ {enhanced_count}/{len(generic_events)} títulos enriquecidos")
 
-    # Adicionar data aos títulos ainda duplicados
-    events = add_date_suffix_to_duplicates(events)
+    # Verificar se ainda há duplicatas (não deveria haver com estratégias em cascata)
+    from collections import Counter
+    titles = [e.get("titulo", "") for e in events]
+    duplicates = sum(1 for t, c in Counter(titles).items() if c > 1)
+    if duplicates > 0:
+        logger.warning(f"{LOG_PREFIX} ⚠️  {duplicates} títulos ainda duplicados após enriquecimento")
 
     return events
 
