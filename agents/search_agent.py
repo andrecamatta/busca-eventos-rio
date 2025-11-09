@@ -520,6 +520,13 @@ OBJETIVO:
         else:
             logger.warning("⚠️  Nenhum evento CCBB encontrado no scraper")
 
+        # Teatro Municipal
+        teatro_municipal_scraped = EventimScraper.scrape_teatro_municipal_events()
+        if teatro_municipal_scraped:
+            logger.info(f"✓ Encontrados {len(teatro_municipal_scraped)} eventos Teatro Municipal")
+        else:
+            logger.warning("⚠️  Nenhum evento Teatro Municipal encontrado no scraper")
+
         # ═══════════════════════════════════════════════════════════
         # CARREGAR PROMPTS DO YAML
         # ═══════════════════════════════════════════════════════════
@@ -889,8 +896,50 @@ OBJETIVO:
 
             logger.info(f"✓ Total de eventos Sala Cecília Meireles após merge: {len(eventos_sala_cecilia)} eventos")
 
-            eventos_teatro_municipal = safe_parse_venue(result_teatro_municipal, "Teatro Municipal do Rio de Janeiro")
-            logger.debug(f"Teatro Municipal parsed - {len(eventos_teatro_municipal)} eventos")
+            # ═══════════════════════════════════════════════════════════
+            # MERGE TEATRO MUNICIPAL: Scraper TEM PRIORIDADE sobre Perplexity
+            # ═══════════════════════════════════════════════════════════
+            eventos_teatro_municipal = []
+
+            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
+            if teatro_municipal_scraped:
+                logger.info(f"🎭 [PRIORIDADE] Adicionando {len(teatro_municipal_scraped)} eventos Teatro Municipal do scraper oficial...")
+                for scraped_event in teatro_municipal_scraped:
+                    # Converter para formato EventoVenue
+                    municipal_event = {
+                        "titulo": scraped_event["titulo"],
+                        "data": scraped_event["data"],
+                        "horario": scraped_event["horario"],
+                        "local": "Teatro Municipal do Rio de Janeiro - Praça Floriano, s/n, Centro, Rio de Janeiro",
+                        "preco": "Consultar link",
+                        "link_ingresso": scraped_event["link"],
+                        "descricao": None,  # Será enriquecido depois
+                        "venue": "Teatro Municipal do Rio de Janeiro"
+                    }
+                    eventos_teatro_municipal.append(municipal_event)
+                    logger.debug(f"   ✓ Scraper: {municipal_event['titulo']}")
+                logger.info(f"✓ {len(eventos_teatro_municipal)} eventos do scraper Teatro Municipal adicionados")
+
+            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
+            eventos_teatro_municipal_perplexity = safe_parse_venue(result_teatro_municipal, "Teatro Municipal do Rio de Janeiro")
+            logger.debug(f"Teatro Municipal parsed from Perplexity - {len(eventos_teatro_municipal_perplexity)} eventos")
+
+            if eventos_teatro_municipal_perplexity:
+                duplicatas_perplexity = 0
+                for perplexity_event in eventos_teatro_municipal_perplexity:
+                    # Verificar duplicata por título (case-insensitive)
+                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
+                               for e in eventos_teatro_municipal):
+                        eventos_teatro_municipal.append(perplexity_event)
+                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
+                    else:
+                        duplicatas_perplexity += 1
+                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
+
+                if duplicatas_perplexity > 0:
+                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
+
+            logger.info(f"✓ Total de eventos Teatro Municipal após merge: {len(eventos_teatro_municipal)} eventos")
 
             eventos_artemis = safe_parse_venue(result_artemis, "Artemis - Torrefação Artesanal e Cafeteria")
             logger.debug(f"Artemis parsed - {len(eventos_artemis)} eventos")
