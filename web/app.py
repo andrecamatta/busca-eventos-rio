@@ -8,7 +8,7 @@ import re
 import shutil
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -287,7 +287,7 @@ def run_event_search():
     # Marcar início da execução
     start_time = time.time()
     job_status["is_running"] = True
-    job_status["last_started"] = datetime.now().isoformat()
+    job_status["last_started"] = datetime.now(timezone.utc).isoformat()
     job_status["last_result"] = None
     job_status["last_error"] = None
 
@@ -420,7 +420,7 @@ def run_event_search():
     finally:
         # Marcar fim da execução
         job_status["is_running"] = False
-        job_status["last_completed"] = datetime.now().isoformat()
+        job_status["last_completed"] = datetime.now(timezone.utc).isoformat()
 
         logger.info("=" * 80)
         logger.info(f"🏁 EXECUÇÃO FINALIZADA - Status: {job_status['last_result']}")
@@ -488,7 +488,7 @@ async def health_check():
     """
     return JSONResponse(content={
         "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "app": "eventos-culturais-rio"
     })
 
@@ -670,7 +670,7 @@ async def get_stats():
         "total_eventos": len(eventos),
         "por_categoria": categorias,
         "por_venue": venues,
-        "ultima_atualizacao": datetime.now().isoformat()
+        "ultima_atualizacao": datetime.now(timezone.utc).isoformat()
     })
 
 
@@ -850,7 +850,7 @@ async def clear_logs():
 
         # Limpar arquivo original (mantém arquivo vazio)
         with open(LOG_FILE, 'w') as f:
-            f.write(f"# Log rotacionado em {datetime.now().isoformat()}\n")
+            f.write(f"# Log rotacionado em {datetime.now(timezone.utc).isoformat()}\n")
             f.write(f"# Backup salvo em: {backup_file}\n\n")
 
         logger.info(f"✓ Arquivo de log limpo. Tamanho anterior: {file_size_mb}MB")
@@ -881,7 +881,7 @@ def run_judge_quality():
 
     start_time = time.time()
     judge_status["is_running"] = True
-    judge_status["last_started"] = datetime.now().isoformat()
+    judge_status["last_started"] = datetime.now(timezone.utc).isoformat()
     judge_status["last_result"] = None
     judge_status["last_error"] = None
 
@@ -965,7 +965,7 @@ def run_judge_quality():
         logger.info("=" * 80)
 
         judge_status["last_result"] = "success"
-        judge_status["last_completed"] = datetime.now().isoformat()
+        judge_status["last_completed"] = datetime.now(timezone.utc).isoformat()
         judge_status["is_running"] = False
 
     except Exception as e:
@@ -981,7 +981,7 @@ def run_judge_quality():
 
         judge_status["last_result"] = "error"
         judge_status["last_error"] = error_msg
-        judge_status["last_completed"] = datetime.now().isoformat()
+        judge_status["last_completed"] = datetime.now(timezone.utc).isoformat()
         judge_status["is_running"] = False
 
 
