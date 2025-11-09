@@ -3,6 +3,7 @@ Utilitários centralizados para identidade e comparação de eventos.
 Define diferentes estratégias para determinar se eventos são duplicados/iguais.
 """
 
+from difflib import SequenceMatcher
 from typing import Tuple
 from utils.text_helpers import normalize_string
 
@@ -161,3 +162,67 @@ class EventIdentity:
             parts.append(f"@ {local}")
 
         return " - ".join(parts) if len(parts) > 1 else parts[0]
+
+    @staticmethod
+    def calculate_title_similarity(title1: str, title2: str) -> float:
+        """
+        Calcula similaridade entre dois títulos usando SequenceMatcher.
+
+        Args:
+            title1: Primeiro título
+            title2: Segundo título
+
+        Returns:
+            Score de similaridade entre 0.0 e 1.0
+
+        Examples:
+            >>> EventIdentity.calculate_title_similarity("Show de Jazz", "Show de jazz")
+            1.0
+            >>> EventIdentity.calculate_title_similarity("Show de Jazz", "Apresentação de Jazz")
+            0.6
+        """
+        # Normalizar títulos para comparação
+        t1_norm = normalize_string(title1)
+        t2_norm = normalize_string(title2)
+
+        # SequenceMatcher com autojunk=False para garantir precisão
+        return SequenceMatcher(None, t1_norm, t2_norm, autojunk=False).ratio()
+
+    @staticmethod
+    def events_are_similar(event1: dict, event2: dict, threshold: float = 0.90) -> bool:
+        """
+        Verifica se dois eventos são similares (possíveis duplicatas com títulos ligeiramente diferentes).
+
+        Usa combinação de:
+        - Mesma data e horário (obrigatório)
+        - Similaridade alta de título (threshold configurável, padrão 90%)
+
+        Args:
+            event1: Primeiro evento
+            event2: Segundo evento
+            threshold: Threshold de similaridade de título (0.0-1.0)
+
+        Returns:
+            True se eventos são similares, False caso contrário
+
+        Examples:
+            >>> e1 = {"titulo": "Show de Jazz", "data": "15/11/2025", "horario": "20:00"}
+            >>> e2 = {"titulo": "Apresentação de Jazz", "data": "15/11/2025", "horario": "20:00"}
+            >>> EventIdentity.events_are_similar(e1, e2, threshold=0.60)
+            True
+        """
+        # Mesma data e horário (obrigatório)
+        if event1.get("data") != event2.get("data"):
+            return False
+        if event1.get("horario") != event2.get("horario"):
+            return False
+
+        # Calcular similaridade de título
+        title1 = event1.get("titulo", "")
+        title2 = event2.get("titulo", "")
+
+        if not title1 or not title2:
+            return False
+
+        similarity = EventIdentity.calculate_title_similarity(title1, title2)
+        return similarity >= threshold

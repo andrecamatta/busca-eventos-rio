@@ -159,6 +159,7 @@ categorias:
     venues_sugeridos:
       - Igreja da Candelária
       - Igreja São Francisco de Paula
+      - Cidade das Artes - Grande Sala
       - Museus e galerias (não IMS)
       - Eventos especiais em locais alternativos
 
@@ -172,15 +173,20 @@ categorias:
       - ❌ IMS (venue dedicado)
       - ❌ Istituto Italiano (venue dedicado)
 
-      ✅ BUSCAR APENAS:
+      ✅ BUSCAR OBRIGATORIAMENTE:
+      - 🏛️ **CIDADE DAS ARTES** - Av. das Américas, 5300, Barra da Tijuca
+        * Buscar especificamente: "Cidade das Artes concerto {month_str}", "OSB Cidade das Artes"
+        * Procurar em: cidadedasartes.rio.rj.gov.br, Sympla, Eventbrite
+        * Tipos: concertos OSB, ópera, ballet, recitais
+        * MÍNIMO: 1-2 eventos (venue premium importante)
+
       - Concertos em igrejas históricas (Candelária, São Francisco de Paula)
       - Recitais em museus/galerias não tradicionais
-      - OSB/orquestras em locais especiais/alternativos
       - Música de câmara em espaços culturais alternativos
       - Eventos pop-up de grupos clássicos
 
       VALIDAÇÃO:
-      - Confirmar que NÃO é nos venues tradicionais listados acima
+      - Confirmar que NÃO é nos venues tradicionais listados acima (exceto Cidade das Artes)
       - Priorizar eventos com nomes de músicos/grupos específicos
       - Evitar duplicatas com venues dedicados
 
@@ -199,19 +205,19 @@ categorias:
       - Festivais culturais pequenos/médios
 
     palavras_chave:
-      - "cinema ao ar livre Rio {month_str}"
+      - "cinema ao ar livre Rio sábado {month_str}"
       - "cinema céu aberto Rio {month_year_str}"
-      - "concerto jardim Rio {month_str}"
-      - "concerto parque Rio {month_year_str}"
-      - "música clássica ao ar livre Rio {month_str}"
+      - "concerto jardim sábado Rio {month_str}"
+      - "concerto parque fim de semana Rio {month_year_str}"
+      - "música clássica ao ar livre Rio sábado {month_str}"
       - "Feira Rio Antigo {month_str}"
-      - "Feira Praça XV {month_str}"
-      - "feira artesanato Jardim Botânico {month_year_str}"
-      - "feira gastronômica parque Rio {month_str}"
-      - "Quinta Boa Vista eventos {month_year_str}"
-      - "Aterro Flamengo eventos culturais {month_str}"
-      - "Parque Garota Ipanema eventos {month_str}"
-      - "show acústico jardim Rio {month_year_str}"
+      - "Feira Praça XV sábado {month_str}"
+      - "feira artesanato Jardim Botânico fim de semana {month_year_str}"
+      - "feira gastronômica parque Rio sábado {month_str}"
+      - "Quinta Boa Vista eventos sábado {month_year_str}"
+      - "Aterro Flamengo eventos culturais sábado {month_str}"
+      - "Parque Garota Ipanema eventos fim de semana {month_str}"
+      - "show acústico jardim sábado Rio {month_year_str}"
 
     venues_sugeridos:
       - Jardim Botânico (concertos, cinema ao ar livre)
@@ -235,33 +241,38 @@ categorias:
     instrucoes_especiais: |
       🎯 OBJETIVO: Eventos culturais ESPECÍFICOS ao ar livre em SÁBADO/DOMINGO entre {start_date_str} e {end_date_str}
 
+      🚨 **PRIORIDADE MÁXIMA - COBERTURA DE TODOS OS SÁBADOS:**
+      Garantir pelo menos 1 evento para CADA sábado do período de busca.
+      Focar especialmente em eventos recorrentes e programação fixa aos sábados.
+
       ✅ BUSCAR PRIORITARIAMENTE:
 
-      1. 🎬 CINEMA AO AR LIVRE:
-         - "cinema ao ar livre Rio {month_str}"
+      1. 🎬 CINEMA AO AR LIVRE (ESPECIALMENTE AOS SÁBADOS):
+         - "cinema ao ar livre Rio sábado {month_str}"
          - "cinema céu aberto {month_year_str}"
          - Jardim Botânico, Parque Lage, Aterro
          - Sessões gratuitas ou pagas
+         - Buscar programação fixa de sábados
 
-      2. 🎵 CONCERTOS EM PARQUES:
-         - "concerto Jardim Botânico {month_str}"
-         - "música clássica ao ar livre Rio"
-         - "concerto parque Rio {month_str}"
+      2. 🎵 CONCERTOS EM PARQUES (FOCO EM SÁBADOS):
+         - "concerto Jardim Botânico sábado {month_str}"
+         - "música clássica ao ar livre Rio fim de semana"
+         - "concerto parque sábado Rio {month_str}"
          - Música clássica, jazz, MPB autoral
 
-      3. 🛍️ FEIRAS CULTURAIS NICHADAS:
-         - **Feira do Rio Antigo** (Largo da Carioca - 1º sábado)
-         - **Feira da Praça XV** (sábados e domingos)
+      3. 🛍️ FEIRAS CULTURAIS NICHADAS (RECORRENTES AOS SÁBADOS):
+         - **Feira do Rio Antigo** (Largo da Carioca - 1º sábado do mês)
+         - **Feira da Praça XV** (sábados e domingos - recorrente)
          - Feiras de artesanato em parques
          - Feiras gastronômicas pequenas/médias
          - Feiras de design e arte
 
-      4. 🌳 EVENTOS EM LOCAIS ESPECÍFICOS:
-         - Jardim Botânico: concertos, cinema, feiras
+      4. 🌳 EVENTOS EM LOCAIS ESPECÍFICOS (PROGRAMAÇÃO REGULAR):
+         - Jardim Botânico: concertos, cinema, feiras (verificar agenda sábados)
          - Quinta da Boa Vista: eventos culturais
          - Aterro do Flamengo: festivais médios
          - Parque Garota de Ipanema: eventos culturais
-         - Parque Lage: cinema ao ar livre, shows
+         - Parque Lage: cinema ao ar livre, shows (Varanda Sonora aos sábados?)
 
       ⚠️ EXCLUSÕES CRÍTICAS - NÃO BUSCAR:
       - ❌ Samba, pagode, roda de samba, axé, forró
