@@ -2,11 +2,14 @@
 
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Final
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Carregar .env do diretório raiz do projeto
+BASE_DIR = Path(__file__).parent
+load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
 
 # OpenRouter API Configuration
 OPENROUTER_API_KEY: Final[str] = os.getenv("OPENROUTER_API_KEY", "")
@@ -136,8 +139,9 @@ VENUE_ADDRESSES: Final[dict[str, list[str]]] = {
         "Tijuca, Rio de Janeiro",
     ],
     "blue_note": [
-        "Av. Nossa Senhora de Copacabana, 2241, Copacabana, Rio de Janeiro",
-        "Avenida Nossa Senhora de Copacabana, 2241, Copacabana",
+        "Av. Atlântica, 1910 - Copacabana, Rio de Janeiro - RJ",
+        "Avenida Atlântica, 1910, Copacabana",
+        "Av. Atlântica, 1910, Leme, Rio de Janeiro",
         "Copacabana, Rio de Janeiro",
     ],
     "teatro_municipal": [
@@ -237,8 +241,9 @@ MAX_DESCRIPTION_LENGTH: Final[int] = 200  # palavras
 OUTPUT_FORMAT: Final[str] = "whatsapp"  # whatsapp, json, markdown
 
 # Configurações de retry e timeout
-HTTP_TIMEOUT: Final[int] = 30
+HTTP_TIMEOUT: Final[int] = 15  # Otimizado: reduzido de 30s para 15s (links lentos geralmente têm problemas)
 MAX_RETRIES: Final[int] = 3
+LINK_VALIDATION_MAX_CONCURRENT: Final[int] = 30  # Otimizado: aumentado de 10 para 30 (3x mais requisições paralelas)
 
 # Threshold mínimo de eventos válidos (apenas eventos de SÁBADO/DOMINGO contam para o threshold)
 MIN_EVENTS_THRESHOLD: Final[int] = 10
@@ -254,8 +259,8 @@ VALIDATION_STRICTNESS: Final[str] = "permissive"
 # Configurações de enriquecimento de descrições
 ENRICHMENT_ENABLED: Final[bool] = True
 ENRICHMENT_MIN_DESC_LENGTH: Final[int] = 40  # palavras - abaixo disso, tentar enriquecer
-ENRICHMENT_MAX_SEARCHES: Final[int] = 10  # limite de buscas Perplexity por execução
-ENRICHMENT_BATCH_SIZE: Final[int] = 3  # processar N eventos por vez
+ENRICHMENT_MAX_SEARCHES: Final[int] = 30  # Otimizado: reduzido de 50 para 30 (evitar buscas desnecessárias)
+ENRICHMENT_BATCH_SIZE: Final[int] = 10  # Otimizado: aumentado de 3 para 10 (processar mais eventos em paralelo)
 ENRICHMENT_GENERIC_TERMS: Final[list[str]] = [
     "consultar",
     "elenco rotativo",
@@ -321,7 +326,7 @@ CONTINUOUS_EVENT_TYPES: Final[dict[str, str]] = {
 MAX_EVENTS_PER_VENUE: Final[int] = 25  # máximo de eventos por venue individual
 
 # Configurações de julgamento de qualidade
-JUDGE_BATCH_SIZE: Final[int] = 5  # eventos processados por batch
+JUDGE_BATCH_SIZE: Final[int] = 10  # Otimizado: aumentado de 5 para 10 (menos batches, mais eventos por chamada GPT-5)
 JUDGE_TIMEOUT: Final[int] = 300  # timeout em segundos por batch (5 minutos)
 JUDGE_EFFORT: Final[str] = "high"  # esforço do modelo GPT-5
 JUDGE_MAX_LINK_CHARS: Final[int] = 2000  # máximo de chars do HTML do link para análise

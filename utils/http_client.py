@@ -178,7 +178,8 @@ class HttpClientWrapper:
         """
         Verifica status de um link (usa HEAD request quando possível).
 
-        Mais rápido que fetch completo para apenas checar se link está acessível.
+        Validação melhorada: verifica o destino final de redirects para evitar
+        falsos positivos de links que redirecionam para páginas 404 ou genéricas.
 
         Args:
             url: URL a ser verificada
@@ -190,41 +191,99 @@ class HttpClientWrapper:
             - reason: Mensagem descritiva
         """
         try:
-            # Tentar HEAD primeiro (mais rápido)
-            response = await self.fetch_with_retry(url, method="HEAD")
-            status_code = response.status_code
-
-            # Se HEAD não retornar 200, tentar GET (alguns servidores não suportam HEAD)
-            if status_code not in [200, 301, 302]:
-                response = await self.fetch_with_retry(url, method="GET")
+            # Primeira tentativa: HEAD sem seguir redirects automaticamente
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
+                response = await client.head(url)
                 status_code = response.status_code
 
-            if status_code == 200:
-                return {
-                    "accessible": True,
-                    "status_code": 200,
-                    "reason": "OK"
-                }
-            elif status_code == 404:
-                return {
-                    "accessible": False,
-                    "status_code": 404,
-                    "reason": "Not Found"
-                }
-            elif status_code == 403:
-                return {
-                    "accessible": False,
-                    "status_code": 403,
-                    "reason": "Forbidden"
-                }
-            elif status_code in [301, 302, 307, 308]:
-                # Redirects já são seguidos automaticamente, então isso não deveria acontecer
-                return {
-                    "accessible": True,
-                    "status_code": status_code,
-                    "reason": "Redirect (followed)"
-                }
-            else:
+                # Status 200 direto = link válido
+                if status_code == 200:
+                    return {
+                        "accessible": True,
+                        "status_code": 200,
+                        "reason": "OK"
+                    }
+
+                # Se é redirect (3xx), verificar destino final
+                if status_code in [301, 302, 307, 308]:
+                    location = response.headers.get('location')
+                    if location:
+                        # Se location é relativa, converter para absoluta
+                        if not location.startswith('http'):
+                            from urllib.parse import urljoin
+                            location = urljoin(url, location)
+
+                        # Fazer GET no destino final para verificar se é válido
+                        try:
+                            final_response = await client.get(location, follow_redirects=True)
+                            final_status = final_response.status_code
+
+                            if final_status == 200:
+                                return {
+                                    "accessible": True,
+                                    "status_code": 200,
+                                    "reason": f"OK (via redirect {status_code})"
+                                }
+                            elif final_status == 404:
+                                return {
+                                    "accessible": False,
+                                    "status_code": 404,
+                                    "reason": "Redirect leads to 404"
+                                }
+                            else:
+                                return {
+                                    "accessible": False,
+                                    "status_code": final_status,
+                                    "reason": f"Redirect leads to HTTP {final_status}"
+                                }
+                        except Exception as redirect_error:
+                            # Se falhar ao seguir redirect, considerar inacessível
+                            return {
+                                "accessible": False,
+                                "status_code": status_code,
+                                "reason": f"Redirect error: {str(redirect_error)}"
+                            }
+                    else:
+                        # Redirect sem Location header = inválido
+                        return {
+                            "accessible": False,
+                            "status_code": status_code,
+                            "reason": "Redirect without Location header"
+                        }
+
+                # Status 404/403 = link inválido
+                if status_code == 404:
+                    return {
+                        "accessible": False,
+                        "status_code": 404,
+                        "reason": "Not Found"
+                    }
+                elif status_code == 403:
+                    return {
+                        "accessible": False,
+                        "status_code": 403,
+                        "reason": "Forbidden"
+                    }
+
+                # Se HEAD não é suportado (405/501), tentar GET
+                if status_code in [405, 501]:
+                    response = await client.get(url, follow_redirects=True)
+                    final_status = response.status_code
+
+                    if final_status == 200:
+                        return {
+                            "accessible": True,
+                            "status_code": 200,
+                            "reason": "OK (GET fallback)"
+                        }
+                    else:
+                        return {
+                            "accessible": False,
+                            "status_code": final_status,
+                            "reason": f"HTTP {final_status}"
+                        }
+
+                # Qualquer outro status = inacessível
                 return {
                     "accessible": False,
                     "status_code": status_code,

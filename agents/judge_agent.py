@@ -267,18 +267,34 @@ CONTEÚDO DO LINK (primeiros {JUDGE_MAX_LINK_CHARS} caracteres):
 CRITÉRIOS DE AVALIAÇÃO (nota 0-10 para cada):
 ═══════════════════════════════════════════════════════════════
 
-1. **ADERÊNCIA AO PROMPT (peso 40%)**
-   - O evento corresponde ao tipo solicitado no prompt?
-   - Está dentro da categoria/venue esperado?
-   - Palavras-chave batem com o prompt?
+1. **ADERÊNCIA AO PROMPT (peso 30%)**
+   - O evento corresponde ao tipo solicitado no prompt OU É CORRELATO/SIMILAR?
+   - Eventos correlatos são VÁLIDOS e devem ter nota boa. Exemplos:
+     * Concertos clássicos + Recitais = VÁLIDO
+     * Jazz + Bossa Nova = VÁLIDO
+     * Teatro + Comédia stand-up = VÁLIDO
+     * Dança + Performance = VÁLIDO
+     * Música + Shows musicais = VÁLIDO
+     * Café cultural + Workshops gastronômicos = VÁLIDO
+   - Penalize (nota baixa) APENAS se totalmente fora de contexto (ex: infantil quando pediu adulto)
+   - Se o evento é do mesmo gênero/tema do prompt, considere aderente (nota >= 7)
 
-2. **CORRELAÇÃO LINK-DADOS (peso 40%)**
-   - Título do evento bate com o conteúdo do link?
-   - Data e horário estão corretos conforme o link?
-   - Local/venue conferem?
+2. **CORRELAÇÃO LINK-CONTEÚDO (peso 30%)**
+   - Título do evento / nome do artista batem com o link?
+   - Descrição do evento condiz com o conteúdo do link?
+   - Local/venue conferem com o link?
    - Preço está correto (se disponível no link)?
+   - **NÃO avalie data/horário aqui** (há critério separado)
 
-3. **QUALIDADE GERAL (peso 20%)**
+3. **PRECISÃO DE DATA E HORÁRIO (peso 30%)**
+   **ATENÇÃO: Este é o critério mais importante para dados temporais!**
+   - CRÍTICO (nota 0-3): Data com diferença de MESES ou ANOS do link
+   - GRAVE (nota 3-5): Data com diferença >7 DIAS do link
+   - MÉDIO (nota 5-7): Horário com diferença >2 horas do link
+   - LEVE (nota 7-8): Horário com diferença de 1-2 horas (tolerável)
+   - OK (nota 8-10): Data/horário corretos ou ±30min, ou evento multi-sessão
+
+4. **COMPLETUDE (peso 10%)**
    - Campos obrigatórios estão preenchidos?
    - Informações são completas e claras?
    - Não há inconsistências óbvias?
@@ -289,18 +305,20 @@ RETORNE JSON NO FORMATO EXATO:
 
 {{
   "prompt_adherence": 8.5,
-  "link_match": 9.0,
-  "completeness": 7.5,
+  "content_match": 9.0,
+  "date_accuracy": 7.5,
+  "completeness": 8.0,
   "quality_score": 8.3,
-  "notes": "Evento condiz com busca de jazz. Link válido e dados corretos, mas preço genérico ('Consultar'). Descrição ausente."
+  "notes": "Evento condiz com busca. Título e local corretos. Horário diverge 1h (tolerável). Preço não informado."
 }}
 
 **IMPORTANTE:**
 - `prompt_adherence`: nota de aderência ao prompt (0-10)
-- `link_match`: nota de correlação link-dados (0-10). Se link inacessível, use 5.0
+- `content_match`: nota de correlação link-conteúdo, SEM data/horário (0-10). Se link inacessível, use 5.0
+- `date_accuracy`: nota de precisão de data/horário (0-10). Se link inacessível ou sem data, use 5.0
 - `completeness`: nota de completude (0-10)
 - `quality_score`: nota final ponderada automaticamente:
-  quality_score = (prompt_adherence * 0.4) + (link_match * 0.4) + (completeness * 0.2)
+  quality_score = (prompt_adherence * 0.3) + (content_match * 0.3) + (date_accuracy * 0.3) + (completeness * 0.1)
 - `notes`: observações em até 200 caracteres
 
 Seja rigoroso mas justo. Eventos legítimos com pequenas falhas devem ter notas boas (7-8).
@@ -367,18 +385,34 @@ CRITÉRIOS DE AVALIAÇÃO (nota 0-10 para cada):
 
 Para CADA um dos {len(events)} eventos, avalie:
 
-1. **ADERÊNCIA AO PROMPT (peso 40%)**
-   - O evento corresponde ao tipo solicitado no prompt?
-   - Está dentro da categoria/venue esperado?
-   - Palavras-chave batem com o prompt?
+1. **ADERÊNCIA AO PROMPT (peso 30%)**
+   - O evento corresponde ao tipo solicitado no prompt OU É CORRELATO/SIMILAR?
+   - Eventos correlatos são VÁLIDOS e devem ter nota boa. Exemplos:
+     * Concertos clássicos + Recitais = VÁLIDO
+     * Jazz + Bossa Nova = VÁLIDO
+     * Teatro + Comédia stand-up = VÁLIDO
+     * Dança + Performance = VÁLIDO
+     * Música + Shows musicais = VÁLIDO
+     * Café cultural + Workshops gastronômicos = VÁLIDO
+   - Penalize (nota baixa) APENAS se totalmente fora de contexto (ex: infantil quando pediu adulto)
+   - Se o evento é do mesmo gênero/tema do prompt, considere aderente (nota >= 7)
 
-2. **CORRELAÇÃO LINK-DADOS (peso 40%)**
-   - Título do evento bate com o conteúdo do link?
-   - Data e horário estão corretos conforme o link?
-   - Local/venue conferem?
+2. **CORRELAÇÃO LINK-CONTEÚDO (peso 30%)**
+   - Título do evento / nome do artista batem com o link?
+   - Descrição do evento condiz com o conteúdo do link?
+   - Local/venue conferem com o link?
    - Preço está correto (se disponível no link)?
+   - **NÃO avalie data/horário aqui** (há critério separado)
 
-3. **QUALIDADE GERAL (peso 20%)**
+3. **PRECISÃO DE DATA E HORÁRIO (peso 30%)**
+   **ATENÇÃO: Este é o critério mais importante para dados temporais!**
+   - CRÍTICO (nota 0-3): Data com diferença de MESES ou ANOS do link
+   - GRAVE (nota 3-5): Data com diferença >7 DIAS do link
+   - MÉDIO (nota 5-7): Horário com diferença >2 horas do link
+   - LEVE (nota 7-8): Horário com diferença de 1-2 horas (tolerável)
+   - OK (nota 8-10): Data/horário corretos ou ±30min, ou evento multi-sessão
+
+4. **COMPLETUDE (peso 10%)**
    - Campos obrigatórios estão preenchidos?
    - Informações são completas e claras?
    - Não há inconsistências óbvias?
@@ -391,18 +425,20 @@ RETORNE JSON ARRAY COM EXATAMENTE {len(events)} AVALIAÇÕES:
   {{
     "event_index": 1,
     "prompt_adherence": 8.5,
-    "link_match": 9.0,
-    "completeness": 7.5,
+    "content_match": 9.0,
+    "date_accuracy": 7.5,
+    "completeness": 8.0,
     "quality_score": 8.3,
-    "notes": "Evento condiz com busca. Link válido e dados corretos, mas preço genérico."
+    "notes": "Evento condiz com busca. Título e local corretos. Horário diverge 1h (tolerável)."
   }},
   {{
     "event_index": 2,
     "prompt_adherence": 7.0,
-    "link_match": 8.5,
-    "completeness": 8.0,
-    "quality_score": 7.7,
-    "notes": "Boa correlação link-dados. Descrição ausente."
+    "content_match": 8.5,
+    "date_accuracy": 9.0,
+    "completeness": 7.5,
+    "quality_score": 8.0,
+    "notes": "Boa correlação link-conteúdo. Data/hora corretas. Descrição ausente."
   }}
   // ... continue para todos os {len(events)} eventos
 ]
@@ -411,10 +447,11 @@ RETORNE JSON ARRAY COM EXATAMENTE {len(events)} AVALIAÇÕES:
 - Retorne EXATAMENTE {len(events)} avaliações (uma para cada evento)
 - `event_index`: número do evento (1 a {len(events)})
 - `prompt_adherence`: nota de aderência ao prompt (0-10)
-- `link_match`: nota de correlação link-dados (0-10). Se link inacessível, use 5.0
+- `content_match`: nota de correlação link-conteúdo, SEM data/horário (0-10). Se link inacessível, use 5.0
+- `date_accuracy`: nota de precisão de data/horário (0-10). Se link inacessível ou sem data, use 5.0
 - `completeness`: nota de completude (0-10)
 - `quality_score`: nota final ponderada:
-  quality_score = (prompt_adherence * 0.4) + (link_match * 0.4) + (completeness * 0.2)
+  quality_score = (prompt_adherence * 0.3) + (content_match * 0.3) + (date_accuracy * 0.3) + (completeness * 0.1)
 - `notes`: observações em até 200 caracteres
 
 Seja rigoroso mas justo. Eventos legítimos com pequenas falhas: 7-8. Perfeitos: 9-10. Ruins: 0-4.
