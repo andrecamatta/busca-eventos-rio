@@ -763,35 +763,50 @@ OBJETIVO:
                     logger.error(f"   Conteúdo (primeiros 200 chars): {result_str[:200]}")
                     return []
 
-            # Parse categorias com Pydantic validation
-            eventos_jazz = safe_parse_categoria(result_jazz, "Jazz")
-            logger.debug(f"Jazz parsed from Perplexity - {len(eventos_jazz)} eventos")
+            # ═══════════════════════════════════════════════════════════
+            # MERGE JAZZ: Scraper Blue Note TEM PRIORIDADE sobre Perplexity
+            # ═══════════════════════════════════════════════════════════
+            eventos_jazz = []
 
-            # ═══════════════════════════════════════════════════════════
-            # MERGE: Adicionar eventos Blue Note scrapados do Eventim
-            # ═══════════════════════════════════════════════════════════
+            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
             if blue_note_scraped:
-                logger.info(f"🎫 Adicionando {len(blue_note_scraped)} eventos Blue Note do Eventim scraper...")
+                logger.info(f"🎫 [PRIORIDADE] Adicionando {len(blue_note_scraped)} eventos Blue Note do scraper oficial...")
                 for scraped_event in blue_note_scraped:
                     # Converter para formato EventoCategoria
                     jazz_event = {
                         "titulo": scraped_event["titulo"],
                         "data": scraped_event["data"],
                         "horario": scraped_event["horario"],
-                        "local": "Blue Note Rio - Av. Nossa Senhora de Copacabana, 2241, Copacabana, Rio de Janeiro",
+                        "local": "Blue Note Rio - Av. Atlântica, 1910, Copacabana, Rio de Janeiro",
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
                         "categoria": "Jazz"
                     }
-                    # Adicionar à lista de jazz (evitando duplicatas por título)
-                    if not any(e.get("titulo", "").lower() == jazz_event["titulo"].lower() for e in eventos_jazz):
-                        eventos_jazz.append(jazz_event)
-                        logger.debug(f"   ✓ Adicionado: {jazz_event['titulo']}")
-                    else:
-                        logger.debug(f"   ⏭️  Duplicata ignorada: {jazz_event['titulo']}")
+                    eventos_jazz.append(jazz_event)
+                    logger.debug(f"   ✓ Scraper: {jazz_event['titulo']}")
+                logger.info(f"✓ {len(eventos_jazz)} eventos do scraper Blue Note adicionados")
 
-                logger.info(f"✓ Total de eventos Jazz após merge: {len(eventos_jazz)}")
+            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
+            eventos_jazz_perplexity = safe_parse_categoria(result_jazz, "Jazz")
+            logger.debug(f"Jazz parsed from Perplexity - {len(eventos_jazz_perplexity)} eventos")
+
+            if eventos_jazz_perplexity:
+                duplicatas_perplexity = 0
+                for perplexity_event in eventos_jazz_perplexity:
+                    # Verificar duplicata por título (case-insensitive)
+                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
+                               for e in eventos_jazz):
+                        eventos_jazz.append(perplexity_event)
+                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
+                    else:
+                        duplicatas_perplexity += 1
+                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
+
+                if duplicatas_perplexity > 0:
+                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
+
+            logger.info(f"✓ Total de eventos Jazz após merge: {len(eventos_jazz)} eventos")
 
             eventos_comedia = safe_parse_categoria(result_comedia, "Comédia")
             logger.debug(f"Comédia parsed - {len(eventos_comedia)} eventos")
@@ -829,14 +844,14 @@ OBJETIVO:
             eventos_casa_choro = safe_parse_venue(result_casa_choro, "Casa do Choro")
             logger.debug(f"Casa do Choro parsed - {len(eventos_casa_choro)} eventos")
 
-            eventos_sala_cecilia = safe_parse_venue(result_sala_cecilia, "Sala Cecília Meireles")
-            logger.debug(f"Sala Cecília Meireles parsed - {len(eventos_sala_cecilia)} eventos")
+            # ═══════════════════════════════════════════════════════════
+            # MERGE SALA CECÍLIA MEIRELES: Scraper TEM PRIORIDADE sobre Perplexity
+            # ═══════════════════════════════════════════════════════════
+            eventos_sala_cecilia = []
 
-            # ═══════════════════════════════════════════════════════════
-            # MERGE: Adicionar eventos Sala Cecília Meireles scrapados
-            # ═══════════════════════════════════════════════════════════
+            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
             if cecilia_meireles_scraped:
-                logger.info(f"🎼 Adicionando {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles do scraper...")
+                logger.info(f"🎼 [PRIORIDADE] Adicionando {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles do scraper oficial...")
                 for scraped_event in cecilia_meireles_scraped:
                     # Converter para formato EventoVenue
                     cecilia_event = {
@@ -849,14 +864,30 @@ OBJETIVO:
                         "descricao": None,  # Será enriquecido depois
                         "venue": "Sala Cecília Meireles"
                     }
-                    # Adicionar à lista (evitando duplicatas por título)
-                    if not any(e.get("titulo", "").lower() == cecilia_event["titulo"].lower() for e in eventos_sala_cecilia):
-                        eventos_sala_cecilia.append(cecilia_event)
-                        logger.debug(f"   ✓ Adicionado: {cecilia_event['titulo']}")
-                    else:
-                        logger.debug(f"   ⏭️  Duplicata ignorada: {cecilia_event['titulo']}")
+                    eventos_sala_cecilia.append(cecilia_event)
+                    logger.debug(f"   ✓ Scraper: {cecilia_event['titulo']}")
+                logger.info(f"✓ {len(eventos_sala_cecilia)} eventos do scraper Sala Cecília Meireles adicionados")
 
-                logger.info(f"✓ Total de eventos Sala Cecília Meireles após merge: {len(eventos_sala_cecilia)}")
+            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
+            eventos_sala_cecilia_perplexity = safe_parse_venue(result_sala_cecilia, "Sala Cecília Meireles")
+            logger.debug(f"Sala Cecília Meireles parsed from Perplexity - {len(eventos_sala_cecilia_perplexity)} eventos")
+
+            if eventos_sala_cecilia_perplexity:
+                duplicatas_perplexity = 0
+                for perplexity_event in eventos_sala_cecilia_perplexity:
+                    # Verificar duplicata por título (case-insensitive)
+                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
+                               for e in eventos_sala_cecilia):
+                        eventos_sala_cecilia.append(perplexity_event)
+                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
+                    else:
+                        duplicatas_perplexity += 1
+                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
+
+                if duplicatas_perplexity > 0:
+                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
+
+            logger.info(f"✓ Total de eventos Sala Cecília Meireles após merge: {len(eventos_sala_cecilia)} eventos")
 
             eventos_teatro_municipal = safe_parse_venue(result_teatro_municipal, "Teatro Municipal do Rio de Janeiro")
             logger.debug(f"Teatro Municipal parsed - {len(eventos_teatro_municipal)} eventos")
@@ -864,16 +895,16 @@ OBJETIVO:
             eventos_artemis = safe_parse_venue(result_artemis, "Artemis - Torrefação Artesanal e Cafeteria")
             logger.debug(f"Artemis parsed - {len(eventos_artemis)} eventos")
 
-            eventos_ccbb = safe_parse_venue(result_ccbb, "CCBB Rio - Centro Cultural Banco do Brasil")
-            logger.debug(f"CCBB Rio parsed - {len(eventos_ccbb)} eventos")
+            # ═══════════════════════════════════════════════════════════
+            # MERGE CCBB: Scraper TEM PRIORIDADE sobre Perplexity
+            # ═══════════════════════════════════════════════════════════
+            eventos_ccbb = []
 
-            # ═══════════════════════════════════════════════════════════
-            # MERGE: Adicionar eventos CCBB scrapados
-            # ═══════════════════════════════════════════════════════════
+            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
             if ccbb_scraped:
-                logger.info(f"🎨 Adicionando {len(ccbb_scraped)} eventos CCBB do scraper...")
+                logger.info(f"🎨 [PRIORIDADE] Adicionando {len(ccbb_scraped)} eventos CCBB do scraper oficial...")
                 for scraped_event in ccbb_scraped:
-                    # Converter para formato EventoCategoria
+                    # Converter para formato EventoVenue
                     ccbb_event = {
                         "titulo": scraped_event["titulo"],
                         "data": scraped_event["data"],
@@ -882,16 +913,32 @@ OBJETIVO:
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
-                        "categoria": "Exposição"  # Categoria padrão para CCBB
+                        "venue": "CCBB Rio - Centro Cultural Banco do Brasil"
                     }
-                    # Adicionar à lista de CCBB (evitando duplicatas por título)
-                    if not any(e.get("titulo", "").lower() == ccbb_event["titulo"].lower() for e in eventos_ccbb):
-                        eventos_ccbb.append(ccbb_event)
-                        logger.debug(f"   ✓ Adicionado: {ccbb_event['titulo']}")
-                    else:
-                        logger.debug(f"   ⏭️  Duplicata ignorada: {ccbb_event['titulo']}")
+                    eventos_ccbb.append(ccbb_event)
+                    logger.debug(f"   ✓ Scraper: {ccbb_event['titulo']}")
+                logger.info(f"✓ {len(eventos_ccbb)} eventos do scraper CCBB adicionados")
 
-                logger.info(f"✓ Total de eventos CCBB após merge: {len(eventos_ccbb)}")
+            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
+            eventos_ccbb_perplexity = safe_parse_venue(result_ccbb, "CCBB Rio - Centro Cultural Banco do Brasil")
+            logger.debug(f"CCBB Rio parsed from Perplexity - {len(eventos_ccbb_perplexity)} eventos")
+
+            if eventos_ccbb_perplexity:
+                duplicatas_perplexity = 0
+                for perplexity_event in eventos_ccbb_perplexity:
+                    # Verificar duplicata por título (case-insensitive)
+                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
+                               for e in eventos_ccbb):
+                        eventos_ccbb.append(perplexity_event)
+                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
+                    else:
+                        duplicatas_perplexity += 1
+                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
+
+                if duplicatas_perplexity > 0:
+                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
+
+            logger.info(f"✓ Total de eventos CCBB após merge: {len(eventos_ccbb)} eventos")
 
             eventos_oi_futuro = safe_parse_venue(result_oi_futuro, "Oi Futuro")
             logger.debug(f"Oi Futuro parsed - {len(eventos_oi_futuro)} eventos")

@@ -294,10 +294,20 @@ CRITÉRIOS DE AVALIAÇÃO (nota 0-10 para cada):
    - LEVE (nota 7-8): Horário com diferença de 1-2 horas (tolerável)
    - OK (nota 8-10): Data/horário corretos ou ±30min, ou evento multi-sessão
 
-4. **COMPLETUDE (peso 10%)**
+4. **COMPLETUDE E CONSISTÊNCIA (peso 10%)**
    - Campos obrigatórios estão preenchidos?
    - Informações são completas e claras?
-   - Não há inconsistências óbvias?
+   - **CONSISTÊNCIA TÍTULO vs DESCRIÇÃO:**
+     * CRÍTICO (0-3): Título genérico (festival/mostra/programação) mas descrição menciona obra/sessão/filme específico
+     * MÉDIO (5-7): Título parcialmente específico
+     * OK (8-10): Título e descrição têm o mesmo nível de especificidade
+
+   **Exemplos de INCONSISTÊNCIA CRÍTICA:**
+   - ❌ Título: "Lumen Festival" + Descrição: "Exibição do filme 'O Quarto das Sombras'"
+   - ❌ Título: "Programação CCBB" + Descrição: "Peça teatral 'Hamlet' às 20h"
+   - ❌ Título: "Festival de Piano" + Descrição: "Recital do pianista Fulano com obras de Chopin"
+   - ✅ Título: "'O Quarto das Sombras' no Lumen Festival" + Descrição condizente
+   - ✅ Título: "Recital de Piano - Fulano" + Descrição condizente
 
 ═══════════════════════════════════════════════════════════════
 RETORNE JSON NO FORMATO EXATO:
@@ -412,10 +422,20 @@ Para CADA um dos {len(events)} eventos, avalie:
    - LEVE (nota 7-8): Horário com diferença de 1-2 horas (tolerável)
    - OK (nota 8-10): Data/horário corretos ou ±30min, ou evento multi-sessão
 
-4. **COMPLETUDE (peso 10%)**
+4. **COMPLETUDE E CONSISTÊNCIA (peso 10%)**
    - Campos obrigatórios estão preenchidos?
    - Informações são completas e claras?
-   - Não há inconsistências óbvias?
+   - **CONSISTÊNCIA TÍTULO vs DESCRIÇÃO:**
+     * CRÍTICO (0-3): Título genérico (festival/mostra/programação) mas descrição menciona obra/sessão/filme específico
+     * MÉDIO (5-7): Título parcialmente específico
+     * OK (8-10): Título e descrição têm o mesmo nível de especificidade
+
+   **Exemplos de INCONSISTÊNCIA CRÍTICA:**
+   - ❌ Título: "Lumen Festival" + Descrição: "Exibição do filme 'O Quarto das Sombras'"
+   - ❌ Título: "Programação CCBB" + Descrição: "Peça teatral 'Hamlet' às 20h"
+   - ❌ Título: "Festival de Piano" + Descrição: "Recital do pianista Fulano com obras de Chopin"
+   - ✅ Título: "'O Quarto das Sombras' no Lumen Festival" + Descrição condizente
+   - ✅ Título: "Recital de Piano - Fulano" + Descrição condizente
 
 ═══════════════════════════════════════════════════════════════
 RETORNE JSON ARRAY COM EXATAMENTE {len(events)} AVALIAÇÕES:

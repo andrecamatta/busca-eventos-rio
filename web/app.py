@@ -90,11 +90,12 @@ def load_latest_events() -> list[dict]:
             logger.info("ℹ️  Nenhum evento carregado ainda. Execute a busca ou use /api/refresh")
             return []
 
-        # Tentar vários arquivos possíveis
+        # Tentar vários arquivos possíveis (em ordem de prioridade)
         possible_files = [
-            LATEST_OUTPUT / "formatted_output.json",
-            LATEST_OUTPUT / "verified_events.json",
-            LATEST_OUTPUT / "enriched_events_initial.json",
+            LATEST_OUTPUT / "judged_events.json",              # PRIORIDADE 1: Eventos com notas de qualidade (GPT-5)
+            LATEST_OUTPUT / "formatted_output.json",           # PRIORIDADE 2: Eventos formatados para WhatsApp
+            LATEST_OUTPUT / "verified_events.json",            # PRIORIDADE 3: Eventos verificados
+            LATEST_OUTPUT / "enriched_events_initial.json",    # PRIORIDADE 4: Fallback (eventos enriquecidos)
         ]
 
         eventos = []
@@ -526,8 +527,12 @@ async def get_events(
             # Parse data (formato DD/MM/YYYY)
             event_date = datetime.strptime(data_str, "%d/%m/%Y").date()
 
-            # Se não é hoje, manter o evento
+            # Se não é hoje, verificar se não é data passada
             if event_date != now.date():
+                # Rejeitar eventos passados
+                if event_date < now.date():
+                    continue  # Filtrar silenciosamente
+                # Aceitar eventos futuros
                 eventos_filtrados.append(evento)
                 continue
 

@@ -298,27 +298,22 @@ ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "sarau",
 ]  # tipos de eventos que aceitam "músicos da casa"
 
-# Configurações de eventos contínuos (temporadas, exposições, mostras)
+# Configurações de eventos contínuos (temporadas, exposições)
+# NOTA: "mostra" removido para evitar consolidação indevida de filmes de festivais de cinema
 CONTINUOUS_EVENT_KEYWORDS: Final[list[str]] = [
     "exposição",
     "exposicao",
-    "mostra",
-    "exibição",
-    "exibicao",
+    # "mostra",  # REMOVIDO: causava consolidação de filmes de festivais de cinema
     "temporada",
     "em cartaz",
     "visitação",
     "visitacao",
-    "aberto ao público",
-    "aberto ao publico",
 ]
 
 CONTINUOUS_EVENT_TYPES: Final[dict[str, str]] = {
     "exposição": "Exposição",
     "exposicao": "Exposição",
-    "mostra": "Mostra",
-    "exibição": "Exibição",
-    "exibicao": "Exibição",
+    # "mostra": "Mostra",  # REMOVIDO: sincronizado com KEYWORDS
     "temporada": "Temporada",
 }
 

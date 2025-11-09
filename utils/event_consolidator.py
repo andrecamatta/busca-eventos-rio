@@ -16,7 +16,7 @@ class EventConsolidator:
     """Consolida eventos recorrentes em uma única entrada."""
 
     # Thresholds de similaridade
-    TITLE_SIMILARITY_THRESHOLD = 0.90  # 90% de similaridade no título
+    TITLE_SIMILARITY_THRESHOLD = 0.98  # 98% de similaridade no título (aumentado de 90% para evitar consolidação de filmes diferentes)
     TIME_TOLERANCE_MINUTES = 60  # Tolerância de 1h para horários
 
     def __init__(self):
@@ -96,6 +96,21 @@ class EventConsolidator:
         Returns:
             True se eventos são similares
         """
+        # EXCEÇÃO: Não consolidar eventos de cinema/festivais com palavras-chave específicas
+        # Cada filme de um festival deve ser um evento separado
+        cinema_keywords = ["festival", "mostra", "filme", "sessão", "sessao", "cinema"]
+        title1_lower = event1.get("titulo", "").lower()
+        title2_lower = event2.get("titulo", "").lower()
+
+        # Se ambos títulos contêm keywords de cinema, NÃO consolidar
+        has_cinema1 = any(kw in title1_lower for kw in cinema_keywords)
+        has_cinema2 = any(kw in title2_lower for kw in cinema_keywords)
+
+        if has_cinema1 and has_cinema2:
+            # Eventos de cinema só consolidam se forem EXATAMENTE iguais (mesma sessão em múltiplas datas)
+            # Não consolidar filmes diferentes do mesmo festival
+            return False
+
         # Extrair campos
         title1 = self._extract_base_title(event1.get("titulo", ""))
         title2 = self._extract_base_title(event2.get("titulo", ""))

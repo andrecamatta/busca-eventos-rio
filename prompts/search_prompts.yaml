@@ -309,10 +309,24 @@ categorias:
     instrucoes_especiais: |
       🎯 OBJETIVO: Mostras/festivais de cinema entre {start_date_str} e {end_date_str}
 
+      ⚠️ CRÍTICO - DESAGREGAÇÃO DE FILMES:
+      Se um festival/mostra (ex: "Lumen Film Festival") tiver MÚLTIPLAS SESSÕES de FILMES DIFERENTES:
+      - CADA filme = 1 EVENTO SEPARADO (não consolidar em "Festival Genérico")
+      - Incluir nome do filme no título do evento
+
+      Exemplo CORRETO:
+      ✅ "Lumen Film Festival - Filme A" (data: 14/11)
+      ✅ "Lumen Film Festival - Filme B" (data: 15/11)
+      ✅ "Lumen Film Festival - Filme C" (data: 16/11)
+
+      Exemplo ERRADO (não fazer):
+      ❌ "Lumen Film Festival - Sessões no Estação Net Rio"
+
+      Se for MESMO FILME em múltiplas datas: use eh_recorrente: true
+
       ⚠️ NÃO incluir:
       - ❌ Filmes comerciais em cartaz normal
       - ❌ Sessões infantis
-      - ❌ Apenas focar em MOSTRAS, FESTIVAIS, EVENTOS especiais
 
   feira_gastronomica:
     nome: Feira Gastronômica
