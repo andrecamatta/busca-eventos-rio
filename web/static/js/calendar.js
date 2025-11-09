@@ -11,16 +11,29 @@ function isMobileDevice() {
     return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
+// Versão do deployment (atualizar quando fizer deploy)
+const DEPLOYMENT_VERSION = '2025-11-09-v2';
+
 // Verificar estado de execução ao carregar página
 function checkExecutionState() {
-    // Verificar se atualização já foi executada
+    // Limpar localStorage se versão mudou (novo deploy)
+    const storedVersion = localStorage.getItem('deployment_version');
+    if (storedVersion !== DEPLOYMENT_VERSION) {
+        console.log('Nova versão detectada - limpando localStorage');
+        localStorage.removeItem('refresh_executed');
+        localStorage.removeItem('judge_executed');
+        localStorage.setItem('deployment_version', DEPLOYMENT_VERSION);
+        return; // Não desabilitar botões
+    }
+
+    // Verificar se atualização já foi executada (apenas na mesma versão)
     if (localStorage.getItem('refresh_executed') === 'true') {
         const btn = document.getElementById('refresh-btn');
         btn.disabled = true;
         btn.title = 'Atualização já executada. Recarregue a página para executar novamente.';
     }
 
-    // Verificar se julgamento já foi executado
+    // Verificar se julgamento já foi executado (apenas na mesma versão)
     if (localStorage.getItem('judge_executed') === 'true') {
         const btn = document.getElementById('judge-btn');
         btn.disabled = true;
