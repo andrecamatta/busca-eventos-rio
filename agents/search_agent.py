@@ -8,35 +8,22 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from agents.base_agent import BaseAgent
 from config import SEARCH_CONFIG, MAX_EVENTS_PER_VENUE
 from models.event_models import ResultadoBuscaCategoria
-from utils.agent_factory import AgentFactory
 from utils.prompt_templates import PromptBuilder
 from utils.prompt_loader import get_prompt_loader
 
 logger = logging.getLogger(__name__)
 
-# Prefixo para logs deste agente
-LOG_PREFIX = "[SearchAgent] 🔍"
 
-
-class SearchAgent:
+class SearchAgent(BaseAgent):
     """Agente responsável por buscar eventos em múltiplas fontes."""
 
     def __init__(self):
-        self.log_prefix = "[SearchAgent] 🔍"
-
-        # Carregar prompts do YAML
-        self.prompt_loader = get_prompt_loader()
-        logger.info(
-            f"{self.log_prefix} 📋 Prompts carregados: "
-            f"{len(self.prompt_loader.get_all_categorias())} categorias, "
-            f"{len(self.prompt_loader.get_all_venues())} venues"
-        )
-
-        # Agente de busca com Perplexity Sonar Pro (busca web em tempo real)
-        self.search_agent = AgentFactory.create_agent(
-            name="Event Search Agent",
+        super().__init__(
+            agent_name="SearchAgent",
+            log_emoji="🔍",
             model_type="search",  # perplexity/sonar-pro
             description="Agente com busca web em tempo real para encontrar eventos culturais no Rio de Janeiro",
             instructions=[
@@ -53,6 +40,18 @@ class SearchAgent:
                 "Retorne no formato JSON estruturado",
             ],
             markdown=True,
+        )
+
+        # Renomear agent para compatibilidade
+        self.search_agent = self.agent
+
+    def _initialize_dependencies(self, **kwargs):
+        """Inicializa prompt loader."""
+        self.prompt_loader = get_prompt_loader()
+        self.log_info(
+            f"📋 Prompts carregados: "
+            f"{len(self.prompt_loader.get_all_categorias())} categorias, "
+            f"{len(self.prompt_loader.get_all_venues())} venues"
         )
 
     def _limit_events_per_venue(self, eventos_por_venue: dict[str, list[dict]]) -> dict[str, list[dict]]:

@@ -5,24 +5,20 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from agents.base_agent import BaseAgent
 from config import MAX_DESCRIPTION_LENGTH
-from utils.agent_factory import AgentFactory
 from utils.date_helpers import DateParser
 
 logger = logging.getLogger(__name__)
 
-# Prefixo para logs deste agente
-LOG_PREFIX = "[FormatAgent] 📝"
 
-
-class FormatAgent:
+class FormatAgent(BaseAgent):
     """Agente responsável por formatar eventos para compartilhamento no WhatsApp."""
 
     def __init__(self):
-        self.log_prefix = "[FormatAgent] 📝"
-
-        self.agent = AgentFactory.create_agent(
-            name="Event Format Agent",
+        super().__init__(
+            agent_name="FormatAgent",
+            log_emoji="📝",
             model_type="light",  # GPT-5 mini - tarefa leve (formatação WhatsApp)
             description="Agente especializado em formatar eventos para compartilhamento no WhatsApp",
             instructions=[
