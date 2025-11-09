@@ -6,6 +6,7 @@ import logging
 import re
 from typing import Any
 
+from agents.base_agent import BaseAgent
 from config import (
     ENRICHMENT_BATCH_SIZE,
     ENRICHMENT_ENABLED,
@@ -17,9 +18,6 @@ from config import (
 from utils.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
-
-# Prefixo para logs deste agente
-LOG_PREFIX = "[EnrichmentAgent] 💎"
 
 # Frases proibidas em descrições (menções a critérios de filtro/validação)
 FORBIDDEN_DESC_PHRASES = [
@@ -52,12 +50,33 @@ def sanitize_description(desc: str) -> str:
     return desc.strip()
 
 
-class EnrichmentAgent:
+class EnrichmentAgent(BaseAgent):
     """Agente especializado em enriquecer descrições genéricas de eventos."""
 
     def __init__(self):
-        self.log_prefix = "[EnrichmentAgent] 💎"
+        # Inicializar agent principal (processing_agent)
+        super().__init__(
+            agent_name="EnrichmentAgent",
+            log_emoji="💎",
+            model_type="important",  # GPT-5 - tarefa crítica (enriquecimento de descrições)
+            description="Agente especializado em enriquecer descrições de eventos",
+            instructions=[
+                "Combinar informações existentes com contexto adicional",
+                "Manter tom profissional e atrativo",
+                "Evitar especulação ou informações não verificadas",
+                "Ser conciso e objetivo",
+            ],
+            markdown=True,
+        )
 
+        # Renomear para compatibilidade
+        self.processing_agent = self.agent
+
+        # Estado
+        self.searches_count = 0
+
+    def _initialize_dependencies(self, **kwargs):
+        """Inicializa agent de busca adicional."""
         # Agent para busca web com Perplexity (versão simples para economia)
         self.search_agent = AgentFactory.create_agent(
             name="Event Search Agent",
@@ -70,22 +89,6 @@ class EnrichmentAgent:
             ],
             markdown=True,
         )
-
-        # Agent para processar e enriquecer com GPT-5
-        self.processing_agent = AgentFactory.create_agent(
-            name="Event Enrichment Processor",
-            model_type="important",  # GPT-5 - tarefa crítica (enriquecimento de descrições)
-            description="Agente especializado em enriquecer descrições de eventos",
-            instructions=[
-                "Combinar informações existentes com contexto adicional",
-                "Manter tom profissional e atrativo",
-                "Evitar especulação ou informações não verificadas",
-                "Ser conciso e objetivo",
-            ],
-            markdown=True,
-        )
-
-        self.searches_count = 0
 
     async def enrich_events(self, events: list[dict]) -> dict[str, Any]:
         """Enriquece descrições de eventos que precisam de mais contexto."""

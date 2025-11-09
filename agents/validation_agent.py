@@ -9,6 +9,7 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from agents.base_agent import BaseAgent
 from config import (
     HTTP_TIMEOUT,
     MIN_HOURS_ADVANCE,
@@ -16,26 +17,19 @@ from config import (
     VALIDATION_STRICTNESS,
     VENUE_ADDRESSES,
 )
-from utils.agent_factory import AgentFactory
 from utils.date_validator import DateValidator
 from utils.http_client import HttpClientWrapper
 
 logger = logging.getLogger(__name__)
 
-# Prefixo para logs deste agente
-LOG_PREFIX = "[ValidationAgent] ⚖️"
 
-
-class ValidationAgent:
+class ValidationAgent(BaseAgent):
     """Agente especializado em validação individual inteligente com LLM."""
 
     def __init__(self):
-        self.log_prefix = "[ValidationAgent] ⚖️"
-        self.http_client = HttpClientWrapper()
-        self.date_validator = DateValidator()
-
-        self.agent = AgentFactory.create_agent(
-            name="Event Validation Agent",
+        super().__init__(
+            agent_name="ValidationAgent",
+            log_emoji="⚖️",
             model_type="important",  # Gemini Flash 1.5 - validação de eventos
             description="Agente especializado em validação inteligente de eventos usando LLM",
             instructions=[
@@ -46,6 +40,11 @@ class ValidationAgent:
             ],
             markdown=True,
         )
+
+    def _initialize_dependencies(self, **kwargs):
+        """Inicializa HTTP client e date validator."""
+        self.http_client = HttpClientWrapper()
+        self.date_validator = DateValidator()
 
     def _needs_individual_validation(self, event: dict) -> bool:
         """Determina se um evento precisa de validação individual via LLM.

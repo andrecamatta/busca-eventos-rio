@@ -5,25 +5,26 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+from agents.base_agent import BaseAgent
 from config import (
     EVENT_CATEGORIES,
     MIN_EVENTS_THRESHOLD,
     REQUIRED_VENUES,
     SEARCH_CONFIG,
 )
-from utils.agent_factory import AgentFactory
 from utils.json_helpers import clean_json_response
 from utils.date_helpers import DateParser
 
 logger = logging.getLogger(__name__)
 
 
-class RetryAgent:
+class RetryAgent(BaseAgent):
     """Agente responsável por realizar buscas complementares quando eventos < threshold."""
 
     def __init__(self):
-        self.agent = AgentFactory.create_agent(
-            name="Event Retry Agent",
+        super().__init__(
+            agent_name="RetryAgent",
+            log_emoji="🔄",
             model_type="search",  # Usar Perplexity Sonar Pro para busca
             description="Agente especializado em buscar eventos complementares quando quantidade inicial é insuficiente",
             instructions=[

@@ -10,19 +10,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
+
+from agents.base_agent import BaseAgent
 from config import (
     HTTP_TIMEOUT,
     LINK_VALIDATION_MAX_CONCURRENT,
     MAX_RETRIES,
     SEARCH_CONFIG,
 )
-from utils.agent_factory import AgentFactory
 from utils.http_client import HttpClientWrapper
 
 logger = logging.getLogger(__name__)
-
-# Prefixo para logs deste agente
-LOG_PREFIX = "[VerifyAgent] ✔️"
 
 # Sites SPAs que sempre retornam 200 OK (requerem validação de conteúdo)
 SPA_DOMAINS = [
@@ -37,15 +35,13 @@ URL_PATTERNS = {
 }
 
 
-class VerifyAgent:
+class VerifyAgent(BaseAgent):
     """Agente responsável por verificar e validar informações de eventos."""
 
     def __init__(self):
-        self.log_prefix = "[VerifyAgent] ✔️"
-        self.http_client = HttpClientWrapper()
-
-        self.agent = AgentFactory.create_agent(
-            name="Event Verification Agent",
+        super().__init__(
+            agent_name="VerifyAgent",
+            log_emoji="✔️",
             model_type="important",  # GPT-5 - tarefa crítica (verificação rigorosa)
             description="Agente especializado em verificar e validar informações de eventos",
             instructions=[
@@ -61,6 +57,10 @@ class VerifyAgent:
             ],
             markdown=True,
         )
+
+    def _initialize_dependencies(self, **kwargs):
+        """Inicializa HTTP client."""
+        self.http_client = HttpClientWrapper()
 
     def _is_generic_link(self, url: str) -> bool:
         """Detecta se um link é genérico (página de busca/categoria/listagem).

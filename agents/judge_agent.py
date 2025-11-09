@@ -8,18 +8,15 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from agents.base_agent import BaseAgent
 from config import JUDGE_BATCH_SIZE, JUDGE_MAX_LINK_CHARS, JUDGE_TIMEOUT
-from utils.agent_factory import AgentFactory
 from utils.http_client import HttpClientWrapper
 from utils.prompt_loader import PromptLoader
 
 logger = logging.getLogger(__name__)
 
-# Prefixo para logs deste agente
-LOG_PREFIX = "[QualityJudgeAgent] ⚖️"
 
-
-class QualityJudgeAgent:
+class QualityJudgeAgent(BaseAgent):
     """Agente especializado em avaliar qualidade de eventos extraídos.
 
     Avalia eventos usando GPT-5 com base em:
@@ -29,13 +26,9 @@ class QualityJudgeAgent:
     """
 
     def __init__(self):
-        self.log_prefix = LOG_PREFIX
-        self.http_client = HttpClientWrapper()
-        self.prompt_loader = PromptLoader()
-
-        # Criar agent com GPT-5
-        self.agent = AgentFactory.create_agent(
-            name="Quality Judge Agent",
+        super().__init__(
+            agent_name="QualityJudgeAgent",
+            log_emoji="⚖️",
             model_type="judge",  # GPT-5 com high effort
             description="Agente especializado em avaliar qualidade de eventos culturais",
             instructions=[
@@ -47,6 +40,11 @@ class QualityJudgeAgent:
             ],
             markdown=True,
         )
+
+    def _initialize_dependencies(self, **kwargs):
+        """Inicializa HTTP client e prompt loader."""
+        self.http_client = HttpClientWrapper()
+        self.prompt_loader = PromptLoader()
 
     def _get_original_prompt(self, event: dict) -> str:
         """Recupera o prompt original usado na busca do evento.
