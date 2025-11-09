@@ -1,6 +1,7 @@
 """Agente de verificação e validação de eventos."""
 
 import asyncio
+import difflib
 import json
 import logging
 import re
@@ -8,8 +9,10 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
+from bs4 import BeautifulSoup
 from config import (
     HTTP_TIMEOUT,
+    LINK_VALIDATION_MAX_CONCURRENT,
     MAX_RETRIES,
     SEARCH_CONFIG,
 )
@@ -251,6 +254,14 @@ class VerifyAgent:
             # Extrair texto visível da página
             page_text = result["text"].lower()
 
+            # QUICK WIN #1: Validar conteúdo mínimo (detectar soft 404s)
+            if not page_text or len(page_text.strip()) < 50:
+                return {
+                    "valid": False,
+                    "reason": "Página vazia ou conteúdo muito curto (possível 404 disfarçado)",
+                    "details": {"page_length": len(page_text.strip()) if page_text else 0}
+                }
+
             # Informações do evento para validar
             titulo = (event.get("titulo") or event.get("nome", "")).lower()
             local = (event.get("local", "")).lower()
@@ -259,26 +270,26 @@ class VerifyAgent:
             issues = []
             matches = []
 
-            # Verificar título (pelo menos 60% das palavras)
+            # Verificar título (pelo menos 70% das palavras) - threshold aumentado para reduzir falsos positivos
             titulo_words = [w for w in titulo.split() if len(w) > 3]  # palavras > 3 chars
             titulo_match_ratio = 0
             if titulo_words:
                 titulo_matches = sum(1 for word in titulo_words if word in page_text)
                 titulo_match_ratio = titulo_matches / len(titulo_words)
 
-                if titulo_match_ratio >= 0.6:
+                if titulo_match_ratio >= 0.7:  # Aumentado de 0.5 para 0.7 (reduzir falsos positivos)
                     matches.append(f"Título encontrado ({titulo_match_ratio:.0%})")
                 else:
                     issues.append(f"Título não encontrado ({titulo_match_ratio:.0%} match)")
 
-            # Verificar local (palavras principais)
+            # Verificar local (palavras principais) - QUICK WIN #2: threshold reduzido de 50% para 40%
             local_words = [w for w in local.split() if len(w) > 4]  # palavras > 4 chars
             local_match_ratio = 0
             if local_words:
                 local_matches = sum(1 for word in local_words if word in page_text)
                 local_match_ratio = local_matches / len(local_words) if local_words else 0
 
-                if local_match_ratio >= 0.5:
+                if local_match_ratio >= 0.4:  # Reduzido de 0.5 para 0.4 (menos falsos negativos)
                     matches.append(f"Local encontrado ({local_match_ratio:.0%})")
                 else:
                     issues.append(f"Local não encontrado ({local_match_ratio:.0%} match)")
@@ -713,13 +724,67 @@ RETORNE APENAS:
         http_client = HttpClientWrapper()
         link_status = await http_client.check_link_status(link)
 
-        # Link acessível (200 OK)
+        # Link acessível (200 OK) - validar conteúdo antes de aceitar
         if link_status["accessible"]:
-            event["link_valid"] = True
-            event["link_status_code"] = link_status["status_code"]
-            stats["validated_first_try"] += 1
-            logger.info(f"✓ Link válido ({link_status['status_code']}): {link}")
-            return stats
+            # NOVA VALIDAÇÃO: Verificar se conteúdo corresponde ao evento
+            logger.info(f"→ Link HTTP 200 OK, validando conteúdo: {link[:80]}...")
+            content_validation = await self._validate_link_content(link, event)
+
+            if content_validation["valid"]:
+                # Conteúdo válido - aceitar link
+                event["link_valid"] = True
+                event["link_status_code"] = link_status["status_code"]
+                event["link_content_validated"] = True
+                event["link_validation_details"] = content_validation["details"]
+                stats["validated_first_try"] += 1
+                logger.info(f"✓ Link válido (HTTP 200 + conteúdo OK): {link}")
+                return stats
+            else:
+                # Conteúdo inválido - link está acessível mas aponta para evento errado
+                reason = content_validation["reason"]
+                logger.warning(f"⚠️ Link HTTP 200 mas conteúdo inválido ({reason}): {link} - Tentando busca inteligente...")
+
+                # Marcar como erro de conteúdo e tentar busca inteligente
+                event["link_original"] = link
+                event["link_content_error"] = reason
+                event["link_validation_details"] = content_validation["details"]
+
+                stats["total_links"] += 1
+                stats["link_errors"] = stats.get("link_errors", 0) + 1
+                stats["intelligent_searches"] += 1
+
+                # Tentar encontrar link correto
+                link_result = await self._intelligent_link_search(event)
+
+                if link_result and link_result.get("link"):
+                    new_link = link_result["link"]
+                    event["link_ingresso"] = new_link
+                    event["link_type"] = self._classify_link_type(new_link, event)
+                    event["link_updated_by_ai"] = True
+                    event["link_recovered_from_content_error"] = True
+                    event["link_quality_score"] = link_result.get("quality_score")
+                    event["link_quality_validation"] = link_result.get("validation")
+
+                    # Armazenar dados estruturados extraídos do link
+                    if link_result.get("structured_data"):
+                        event["link_structured_data"] = link_result["structured_data"]
+
+                    # Link já foi validado no _intelligent_link_search
+                    event["link_valid"] = True
+                    event["link_status_code"] = 200
+                    stats["links_fixed"] += 1
+                    stats["links_recovered"] = stats.get("links_recovered", 0) + 1
+                    logger.info(f"✓ Link recuperado após erro de conteúdo: {new_link}")
+                else:
+                    # Nenhum link alternativo encontrado - manter link original mas marcar como suspeito
+                    event["link_valid"] = False
+                    event["link_status_code"] = link_status["status_code"]
+                    event["link_error"] = f"Conteúdo inválido: {reason}"
+                    event["requires_manual_link_check"] = True
+                    stats["links_failed_permanently"] = stats.get("links_failed_permanently", 0) + 1
+                    logger.error(f"❌ Link com conteúdo inválido ({reason}): {link} - Nenhum link alternativo encontrado")
+
+                return stats
 
         # Link com erro (404, 403, timeout) - tentar busca inteligente
         status_code = link_status.get("status_code")
@@ -800,15 +865,23 @@ RETORNE APENAS:
             "generic_links_detected": 0,
         }
 
-        # Validar todos os links em paralelo
+        # Validar todos os links em paralelo com rate limiting
+        # Criar semáforo para limitar concorrência
+        semaphore = asyncio.Semaphore(LINK_VALIDATION_MAX_CONCURRENT)
+
+        async def validate_with_semaphore(event):
+            """Wrapper para validação com semáforo."""
+            async with semaphore:
+                return await self._validate_single_event_link(event)
+
         # Criar tasks para validar todos os eventos em paralelo
         validation_tasks = [
-            self._validate_single_event_link(event)
+            validate_with_semaphore(event)
             for event in event_list
         ]
 
-        # Executar todas as validações em paralelo
-        logger.info(f"Iniciando validação paralela de {len(event_list)} links...")
+        # Executar todas as validações em paralelo (respeitando semáforo)
+        logger.info(f"Iniciando validação paralela de {len(event_list)} links (máx {LINK_VALIDATION_MAX_CONCURRENT} concorrentes)...")
         validation_results = await asyncio.gather(*validation_tasks, return_exceptions=True)
 
         # Agregar estatísticas

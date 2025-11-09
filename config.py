@@ -288,8 +288,8 @@ VENUE_ALIASES: Final[dict[str, str]] = {
 }
 
 # Configurações de validação de qualidade de links
-LINK_QUALITY_THRESHOLD: Final[int] = 50  # score mínimo (0-100) para aceitar link (reduzido para aceitar mais links válidos)
-LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 3  # máximo de tentativas de busca inteligente
+LINK_QUALITY_THRESHOLD: Final[int] = 65  # score mínimo (0-100) para aceitar link (aumentado para rejeitar links genéricos)
+LINK_MAX_INTELLIGENT_SEARCHES: Final[int] = 5  # máximo de tentativas de busca inteligente (aumentado para melhor recovery)
 REQUIRE_SPECIFIC_ARTISTS: Final[bool] = True  # rejeitar eventos sem artistas específicos
 ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "roda de choro",
