@@ -19,6 +19,7 @@ from config import (
     SEARCH_CONFIG,
 )
 from utils.http_client import HttpClientWrapper
+from utils.link_validator import LinkValidator
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,9 @@ class VerifyAgent(BaseAgent):
         )
 
     def _initialize_dependencies(self, **kwargs):
-        """Inicializa HTTP client."""
+        """Inicializa HTTP client e link validator."""
         self.http_client = HttpClientWrapper()
+        self.link_validator = LinkValidator()
 
     def _is_generic_link(self, url: str) -> bool:
         """Detecta se um link é genérico (página de busca/categoria/listagem).
@@ -71,61 +73,7 @@ class VerifyAgent(BaseAgent):
         Returns:
             True se o link for genérico (não específico de um evento)
         """
-        if not url or not isinstance(url, str):
-            return False
-
-        # EXCEÇÕES: URLs conhecidas e confiáveis (não marcar como genérico)
-        # Estes venues têm apenas página de listagem ou links específicos confiáveis
-        trusted_listing_pages = [
-            'bluenoterio.com.br/shows',
-            'eventim.com.br/artist/blue-note-rio',  # Aceita tanto /artist/ quanto /artist/blue-note-rio/event-name-id/
-        ]
-
-        for trusted in trusted_listing_pages:
-            if trusted in url.lower():
-                return False  # Não é genérico, é confiável
-
-        # Padrões de URLs genéricas
-        generic_patterns = [
-            r'/eventos/[^/]+\?',  # /eventos/categoria?params
-            r'/eventos\?',         # /eventos?params
-            r'/eventos/?$',        # /eventos ou /eventos/ no final
-            r'/shows/?$',          # /shows ou /shows/ no final (Blue Note, etc)
-            r'/agenda/?$',         # /agenda ou /agenda/ no final
-            r'/programacao/?$',    # /programacao ou /programacao/ no final
-            r'/calendar/?$',       # /calendar ou /calendar/ no final
-            r'/schedule/?$',       # /schedule ou /schedule/ no final
-            r'/busca\?',          # /busca?query=
-            r'/search\?',         # /search?q=
-            r'[?&]city=',         # query param de cidade
-            r'[?&]partnership=',  # query param de partnership
-            r'/d/brazil--',       # eventbrite listings
-            r'/eventos/rio-de-janeiro',  # páginas de listagem por cidade
-            r'/events/rio-de-janeiro',   # páginas de listagem por cidade
-        ]
-
-        for pattern in generic_patterns:
-            if re.search(pattern, url, re.IGNORECASE):
-                return True
-
-        # Verificar se URL é homepage (muito curta)
-        # Ex: salaceliciameireles.com.br/ ou casadochoro.com.br/
-        path = url.split('?')[0]  # Remover query params
-        path_parts = [p for p in path.split('/') if p and p not in ['http:', 'https:', '']]
-
-        # URL com apenas domínio (homepage) é genérica
-        if len(path_parts) == 1:
-            return True
-
-        # URL com domínio + apenas 1 segmento genérico também é genérica
-        # Ex: bluenoterio.com.br/shows (2 partes, mas shows é genérico)
-        if len(path_parts) == 2:
-            generic_segments = ['shows', 'eventos', 'events', 'agenda', 'programacao', 'calendar', 'schedule']
-            last_segment = path_parts[-1].lower().rstrip('/')
-            if last_segment in generic_segments:
-                return True
-
-        return False
+        return self.link_validator.is_generic_link(url)
 
     def _find_consensus(self, links: list[str], event: dict) -> dict[str, Any] | None:
         """Encontra consenso entre múltiplos links retornados por diferentes buscas.
@@ -496,61 +444,7 @@ RETORNE APENAS:
         Returns:
             "purchase" (plataforma de venda), "info" (site informativo), ou "venue" (página do local)
         """
-        if not url:
-            return "info"  # Default para links ausentes
-
-        url_lower = url.lower()
-
-        # 1. PLATAFORMAS DE VENDA (maior prioridade)
-        purchase_platforms = [
-            'sympla.com',
-            'eventbrite.com',
-            'ticketmaster.com',
-            'ingresso.com',
-            'ingressodigital.com',
-            'tickets.com',
-            'eventim.com.br/artist',  # Eventim com artista específico
-            'eleventickets.com',
-        ]
-
-        for platform in purchase_platforms:
-            if platform in url_lower:
-                return "purchase"
-
-        # 2. VENUES COM PÁGINAS ESPECÍFICAS DE EVENTOS
-        venue_event_patterns = [
-            ('bluenoterio.com.br/shows/', 5),  # Blue Note com slug do show
-            ('salaceliciameireles.rj.gov.br/programacao/', 5),  # Sala Cecília com evento específico
-        ]
-
-        for pattern, min_length in venue_event_patterns:
-            if pattern in url_lower:
-                # Verificar se tem slug/ID significativo no final
-                slug = url.split('/')[-1].rstrip('/')
-                if len(slug) > min_length:
-                    return "purchase"  # Página específica de evento
-
-        # 3. VERIFICAR SE É LINK GENÉRICO (listagem/homepage)
-        if self._is_generic_link(url):
-            return "venue"  # Links genéricos geralmente são páginas do venue
-
-        # 4. VERIFICAR SE É SITE DE ARTISTA (informativo)
-        # NOTA: _is_artist_or_venue_site precisa do título do evento
-        titulo = event.get("titulo", "")
-        if titulo:
-            try:
-                if hasattr(self, '_validation_agent') and self._validation_agent:
-                    if self._validation_agent._is_artist_or_venue_site(url, titulo):
-                        return "info"
-            except:
-                pass  # Se falhar, continuar com outras verificações
-
-        # 5. DOMÍNIOS .GOV.BR = venue
-        if '.gov.br' in url_lower:
-            return "venue"
-
-        # 6. FALLBACK: Link externo genérico = info
-        return "info"
+        return self.link_validator.classify_link_type(url, event)
 
     def _matches_url_pattern(self, url: str) -> bool:
         """Valida se URL corresponde ao padrão esperado para o domínio.
