@@ -165,6 +165,12 @@ class SearchAgent(BaseAgent):
                 return "{}"
 
         result = await asyncio.to_thread(sync_search)
+
+        # Log resposta do Perplexity para diagnóstico (primeiros 500 chars)
+        if result and result.strip():
+            preview = result[:500].replace('\n', ' ')
+            logger.debug(f"   📄 Resposta Perplexity [{search_name}]: {preview}...")
+
         logger.info(f"   ✓ Busca concluída: {search_name}")
         return result
 
@@ -458,6 +464,117 @@ OBJETIVO:
             + return_format
         )
 
+    def _get_saturdays_in_period(self, start_date, end_date) -> list[dict]:
+        """
+        Retorna lista de sábados no período de busca.
+
+        Args:
+            start_date: Data inicial (datetime)
+            end_date: Data final (datetime)
+
+        Returns:
+            Lista de dicts com info de cada sábado: [{"date": datetime, "date_str": "15/11/2025"}, ...]
+        """
+        from datetime import timedelta
+
+        saturdays = []
+        current = start_date
+
+        # Iterar dia por dia até end_date
+        while current <= end_date:
+            # weekday() retorna 5 para sábado (0=segunda, 6=domingo)
+            if current.weekday() == 5:
+                saturdays.append({
+                    "date": current,
+                    "date_str": current.strftime("%d/%m/%Y")
+                })
+            current += timedelta(days=1)
+
+        return saturdays
+
+    def _build_saturday_outdoor_prompt(self, saturday_date_str: str, month_str: str) -> str:
+        """
+        Constrói prompt ultra-focado para buscar eventos outdoor em UM sábado específico.
+
+        Args:
+            saturday_date_str: Data do sábado no formato DD/MM/YYYY
+            month_str: Nome do mês em inglês (ex: "november")
+
+        Returns:
+            Prompt completo formatado
+        """
+        return f"""
+🎯 BUSCA ULTRA-FOCADA: Eventos Outdoor no Rio APENAS no dia {saturday_date_str} (SÁBADO)
+
+OBJETIVO: Encontrar eventos culturais ao ar livre ESPECIFICAMENTE neste sábado.
+
+TIPOS DE EVENTOS:
+- 🎬 Cinema ao ar livre
+- 🎵 Concertos em parques
+- 🛍️ Feiras culturais nichadas
+- 🌳 Eventos em parques/jardins
+
+ESTRATÉGIA DE BUSCA - FOCO EM EVENTOS RECORRENTES:
+
+1. 🔍 **Feiras Recorrentes aos Sábados**:
+   - Feira da Praça XV (todos os sábados): site:bafafa.com.br "feira praça xv" {saturday_date_str}
+   - Feira Rio Antigo (1º sábado): site:visit.rio "feira rio antigo" {month_str}
+   - Feiras de artesanato em parques: site:timeout.com/rio-de-janeiro feira {month_str}
+
+2. 🔍 **Cinema ao Ar Livre**:
+   - "cinema ao ar livre rio sábado {saturday_date_str}"
+   - Parque Lage, Jardim Botânico, Aterro: site:parquelage.rj.gov.br cinema {month_str}
+
+3. 🔍 **Concertos em Parques**:
+   - "concerto jardim botânico {saturday_date_str}"
+   - "música ao ar livre rio {saturday_date_str}"
+
+4. 🔍 **Eventos em Locais Específicos**:
+   - Jardim Botânico: Instagram @jardimbotanicorj
+   - Parque Lage: Instagram @parquelage
+   - Quinta da Boa Vista: eventos culturais
+
+FONTES OBRIGATÓRIAS:
+- site:bafafa.com.br eventos rio {saturday_date_str}
+- site:visit.rio agenda {saturday_date_str}
+- site:timeout.com/rio-de-janeiro fim-de-semana
+
+⚠️ EXCLUSÕES:
+- ❌ Samba, pagode, forró, axé
+- ❌ Eventos esportivos (corridas, maratonas)
+- ❌ Mega shows em estádios
+
+INFORMAÇÕES OBRIGATÓRIAS:
+- titulo: Nome do evento
+- data: {saturday_date_str} (fixo - este sábado)
+- horario: HH:MM (obrigatório)
+- local: Nome + endereço completo
+- preco: Valor ou "Gratuito"
+- link_ingresso: URL específica ou null
+- descricao: Resumo do evento
+
+FORMATO DE RETORNO:
+{{
+  "eventos": [
+    {{
+      "categoria": "Outdoor/Parques",
+      "titulo": "Nome do evento",
+      "data": "{saturday_date_str}",
+      "horario": "HH:MM",
+      "local": "Nome + Endereço",
+      "preco": "Valor",
+      "link_ingresso": "URL ou null",
+      "descricao": "Resumo"
+    }}
+  ]
+}}
+
+IMPORTANTE:
+- Retornar APENAS eventos confirmados para {saturday_date_str}
+- Se não encontrar eventos: retornar {{"eventos": []}}
+- Priorizar eventos RECORRENTES (feiras fixas aos sábados)
+"""
+
     def _build_prompt_from_config(self, config: dict, context: dict) -> str:
         """
         Constrói prompt a partir de configuração YAML.
@@ -560,7 +677,25 @@ OBJETIVO:
             config = self.prompt_loader.get_venue(venue_id, context)
             prompts_venues[venue_id] = self._build_prompt_from_config(config, context)
 
-        total_prompts = len(categorias_ids) + len(venues_ids)
+        # ═══════════════════════════════════════════════════════════
+        # BUSCAS SEPARADAS PARA SÁBADOS OUTDOOR (dinâmico)
+        # ═══════════════════════════════════════════════════════════
+        start_date = SEARCH_CONFIG['start_date']
+        end_date = SEARCH_CONFIG['end_date']
+        saturdays = self._get_saturdays_in_period(start_date, end_date)
+        saturday_prompts = []
+        saturday_names = []
+
+        for saturday in saturdays:
+            saturday_date_str = saturday["date_str"]
+            month_str = saturday["date"].strftime("%B").lower()
+            prompt = self._build_saturday_outdoor_prompt(saturday_date_str, month_str)
+            saturday_prompts.append(prompt)
+            saturday_names.append(f"Outdoor Sábado {saturday_date_str}")
+
+        logger.info(f"{self.log_prefix} 🗓️  {len(saturdays)} sábados identificados no período: {[s['date_str'] for s in saturdays]}")
+
+        total_prompts = len(categorias_ids) - 1 + len(saturday_prompts) + len(venues_ids)  # -1 para remover "outdoor" genérico
         logger.info(f"{self.log_prefix} ✅ {total_prompts} prompts criados com sucesso")
 
         try:
@@ -569,15 +704,23 @@ OBJETIVO:
             # ═══════════════════════════════════════════════════════════
             logger.info(f"{self.log_prefix} Executando {total_prompts} micro-searches em paralelo...")
 
-            # Executar todas as buscas em paralelo
-            results = await asyncio.gather(
+            # Preparar lista de searches (categorias + sábados + venues)
+            searches = [
                 self._run_micro_search(prompts_categorias["jazz"], "Jazz"),
                 self._run_micro_search(prompts_categorias["comedia"], "Comédia"),
                 self._run_micro_search(prompts_categorias["musica_classica"], "Música Clássica"),
-                self._run_micro_search(prompts_categorias["outdoor"], "Outdoor/Parques"),
+                # OUTDOOR: substituído por buscas separadas por sábado
                 self._run_micro_search(prompts_categorias["cinema"], "Cinema"),
                 self._run_micro_search(prompts_categorias["feira_gastronomica"], "Feira Gastronômica"),
                 self._run_micro_search(prompts_categorias["feira_artesanato"], "Feira de Artesanato"),
+            ]
+
+            # Adicionar buscas de sábados outdoor
+            for i, saturday_prompt in enumerate(saturday_prompts):
+                searches.append(self._run_micro_search(saturday_prompt, saturday_names[i]))
+
+            # Adicionar buscas de venues
+            searches.extend([
                 self._run_micro_search(prompts_venues["casa_choro"], "Casa do Choro"),
                 self._run_micro_search(prompts_venues["sala_cecilia"], "Sala Cecília Meireles"),
                 self._run_micro_search(prompts_venues["teatro_municipal"], "Teatro Municipal"),
@@ -595,34 +738,43 @@ OBJETIVO:
                 self._run_micro_search(prompts_venues["teatro_leblon"], "Teatro do Leblon"),
                 self._run_micro_search(prompts_venues["clube_jazz_rival"], "Clube do Jazz/Rival"),
                 self._run_micro_search(prompts_venues["estacao_net"], "Estação Net"),
-            )
+            ])
+
+            # Executar todas as buscas em paralelo
+            results = await asyncio.gather(*searches)
+
             # Desempacotar resultados
-            (
-                result_jazz,
-                result_comedia,
-                result_musica_classica,
-                result_outdoor,
-                result_cinema,
-                result_feira_gastronomica,
-                result_feira_artesanato,
-                result_casa_choro,
-                result_sala_cecilia,
-                result_teatro_municipal,
-                result_artemis,
-                result_ccbb,
-                result_oi_futuro,
-                result_ims,
-                result_parque_lage,
-                result_ccjf,
-                result_mam_cinema,
-                result_theatro_net,
-                result_ccbb_teatro_cinema,
-                result_istituto_italiano,
-                result_maze_jazz,
-                result_teatro_leblon,
-                result_clube_jazz_rival,
-                result_estacao_net,
-            ) = results
+            # Formato: [jazz, comedia, musica_classica, cinema, feira_gast, feira_art, sábados..., venues...]
+            result_jazz = results[0]
+            result_comedia = results[1]
+            result_musica_classica = results[2]
+            result_cinema = results[3]
+            result_feira_gastronomica = results[4]
+            result_feira_artesanato = results[5]
+
+            # Resultados dos sábados outdoor (dinâmico) - consolidar todos
+            saturday_results = results[6:6 + len(saturdays)]
+            logger.info(f"🗓️  Processando {len(saturday_results)} resultados de sábados outdoor...")
+
+            # Resultados dos venues (após sábados)
+            venues_start_idx = 6 + len(saturdays)
+            result_casa_choro = results[venues_start_idx]
+            result_sala_cecilia = results[venues_start_idx + 1]
+            result_teatro_municipal = results[venues_start_idx + 2]
+            result_artemis = results[venues_start_idx + 3]
+            result_ccbb = results[venues_start_idx + 4]
+            result_oi_futuro = results[venues_start_idx + 5]
+            result_ims = results[venues_start_idx + 6]
+            result_parque_lage = results[venues_start_idx + 7]
+            result_ccjf = results[venues_start_idx + 8]
+            result_mam_cinema = results[venues_start_idx + 9]
+            result_theatro_net = results[venues_start_idx + 10]
+            result_ccbb_teatro_cinema = results[venues_start_idx + 11]
+            result_istituto_italiano = results[venues_start_idx + 12]
+            result_maze_jazz = results[venues_start_idx + 13]
+            result_teatro_leblon = results[venues_start_idx + 14]
+            result_clube_jazz_rival = results[venues_start_idx + 15]
+            result_estacao_net = results[venues_start_idx + 16]
 
             logger.info(f"✓ Todas as {total_prompts} micro-searches concluídas")
 
@@ -821,8 +973,18 @@ OBJETIVO:
             eventos_musica_classica = safe_parse_categoria(result_musica_classica, "Música Clássica")
             logger.debug(f"Música Clássica parsed - {len(eventos_musica_classica)} eventos")
 
-            eventos_outdoor = safe_parse_categoria(result_outdoor, "Outdoor/Parques")
-            logger.debug(f"Outdoor/Parques parsed - {len(eventos_outdoor)} eventos")
+            # Processar eventos outdoor dos sábados (consolidar todos os resultados)
+            eventos_outdoor = []
+            for i, saturday_result in enumerate(saturday_results):
+                saturday_date = saturdays[i]["date_str"]
+                eventos_sab = safe_parse_categoria(saturday_result, "Outdoor/Parques")
+                if eventos_sab:
+                    logger.info(f"   ✓ Sábado {saturday_date}: {len(eventos_sab)} eventos outdoor")
+                    eventos_outdoor.extend(eventos_sab)
+                else:
+                    logger.debug(f"   ⚠️  Sábado {saturday_date}: 0 eventos outdoor")
+
+            logger.info(f"✓ Total eventos outdoor (todos os sábados): {len(eventos_outdoor)} eventos")
 
             eventos_cinema = safe_parse_categoria(result_cinema, "Cinema")
             logger.debug(f"Cinema parsed - {len(eventos_cinema)} eventos")
