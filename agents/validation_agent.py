@@ -17,6 +17,7 @@ from config import (
     VENUE_ADDRESSES,
 )
 from utils.agent_factory import AgentFactory
+from utils.date_validator import DateValidator
 from utils.http_client import HttpClientWrapper
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class ValidationAgent:
     def __init__(self):
         self.log_prefix = "[ValidationAgent] ⚖️"
         self.http_client = HttpClientWrapper()
+        self.date_validator = DateValidator()
 
         self.agent = AgentFactory.create_agent(
             name="Event Validation Agent",
@@ -194,6 +196,9 @@ class ValidationAgent:
             f"{len(rejected_events)} rejeitados"
         )
 
+        # Logar estatísticas de validação de datas
+        self.date_validator.log_validation_stats()
+
         return {
             "validated_events": validated_events,
             "rejected_events": rejected_events,
@@ -206,8 +211,8 @@ class ValidationAgent:
         # Coletar evidências sobre o evento
         evidences = {}
 
-        # 1. Validar data (obrigatório)
-        date_check = self._check_date(event)
+        # 1. Validar data (obrigatório) - usando DateValidator
+        date_check = self.date_validator.check_event_date(event)
         evidences["date"] = date_check
         if not date_check["valid"]:
             return {
@@ -354,8 +359,8 @@ class ValidationAgent:
         page_text = result["text"]
         soup = result["soup"]
 
-        # Extrair datas do conteúdo
-        extracted_date = self._extract_date_from_content(page_text)
+        # Extrair datas do conteúdo - usando DateValidator
+        extracted_date = self.date_validator.extract_dates_from_html(page_text)
 
         # Extrair dados estruturados
         structured_data = {}
@@ -395,63 +400,6 @@ class ValidationAgent:
             "quality_validation": quality_validation,
         }
 
-    def _extract_date_from_content(self, content: str) -> dict[str, Any]:
-        """Extrai datas estruturadas do conteúdo HTML."""
-        # Padrões de data comuns em Sympla, Eventbrite, etc
-        date_patterns = [
-            r'(\d{2})/(\d{2})/(\d{4})',  # DD/MM/YYYY
-            r'(\d{4})-(\d{2})-(\d{2})',  # YYYY-MM-DD (ISO)
-            r'(\d{2})\s+de\s+(\w+)\s+de\s+(\d{4})',  # 15 de novembro de 2025
-        ]
-
-        month_map = {
-            'janeiro': '01', 'fevereiro': '02', 'março': '03', 'abril': '04',
-            'maio': '05', 'junho': '06', 'julho': '07', 'agosto': '08',
-            'setembro': '09', 'outubro': '10', 'novembro': '11', 'dezembro': '12'
-        }
-
-        found_dates = []
-        content_lower = content.lower()
-
-        for pattern in date_patterns:
-            matches = re.findall(pattern, content_lower)
-            for match in matches:
-                try:
-                    if len(match) == 3:
-                        if match[1].isalpha():  # Mês por extenso
-                            day, month_name, year = match
-                            month = month_map.get(month_name, None)
-                            if month:
-                                date_str = f"{day.zfill(2)}/{month}/{year}"
-                                date_obj = datetime.strptime(date_str, "%d/%m/%Y")
-                                found_dates.append(date_obj.strftime("%d/%m/%Y"))
-                        elif '-' in f"{match[0]}-{match[1]}-{match[2]}":  # ISO format
-                            year, month, day = match
-                            date_str = f"{day.zfill(2)}/{month.zfill(2)}/{year}"
-                            date_obj = datetime.strptime(date_str, "%d/%m/%Y")
-                            found_dates.append(date_obj.strftime("%d/%m/%Y"))
-                        else:  # DD/MM/YYYY
-                            day, month, year = match
-                            date_str = f"{day.zfill(2)}/{month.zfill(2)}/{year}"
-                            date_obj = datetime.strptime(date_str, "%d/%m/%Y")
-                            found_dates.append(date_obj.strftime("%d/%m/%Y"))
-                except (ValueError, AttributeError):
-                    continue
-
-        # Remove duplicatas preservando ordem
-        unique_dates = []
-        for date in found_dates:
-            if date not in unique_dates:
-                unique_dates.append(date)
-
-        if unique_dates:
-            return {
-                "found": True,
-                "dates": unique_dates,
-                "primary_date": unique_dates[0]
-            }
-        else:
-            return {"found": False, "dates": []}
 
     def _extract_structured_data(self, soup: BeautifulSoup, page_text: str) -> dict[str, Any]:
         """Extrai dados estruturados da página do evento.
@@ -863,123 +811,3 @@ Retorne JSON:
                     "reason": f"Erro na análise LLM: {str(e)}",
                 }
 
-    def _check_date(self, event: dict) -> dict[str, Any]:
-        """Valida formato e período da data."""
-        date_str = event.get("data", "")
-
-        if not date_str:
-            return {"valid": False, "reason": "Data não fornecida"}
-
-        # Validação RIGOROSA: Rejeitar datas descritivas
-        # Detectar palavras que indicam data inválida
-        invalid_indicators = ["última", "primeira", "edição", "temporada", "confirmar", "a definir", "tbd", "novembro de"]
-        if any(indicator in date_str.lower() for indicator in invalid_indicators):
-            return {"valid": False, "reason": f"Data descritiva não aceita (deve ser DD/MM/YYYY): {date_str}"}
-
-        # Validar formato DD/MM/YYYY (estrito - não aceitar texto extra)
-        try:
-            # Extrair apenas a parte da data (primeira palavra se houver espaços)
-            date_part = date_str.split()[0] if ' ' in date_str else date_str
-
-            # Validar formato exato DD/MM/YYYY
-            if not date_part or len(date_part) != 10 or date_part.count('/') != 2:
-                return {"valid": False, "reason": f"Formato de data inválido (esperado DD/MM/YYYY): {date_str}"}
-
-            event_date = datetime.strptime(date_part, "%d/%m/%Y")
-        except (ValueError, IndexError):
-            return {"valid": False, "reason": f"Formato de data inválido (esperado DD/MM/YYYY): {date_str}"}
-
-        # Verificar se está no período válido
-        # Normalizar para comparar apenas datas (sem horário)
-        start_date = SEARCH_CONFIG["start_date"].date()
-        end_date = SEARCH_CONFIG["end_date"].date()
-        event_date_only = event_date.date()
-
-        if not (start_date <= event_date_only <= end_date):
-            return {
-                "valid": False,
-                "reason": f"Data fora do período válido ({start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')})",
-            }
-
-        # VALIDAÇÃO RIGOROSA: Horário
-        horario_str = event.get("horario", "")
-
-        if not horario_str:
-            return {"valid": False, "reason": "Horário não fornecido"}
-
-        # Rejeitar placeholders de horário
-        invalid_time_indicators = ["xx:xx", "x:x", "tbd", "confirmar", "a definir"]
-        if any(indicator in horario_str.lower() for indicator in invalid_time_indicators):
-            return {"valid": False, "reason": f"Horário placeholder não aceito (deve ser HH:MM): {horario_str}"}
-
-        # Validar formato HH:MM estrito
-        if ":" not in horario_str:
-            return {"valid": False, "reason": f"Formato de horário inválido (esperado HH:MM): {horario_str}"}
-
-        try:
-            hora_partes = horario_str.strip().split(":")
-            if len(hora_partes) != 2:
-                return {"valid": False, "reason": f"Formato de horário inválido (esperado HH:MM): {horario_str}"}
-
-            hora = int(hora_partes[0])
-            minuto = int(hora_partes[1])
-
-            # Validar ranges válidos
-            if not (0 <= hora <= 23):
-                return {"valid": False, "reason": f"Hora inválida (deve ser 00-23): {horario_str}"}
-            if not (0 <= minuto <= 59):
-                return {"valid": False, "reason": f"Minuto inválido (deve ser 00-59): {horario_str}"}
-
-        except (ValueError, IndexError):
-            return {"valid": False, "reason": f"Formato de horário inválido (esperado HH:MM): {horario_str}"}
-
-        # VALIDAÇÃO GEOGRÁFICA: Apenas eventos no Rio de Janeiro
-        local_str = event.get("local", "")
-
-        if not local_str:
-            return {"valid": False, "reason": "Local não fornecido"}
-
-        local_lower = local_str.lower()
-
-        # Lista de cidades FORA do Rio de Janeiro que devem ser rejeitadas
-        invalid_cities = [
-            "paraty", "parati",  # Paraty/Parati
-            "niterói", "niteroi",  # Niterói
-            "são gonçalo", "sao goncalo",  # São Gonçalo
-            "duque de caxias",  # Duque de Caxias
-            "nova iguaçu", "nova iguacu",  # Nova Iguaçu
-            "são paulo", "sao paulo", "sp",  # São Paulo
-            "belo horizonte",  # BH
-            "brasília", "brasilia",  # Brasília
-        ]
-
-        # Verificar se o local contém alguma cidade inválida
-        for city in invalid_cities:
-            if city in local_lower:
-                return {"valid": False, "reason": f"Evento fora do Rio de Janeiro (cidade: {city})"}
-
-        # VALIDAÇÃO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos MIN_HOURS_ADVANCE horas
-        now = datetime.now()
-        if event_date_only == now.date():
-            # Evento é hoje - validar horário
-            horario_str = event.get("horario", "00:00")
-            try:
-                # Parse horário (formato HH:MM)
-                hora_partes = horario_str.split(":")
-                if len(hora_partes) >= 2:
-                    hora = int(hora_partes[0])
-                    minuto = int(hora_partes[1])
-                    event_datetime = datetime.combine(event_date_only, datetime.min.time()).replace(hour=hora, minute=minuto)
-
-                    # Verificar se faltam pelo menos MIN_HOURS_ADVANCE horas
-                    hora_minima = now + timedelta(hours=MIN_HOURS_ADVANCE)
-                    if event_datetime < hora_minima:
-                        return {
-                            "valid": False,
-                            "reason": f"Evento hoje às {horario_str} já passou ou está muito próximo (menos de {MIN_HOURS_ADVANCE}h)",
-                        }
-            except (ValueError, IndexError):
-                # Se não conseguir parsear horário, aceitar por segurança (modo permissivo)
-                logger.warning(f"Não foi possível parsear horário '{horario_str}' para validação temporal")
-
-        return {"valid": True, "reason": "Data válida", "date": event_date.strftime('%d/%m/%Y')}
