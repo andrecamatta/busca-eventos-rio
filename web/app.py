@@ -230,6 +230,13 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
                 "venue": venue,
                 "is_temporada": is_temporada,
                 "tipo_temporada": tipo_temporada,
+                # Campos de qualidade (do judge_agent)
+                "quality_score": event.get("quality_score"),
+                "quality_notes": event.get("quality_notes"),
+                "prompt_adherence": event.get("prompt_adherence"),
+                "content_match": event.get("content_match"),
+                "date_accuracy": event.get("date_accuracy"),
+                "completeness": event.get("completeness"),
             },
             "color": color,
             "textColor": "#ffffff",
