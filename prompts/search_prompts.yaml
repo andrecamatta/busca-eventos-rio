@@ -499,15 +499,46 @@ venues:
       - "Artemis café curso {month_str}"
       - "workshop café Artemis Rio"
       - "Conde de Bonfim café"
+      - "degustação café Artemis {month_str}"
+      - "site:sympla.com.br artemis torrefacao"
+      - "site:eventbrite.com.br artemis rio"
 
     fontes_prioritarias:
+      - https://www.sympla.com.br/produtor/artemistorrefacao
       - Instagram @artemistorrefacao
       - Site oficial Artemis
 
     instrucoes_especiais: |
-      🎯 BUSCAR: Cursos e eventos de café especializado
+      🎯 BUSCAR OBRIGATÓRIO: Cursos e eventos de café especializado na Artemis Torrefação
 
-      ENDEREÇO: Rua Conde de Bonfim, 751, Tijuca
+      ENDEREÇO: Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro
+
+      ESTRATÉGIA DE BUSCA:
+      1. 🔍 **Sympla** (fonte principal):
+         - site:sympla.com.br/produtor/artemistorrefacao
+         - site:sympla.com.br "artemis torrefação" {month_str}
+
+      2. 🔍 **Eventbrite**:
+         - site:eventbrite.com.br "artemis" "café" rio
+
+      3. 🔍 **Redes sociais**:
+         - Instagram @artemistorrefacao (posts sobre eventos)
+
+      4. 🔍 **Palavras-chave específicas**:
+         - "artemis torrefação degustação {month_year_str}"
+         - "curso barista artemis rio {month_str}"
+         - "workshop café conde de bonfim"
+
+      TIPOS DE EVENTOS:
+      - Cursos de barista (iniciante, intermediário, avançado)
+      - Degustações guiadas (cafés especiais, origem única, microlotes)
+      - Workshops de torra, extração, latte art
+      - Eventos especiais de café
+
+      ⚠️ IMPORTANTE:
+      - Buscar eventos CONFIRMADOS com data específica (DD/MM/YYYY)
+      - Ignorar eventos passados ou sem data definida
+      - Artemis é VENUE OBRIGATÓRIO - esforço extra para encontrar eventos
 
   ccbb:
     nome: CCBB Rio - Centro Cultural Banco do Brasil
