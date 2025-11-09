@@ -11,12 +11,30 @@ function isMobileDevice() {
     return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
 
+// Verificar estado de execução ao carregar página
+function checkExecutionState() {
+    // Verificar se atualização já foi executada
+    if (localStorage.getItem('refresh_executed') === 'true') {
+        const btn = document.getElementById('refresh-btn');
+        btn.disabled = true;
+        btn.title = 'Atualização já executada. Recarregue a página para executar novamente.';
+    }
+
+    // Verificar se julgamento já foi executado
+    if (localStorage.getItem('judge_executed') === 'true') {
+        const btn = document.getElementById('judge-btn');
+        btn.disabled = true;
+        btn.title = 'Julgamento já executado. Recarregue a página para executar novamente.';
+    }
+}
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
     initCalendar();
     loadFilters();
     setupEventListeners();
     updateStats();
+    checkExecutionState();
 });
 
 // Inicializar FullCalendar
@@ -156,6 +174,13 @@ function setupEventListeners() {
 // Atualizar eventos
 async function refreshEvents() {
     const btn = document.getElementById('refresh-btn');
+
+    // Verificar se já foi executado nesta sessão (usando localStorage)
+    if (localStorage.getItem('refresh_executed') === 'true') {
+        showToast('⚠️ Atualização já foi executada nesta sessão. Recarregue a página para executar novamente.', 'warning');
+        return;
+    }
+
     btn.classList.add('spinning');
     btn.disabled = true;
 
@@ -175,8 +200,14 @@ async function refreshEvents() {
                 // Outros erros
                 showToast(data.detail || 'Erro ao iniciar atualização', 'error');
             }
+            // Reabilitar botão apenas em caso de erro antes de iniciar
+            btn.classList.remove('spinning');
+            btn.disabled = false;
             return;
         }
+
+        // Marcar como executado no localStorage (bloqueio permanente até reload)
+        localStorage.setItem('refresh_executed', 'true');
 
         // Sucesso - iniciar polling de status
         showToast('✓ Atualização iniciada! Acompanhando progresso...', 'info');
@@ -185,7 +216,7 @@ async function refreshEvents() {
     } catch (error) {
         console.error('Erro ao atualizar:', error);
         showToast('Erro de conexão ao iniciar atualização', 'error');
-        // Restaurar botão em caso de erro
+        // Restaurar botão em caso de erro de conexão
         setTimeout(() => {
             btn.classList.remove('spinning');
             btn.disabled = false;
@@ -222,7 +253,7 @@ async function pollRefreshStatus() {
             // Job terminou - parar polling
             clearInterval(interval);
             btn.classList.remove('spinning');
-            btn.disabled = false;
+            // Manter botão desabilitado permanentemente após conclusão
 
             // Verificar resultado
             if (status.last_result === 'success') {
@@ -233,6 +264,7 @@ async function pollRefreshStatus() {
             } else if (status.last_result === 'error') {
                 showToast(`❌ Erro na atualização: ${status.last_error || 'Erro desconhecido'}`, 'error');
                 console.error('Detalhes do erro:', status);
+                // Em caso de erro durante execução, não permitir nova tentativa
             } else {
                 // Resultado desconhecido
                 showToast('⚠️ Atualização finalizada com status desconhecido', 'warning');
@@ -244,7 +276,7 @@ async function pollRefreshStatus() {
             if (pollCount >= maxPolls) {
                 clearInterval(interval);
                 btn.classList.remove('spinning');
-                btn.disabled = false;
+                // Manter botão desabilitado mesmo em timeout
                 showToast('⚠️ Timeout ao aguardar atualização', 'warning');
             }
         }
@@ -421,6 +453,13 @@ function showToast(message, type = 'info') {
 // Iniciar julgamento de qualidade
 async function startJudgement() {
     const btn = document.getElementById('judge-btn');
+
+    // Verificar se já foi executado nesta sessão (usando localStorage)
+    if (localStorage.getItem('judge_executed') === 'true') {
+        showToast('⚠️ Julgamento já foi executado nesta sessão. Recarregue a página para executar novamente.', 'warning');
+        return;
+    }
+
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -437,10 +476,14 @@ async function startJudgement() {
             } else {
                 showToast(data.detail || 'Erro ao iniciar julgamento', 'error');
             }
+            // Reabilitar botão apenas em caso de erro antes de iniciar
             btn.disabled = false;
             btn.innerHTML = originalHTML;
             return;
         }
+
+        // Marcar como executado no localStorage (bloqueio permanente até reload)
+        localStorage.setItem('judge_executed', 'true');
 
         showToast('⚖️ Julgamento iniciado! Aguarde...', 'info');
         pollJudgeStatus(btn, originalHTML);
@@ -448,6 +491,7 @@ async function startJudgement() {
     } catch (error) {
         console.error('Erro ao iniciar julgamento:', error);
         showToast('Erro de conexão ao iniciar julgamento', 'error');
+        // Restaurar botão em caso de erro de conexão
         btn.disabled = false;
         btn.innerHTML = originalHTML;
     }
@@ -481,8 +525,8 @@ async function pollJudgeStatus(btn, originalHTML) {
 
             // Job terminou
             clearInterval(interval);
-            btn.disabled = false;
             btn.innerHTML = originalHTML;
+            // Manter botão desabilitado permanentemente após conclusão
 
             if (status.last_result === 'success') {
                 showToast(
@@ -494,6 +538,7 @@ async function pollJudgeStatus(btn, originalHTML) {
             } else if (status.last_result === 'error') {
                 showToast(`❌ Erro no julgamento: ${status.last_error || 'Desconhecido'}`, 'error');
                 console.error('Detalhes do erro:', status);
+                // Em caso de erro durante execução, não permitir nova tentativa
             } else {
                 showToast('⚠️ Julgamento finalizado com status desconhecido', 'warning');
             }
@@ -502,8 +547,8 @@ async function pollJudgeStatus(btn, originalHTML) {
             console.error('Erro ao consultar status do julgamento:', error);
             if (pollCount >= maxPolls) {
                 clearInterval(interval);
-                btn.disabled = false;
                 btn.innerHTML = originalHTML;
+                // Manter botão desabilitado mesmo em timeout
                 showToast('⚠️ Timeout ao aguardar julgamento', 'warning');
             }
         }
