@@ -184,24 +184,20 @@ class QualityJudgeAgent:
         try:
             logger.debug(f"{self.log_prefix} Acessando link: {url}")
 
-            response = await self.http_client.get(url, timeout=10)
+            # Usar fetch_and_parse que já faz retry, parsing e limpeza
+            result = await self.http_client.fetch_and_parse(
+                url,
+                extract_text=True,
+                text_max_length=JUDGE_MAX_LINK_CHARS,
+                clean_html=True
+            )
 
-            if response.status_code != 200:
-                return f"[Link inacessível - HTTP {response.status_code}]"
+            if not result["success"]:
+                logger.warning(f"{self.log_prefix} Link inacessível {url}: {result.get('error', 'Unknown')}")
+                return f"[Link inacessível - {result.get('error', 'Erro desconhecido')}]"
 
-            # Parsear HTML
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Remover scripts e styles
-            for element in soup(["script", "style", "nav", "footer"]):
-                element.decompose()
-
-            # Extrair texto
-            text = soup.get_text(separator="\n", strip=True)
-
-            # Limitar tamanho
-            if len(text) > JUDGE_MAX_LINK_CHARS:
-                text = text[:JUDGE_MAX_LINK_CHARS] + "..."
+            # Texto já vem extraído e limpo do fetch_and_parse
+            text = result["text"]
 
             logger.debug(f"{self.log_prefix} ✓ Link acessado ({len(text)} chars)")
             return text
