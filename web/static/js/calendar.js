@@ -140,6 +140,9 @@ function setupEventListeners() {
     // Botão de atualização
     document.getElementById('refresh-btn').addEventListener('click', refreshEvents);
 
+    // Botão de julgamento
+    document.getElementById('judge-btn').addEventListener('click', startJudgement);
+
     // Aplicar filtros
     document.getElementById('apply-filters').addEventListener('click', applyFilters);
 
@@ -270,7 +273,9 @@ function handleEventClick(info) {
     document.getElementById('eventModalTitle').textContent = info.event.title;
 
     const modalBody = document.getElementById('eventModalBody');
-    modalBody.innerHTML = `
+
+    // Montar HTML com detalhes do evento
+    let detailsHTML = `
         <div class="event-detail">
             <div class="event-detail-label"><i class="fas fa-calendar"></i> Data e Horário</div>
             <div class="event-detail-value">${formatDateTime(info.event.start)}</div>
@@ -306,13 +311,46 @@ function handleEventClick(info) {
             <div class="event-detail-value">${props.descricao}</div>
         </div>
         ` : ''}
+    `;
 
-        ${props.link_ingresso ? `
+    // Adicionar informações de qualidade se disponíveis
+    if (props.quality_score !== undefined && props.quality_score !== null) {
+        const badgeColor = getScoreBadgeColor(props.quality_score);
+        detailsHTML += `
+        <div class="alert alert-${badgeColor} mt-3">
+            <h6><i class="fas fa-balance-scale"></i> Avaliação de Qualidade</h6>
+            <div class="row">
+                <div class="col-6">
+                    <strong>Nota Geral:</strong> ${props.quality_score.toFixed(1)}/10
+                </div>
+                <div class="col-6">
+                    <strong>Aderência ao Prompt:</strong> ${(props.prompt_adherence || 0).toFixed(1)}/10
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-12">
+                    <strong>Correlação Link-Dados:</strong> ${(props.link_match || 0).toFixed(1)}/10
+                </div>
+            </div>
+            ${props.quality_notes ? `
+            <div class="mt-2">
+                <small><strong>Observações:</strong> ${props.quality_notes}</small>
+            </div>
+            ` : ''}
+        </div>
+        `;
+    }
+
+    // Adicionar link de ingresso
+    if (props.link_ingresso) {
+        detailsHTML += `
         <a href="${props.link_ingresso}" target="_blank" class="event-link event-link-${props.link_type || 'info'}">
             <i class="${getLinkIcon(props.link_type)}"></i> ${getLinkLabel(props.link_type)}
         </a>
-        ` : ''}
-    `;
+        `;
+    }
+
+    modalBody.innerHTML = detailsHTML;
 
     // Mostrar modal
     const modal = new bootstrap.Modal(document.getElementById('eventModal'));
@@ -378,6 +416,126 @@ function showToast(message, type = 'info') {
 
     const bsToast = new bootstrap.Toast(toast);
     bsToast.show();
+}
+
+// Iniciar julgamento de qualidade
+async function startJudgement() {
+    const btn = document.getElementById('judge-btn');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        const response = await fetch('/api/judge', { method: 'POST' });
+        const data = await response.json();
+
+        if (!response.ok) {
+            if (response.status === 503) {
+                showToast('⚠️ Julgamento indisponível: API key não configurada', 'error');
+            } else if (response.status === 409) {
+                showToast('⚠️ Julgamento já em andamento', 'warning');
+            } else {
+                showToast(data.detail || 'Erro ao iniciar julgamento', 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+            return;
+        }
+
+        showToast('⚖️ Julgamento iniciado! Aguarde...', 'info');
+        pollJudgeStatus(btn, originalHTML);
+
+    } catch (error) {
+        console.error('Erro ao iniciar julgamento:', error);
+        showToast('Erro de conexão ao iniciar julgamento', 'error');
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
+// Poll de status do julgamento
+async function pollJudgeStatus(btn, originalHTML) {
+    let pollCount = 0;
+    const maxPolls = 240; // 20 minutos (240 * 5s)
+
+    const interval = setInterval(async () => {
+        pollCount++;
+
+        try {
+            const response = await fetch('/api/judge/status');
+            const status = await response.json();
+
+            console.log(`[Judge Polling ${pollCount}/${maxPolls}]`, status);
+
+            if (status.is_running) {
+                // Atualizar progresso a cada 6 polls (30s)
+                if (pollCount % 6 === 0 && status.judged_count > 0) {
+                    const progress = Math.round((status.judged_count / status.total_events) * 100);
+                    showToast(
+                        `⚖️ Julgando... ${status.judged_count}/${status.total_events} eventos (${progress}%)`,
+                        'info'
+                    );
+                }
+                return; // Continuar polling
+            }
+
+            // Job terminou
+            clearInterval(interval);
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+
+            if (status.last_result === 'success') {
+                showToast(
+                    `✅ Julgamento concluído! Nota média: ${status.average_score}/10`,
+                    'success'
+                );
+                // Recarregar eventos com notas
+                loadJudgedEvents();
+            } else if (status.last_result === 'error') {
+                showToast(`❌ Erro no julgamento: ${status.last_error || 'Desconhecido'}`, 'error');
+                console.error('Detalhes do erro:', status);
+            } else {
+                showToast('⚠️ Julgamento finalizado com status desconhecido', 'warning');
+            }
+
+        } catch (error) {
+            console.error('Erro ao consultar status do julgamento:', error);
+            if (pollCount >= maxPolls) {
+                clearInterval(interval);
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
+                showToast('⚠️ Timeout ao aguardar julgamento', 'warning');
+            }
+        }
+    }, 5000); // Poll a cada 5 segundos
+}
+
+// Carregar eventos julgados
+async function loadJudgedEvents() {
+    try {
+        const response = await fetch('/api/judge/results');
+
+        if (!response.ok) {
+            console.log('Nenhum julgamento disponível ainda');
+            return;
+        }
+
+        const data = await response.json();
+        console.log('Eventos julgados carregados:', data.stats);
+
+        // Recarregar calendário (que agora terá as notas)
+        calendar.refetchEvents();
+
+    } catch (error) {
+        console.error('Erro ao carregar eventos julgados:', error);
+    }
+}
+
+// Obter cor do badge baseado na nota
+function getScoreBadgeColor(score) {
+    if (score >= 8) return 'success';  // Verde
+    if (score >= 5) return 'warning';  // Amarelo
+    return 'danger';  // Vermelho
 }
 
 // Obter ícone baseado no tipo de link

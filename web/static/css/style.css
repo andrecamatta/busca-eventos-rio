@@ -204,3 +204,94 @@ body {
 .btn-sm {
     font-size: 0.85rem;
 }
+
+/* Quality Judge Button */
+#judge-btn {
+    animation: none;
+    position: relative;
+}
+
+#judge-btn.judging {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Quality Score Badges */
+.quality-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 4px;
+    color: white;
+}
+
+.quality-badge-excellent {
+    background: #28a745;  /* Verde - 8-10 */
+}
+
+.quality-badge-good {
+    background: #ffc107;  /* Amarelo - 5-7.9 */
+    color: #212529;
+}
+
+.quality-badge-poor {
+    background: #dc3545;  /* Vermelho - 0-4.9 */
+}
+
+/* Quality Alert Box in Modal */
+.quality-alert {
+    border-left: 4px solid;
+    padding: 15px;
+    margin-top: 15px;
+    border-radius: 6px;
+}
+
+.quality-alert.alert-success {
+    border-left-color: #28a745;
+    background-color: #d4edda;
+}
+
+.quality-alert.alert-warning {
+    border-left-color: #ffc107;
+    background-color: #fff3cd;
+}
+
+.quality-alert.alert-danger {
+    border-left-color: #dc3545;
+    background-color: #f8d7da;
+}
+
+.quality-alert h6 {
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+.quality-alert .row {
+    margin-bottom: 5px;
+}
+
+.quality-alert small {
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+/* Judge Progress Toast */
+.judge-progress {
+    font-weight: 600;
+    color: #007bff;
+}
+
+/* Event with quality score in calendar */
+.fc-event-has-quality {
+    font-weight: 500;
+}

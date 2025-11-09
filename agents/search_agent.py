@@ -12,6 +12,7 @@ from config import SEARCH_CONFIG, MAX_EVENTS_PER_VENUE
 from models.event_models import ResultadoBuscaCategoria
 from utils.agent_factory import AgentFactory
 from utils.prompt_templates import PromptBuilder
+from utils.prompt_loader import get_prompt_loader
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,14 @@ class SearchAgent:
 
     def __init__(self):
         self.log_prefix = "[SearchAgent] 🔍"
+
+        # Carregar prompts do YAML
+        self.prompt_loader = get_prompt_loader()
+        logger.info(
+            f"{self.log_prefix} 📋 Prompts carregados: "
+            f"{len(self.prompt_loader.get_all_categorias())} categorias, "
+            f"{len(self.prompt_loader.get_all_venues())} venues"
+        )
 
         # Agente de busca com Perplexity Sonar Pro (busca web em tempo real)
         self.search_agent = AgentFactory.create_agent(
@@ -449,6 +458,37 @@ OBJETIVO:
             + return_format
         )
 
+    def _build_prompt_from_config(self, config: dict, context: dict) -> str:
+        """
+        Constrói prompt a partir de configuração YAML.
+
+        Args:
+            config: Configuração carregada do YAML (categoria ou venue)
+            context: Contexto com variáveis de data (start_date_str, end_date_str, etc)
+
+        Returns:
+            Prompt completo formatado
+        """
+        # Nomes dos campos variam se é categoria ou venue
+        # Para categoria: venues_sugeridos
+        # Para venue: pode não ter venues_sugeridos (usar lista vazia)
+
+        venues_list = config.get("venues_sugeridos", config.get("fontes_prioritarias", []))
+
+        return self._build_focused_prompt(
+            categoria=config["nome"],
+            tipo_busca=config["tipo_busca"],
+            descricao=config["descricao"],
+            tipos_evento=config["tipos_evento"],
+            palavras_chave=config["palavras_chave"],
+            venues_sugeridos=venues_list if isinstance(venues_list, list) else [],
+            instrucoes_especiais=config.get("instrucoes_especiais", ""),
+            start_date_str=context["start_date_str"],
+            end_date_str=context["end_date_str"],
+            month_year_str=context["month_year_str"],
+            month_str=context["month_str"]
+        )
+
     async def search_all_sources(self) -> dict[str, Any]:
         """Busca eventos usando Perplexity Sonar Pro com 6 micro-searches focadas."""
         logger.info(f"{self.log_prefix} Iniciando busca de eventos com Perplexity Sonar Pro...")
@@ -480,868 +520,80 @@ OBJETIVO:
         else:
             logger.warning("⚠️  Nenhum evento CCBB encontrado no scraper")
 
-        # Gerar strings de data dinâmicas
-        start_date_str = SEARCH_CONFIG['start_date'].strftime('%d/%m/%Y')
-        end_date_str = SEARCH_CONFIG['end_date'].strftime('%d/%m/%Y')
-        month_year_str = SEARCH_CONFIG['start_date'].strftime('%B %Y')  # ex: "novembro 2025"
-        month_str = SEARCH_CONFIG['start_date'].strftime('%B').lower()  # ex: "novembro"
-        year_str = SEARCH_CONFIG['start_date'].strftime('%Y')  # ex: "2025"
-
         # ═══════════════════════════════════════════════════════════
-        # ESTRATÉGIA: 6 MICRO-SEARCHES FOCADAS (DRY + Paralelas)
+        # CARREGAR PROMPTS DO YAML
         # ═══════════════════════════════════════════════════════════
-        logger.info(f"{self.log_prefix} Criando 7 prompts micro-focados...")
-
-        # MICRO-SEARCH 1: Jazz (Blue Note via scraper direto, Perplexity para outros venues)
-        prompt_jazz = self._build_focused_prompt(
-            categoria="Jazz",
-            tipo_busca="categoria",
-            descricao="Shows de jazz no Rio de Janeiro (jazz tradicional, bebop, fusion, bossa nova)",
-            tipos_evento=[
-                "Shows de jazz ao vivo",
-                "Jazz tradicional, bebop, fusion",
-                "Bossa nova, jazz contemporâneo",
-                "Jazz em bares, casas de jazz especializadas"
-            ],
-            palavras_chave=[
-                f"jazz Rio Janeiro {month_year_str}",
-                f"shows jazz {month_str}",
-                f"Maze Jazz Club {month_str}",
-                f"Clube do Jazz Rio {month_str}",
-                f"jazz ao vivo Rio {month_str}",
-                f"casa de jazz Rio {month_year_str}"
-            ],
-            venues_sugeridos=[
-                "Maze Jazz Club",
-                "Clube do Jazz",
-                "Jazz nos Fundos",
-                "Casa do Choro",
-                "Bares e hotéis com jazz ao vivo"
-            ],
-            instrucoes_especiais=f"""
-🎯 OBJETIVO: Buscar shows de jazz no Rio de Janeiro entre {start_date_str} e {end_date_str}
-
-OBSERVAÇÃO: Blue Note Rio é extraído via scraper direto (não buscar aqui).
-Focar em OUTROS venues de jazz e shows de jazz em bares/hotéis.
-
-ESTRATÉGIA DE BUSCA:
-
-1. 🎷 CASAS DE JAZZ ESPECIALIZADAS:
-   - Maze Jazz Club
-   - Clube do Jazz
-   - Jazz nos Fundos
-   - Casa do Choro (choro e jazz)
-
-2. 🏨 BARES E HOTÉIS COM JAZZ:
-   - Hotéis com jazz ao vivo
-   - Bares especializados em jazz
-   - Espaços culturais com programação jazz
-
-3. 🔍 PORTAIS CULTURAIS:
-   - TimeOut Rio - categoria Jazz
-   - Veja Rio - shows de jazz
-   - Agendas culturais locais
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- Horário obrigatório (padrão 20:00 se não encontrado)
-- Links de compra/informação quando disponíveis
-- Priorizar jazz autêntico sobre tributos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
+        # Construir contexto de datas para interpolação
+        context = self.prompt_loader.build_context(
+            SEARCH_CONFIG['start_date'],
+            SEARCH_CONFIG['end_date']
         )
 
-        # MICRO-SEARCH 2: Comédia
-        prompt_comedia = self._build_focused_prompt(
-            categoria="Comédia",
-            tipo_busca="categoria",
-            descricao="Stand-up comedy e espetáculos de humor ADULTO no Rio de Janeiro (EXCLUIR eventos infantis)",
-            tipos_evento=[
-                "Peças teatrais de comédia (adulto)",
-                "Stand-up comedy",
-                "Humor adulto, espetáculos cômicos",
-                "Improv, teatro de improvisação"
-            ],
-            palavras_chave=[
-                f"stand-up Rio {month_str}",
-                "teatro comédia adulto Rio de Janeiro",
-                "humor adulto Rio",
-                "espetáculo cômico Rio"
-            ],
-            venues_sugeridos=[
-                "Estação Net Rio",
-                "Teatro Riachuelo",
-                "Teatro Clara Nunes",
-                "Teatros de comédia especializados"
-            ],
-            instrucoes_especiais="""
-ATENÇÃO - EXCLUSÕES CRÍTICAS (VALIDAÇÃO RIGOROSA):
-- REJEITAR IMEDIATAMENTE qualquer evento contendo:
+        logger.info(f"{self.log_prefix} Criando prompts a partir do YAML...")
 
-  INFANTIL/FAMILIAR:
-  * "infantil", "criança(s)", "kids", "criancas"
-  * "infanto-juvenil", "infanto juvenil"
-  * "família", "familia", "family", "para toda família"
-  * "sessão infantil", "sessao infantil", "sessão dupla", "sessao dupla"
-  * "indicado para crianças", "filme infantil", "filmes infantis", "cinema infantil"
 
-  LGBTQIAPN+:
-  * "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn"
-  * "pride", "parada gay", "parada lgbtq"
-  * "diversidade sexual", "queer", "drag queen", "drag king"
+        # Carregar configurações de categorias e construir prompts
+        categorias_ids = ["jazz", "comedia", "musica_classica", "outdoor", "cinema", "feira_gastronomica", "feira_artesanato"]
+        prompts_categorias = {}
 
-- Se menciona "todas as idades" sem clareza de ser adulto → REJEITAR
-- APENAS comédia explicitamente para público adulto/maiores de 14/16/18
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
+        for cat_id in categorias_ids:
+            config = self.prompt_loader.get_categoria(cat_id, context)
+            prompts_categorias[cat_id] = self._build_prompt_from_config(config, context)
 
-        # MICRO-SEARCH 3: Outdoor/Parques
-        prompt_outdoor = self._build_focused_prompt(
-            categoria="Outdoor/Parques",
-            tipo_busca="categoria",
-            descricao="Eventos culturais ao ar livre APENAS em sábados e domingos no Rio de Janeiro - INCLUINDO feiras culturais e eventos em praças",
-            tipos_evento=[
-                "Festivais culturais ao ar livre (sábado/domingo)",
-                "Eventos comunitários em parques e praças",
-                "Feiras culturais mistas (música + arte + gastronomia)",
-                "Eventos de rua em praças públicas",
-                "Festivais independentes e alternativos",
-                "Shows e performances ao ar livre",
-                "Juntas locais e eventos comunitários regulares",
-                "Eventos na orla (Copacabana, Ipanema, Leblon)"
-            ],
-            palavras_chave=[
-                f"festival cultural Rio fim de semana {month_str}",
-                "evento comunitário parque Rio",
-                "festival independente Rio",
-                "show ao ar livre Rio",
-                f"feira cultural Rio sábado domingo {month_str}",
-                f"feira O Fuxico Ipanema {month_str}",
-                f"feira da Glória {month_str}",
-                f"feirinha Laranjeiras {month_str}",
-                f"junta local Rio {month_str}",
-                f"corona sunset Copacabana {month_str}",
-                f"eventos praça Rio fim de semana {month_str}",
-                f"eventos orla Rio sábado domingo {month_str}"
-            ],
-            venues_sugeridos=[
-                "Aterro do Flamengo",
-                "Jockey Club Brasileiro",
-                "Marina da Glória",
-                "Parque Lage",
-                "Pista Cláudio Coutinho",
-                "Praça Nossa Senhora da Paz (Ipanema)",
-                "Praça Marechal Deodoro (Glória)",
-                "Praça Paris",
-                "Praça XV",
-                "Orla de Copacabana",
-                "Orla de Ipanema",
-                "Avenida Augusto Severo (Glória)",
-                "Largo da Carioca"
-            ],
-            instrucoes_especiais="""
-ATENÇÃO - DIAS ESPECÍFICOS:
-- APENAS sábados e domingos
-- NÃO incluir eventos de segunda a sexta
-- Verificar dia da semana da data do evento
+        # Carregar configurações de venues e construir prompts
+        venues_ids = [
+            "casa_choro", "sala_cecilia", "teatro_municipal", "artemis", "ccbb",
+            "oi_futuro", "ims", "parque_lage", "ccjf", "mam_cinema",
+            "theatro_net", "ccbb_teatro_cinema",
+            "istituto_italiano", "maze_jazz", "teatro_leblon", "clube_jazz_rival", "estacao_net"
+        ]
+        prompts_venues = {}
 
-ATENÇÃO - EXCLUSÕES CRÍTICAS:
-- NÃO incluir: shows mainstream de grandes artistas (Ivete Sangalo, Thiaguinho, Luan Santana, etc.)
-- NÃO incluir: samba, pagode, roda de samba, axé, forró (EXCETO se fizer parte de feira cultural mista)
-- NÃO incluir: eventos com tags: "turnê", "show nacional", "mega show"
-- NÃO incluir: eventos puramente promocionais/comerciais de marcas
-- ✅ INCLUIR: feiras culturais mistas, eventos comunitários, festivais independentes
-- ✅ INCLUIR: eventos com múltiplos elementos (música + arte + gastronomia)
-- FOCO: festivais culturais nichados, performances, eventos comunitários em praças e orlas
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
+        for venue_id in venues_ids:
+            config = self.prompt_loader.get_venue(venue_id, context)
+            prompts_venues[venue_id] = self._build_prompt_from_config(config, context)
 
-        # MICRO-SEARCH 4: Cinema
-        prompt_cinema = self._build_focused_prompt(
-            categoria="Cinema",
-            tipo_busca="categoria",
-            descricao="Sessões de cinema, mostras e festivais de filmes no Rio de Janeiro",
-            tipos_evento=[
-                "Mostras de cinema",
-                "Festivais de filmes",
-                "Cineclubes",
-                "Sessões especiais e retrospectivas"
-            ],
-            palavras_chave=[
-                f"mostra de cinema Rio {month_str}",
-                f"festival de filmes Rio {month_year_str}",
-                "cineclube Rio",
-                "sessão especial cinema Rio",
-                "retrospectiva cinema"
-            ],
-            venues_sugeridos=[
-                "Estação NET Rio",
-                "Centro Cultural Justiça Federal",
-                "MAM Cinema",
-                "Cinemas de arte"
-            ],
-            instrucoes_especiais=f"""
-FOCO:
-- Mostras temáticas
-- Festivais de cinema
-- Cineclubes e sessões comentadas
-- Retrospectivas de diretores
-
-EXCLUIR:
-- Filmes comerciais em cartaz normal
-- APENAS eventos especiais/culturais
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 7: Feira Gastronômica
-        prompt_feira_gastronomica = self._build_focused_prompt(
-            categoria="Feira Gastronômica",
-            tipo_busca="categoria",
-            descricao="Feiras gastronômicas, food festivals e mercados de comida APENAS em sábados/domingos",
-            tipos_evento=[
-                "Feiras gastronômicas",
-                "Food festivals",
-                "Mercados de comida de rua",
-                "Festivais de gastronomia"
-            ],
-            palavras_chave=[
-                f"feira gastronômica Rio fim de semana {month_str}",
-                f"food festival Rio sábado domingo {month_year_str}",
-                "mercado gastronômico Rio",
-                "festival gastronomia Rio"
-            ],
-            venues_sugeridos=[
-                "Aterro do Flamengo",
-                "Jockey Club",
-                "Marina da Glória",
-                "Parques e espaços abertos"
-            ],
-            instrucoes_especiais=f"""
-CRÍTICO: APENAS SÁBADOS E DOMINGOS
-
-FOCO:
-- Feiras de comida
-- Food trucks e mercados
-- Festivais gastronômicos
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- DIA DA SEMANA: sábado OU domingo
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 8: Feira de Artesanato
-        prompt_feira_artesanato = self._build_focused_prompt(
-            categoria="Feira de Artesanato",
-            tipo_busca="categoria",
-            descricao="Feiras de artesanato, arte e design APENAS em sábados/domingos",
-            tipos_evento=[
-                "Feiras de artesanato",
-                "Feiras de arte",
-                "Mercados de design",
-                "Bazares culturais"
-            ],
-            palavras_chave=[
-                f"feira de artesanato Rio fim de semana {month_str}",
-                f"feira de arte Rio sábado domingo {month_year_str}",
-                "bazar cultural Rio",
-                "feira de design Rio"
-            ],
-            venues_sugeridos=[
-                "Praça General Osório (Ipanema)",
-                "Parques",
-                "Centros culturais",
-                "Espaços abertos"
-            ],
-            instrucoes_especiais=f"""
-CRÍTICO: APENAS SÁBADOS E DOMINGOS
-
-FOCO:
-- Artesanato
-- Arte local
-- Design independente
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- DIA DA SEMANA: sábado OU domingo
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 9: Casa do Choro
-        prompt_casa_choro = self._build_focused_prompt(
-            categoria="Casa do Choro",
-            tipo_busca="venue",
-            descricao="Eventos na Casa do Choro (Rua da Carioca, 38 - Centro, Rio de Janeiro)",
-            tipos_evento=[
-                "Shows de choro e música brasileira",
-                "Apresentações ao vivo",
-                "Eventos culturais no venue"
-            ],
-            palavras_chave=[
-                f"Casa do Choro programação completa {month_year_str}",
-                f"site:sympla.com.br Casa do Choro {month_str}",
-                f"shows Casa do Choro {month_year_str}",
-                "Casa do Choro Rio roda de choro",
-                f"roda de choro Centro Rio {month_str}"
-            ],
-            venues_sugeridos=[
-                "Casa do Choro - Rua da Carioca, 38, Centro"
-            ],
-            instrucoes_especiais=f"""
-⚠️ IMPORTANTE: RETORNE **TODOS OS EVENTOS** encontrados no período!
-A Casa do Choro pode ter múltiplas apresentações/rodas de choro por mês.
-
-ESTRATÉGIA DE BUSCA MULTI-STEP (execute TODAS as buscas):
-
-1. 🎫 PRIORIDADE MÁXIMA - Plataformas de ingressos:
-   - Sympla: "site:sympla.com.br Casa do Choro {month_str} {year_str}"
-   - Eventbrite: "site:eventbrite.com.br Casa do Choro Rio"
-   - Fever: "site:feverup.com Casa do Choro"
-
-2. 🎭 BUSCA POR PROGRAMAÇÃO COMPLETA:
-   - ⚠️ NOTA: Site oficial casadochoro.com.br está instável/quebrado - NÃO usar
-   - Busca geral: "Casa do Choro programação completa {month_year_str}"
-   - Roda de choro: "roda de choro Casa do Choro Centro Rio {month_str}"
-
-3. 📰 PORTAIS E REDES SOCIAIS:
-   - TimeOut Rio: "Casa do Choro {month_year_str}"
-   - Instagram: @casadochororj (posts recentes com shows)
-   - Veja Rio, O Globo Cultura: agenda Casa do Choro
-
-REGRAS PARA LINKS:
-- ✅ PRIORIZAR SEMPRE: Links do Sympla/Eventbrite com ID específico (MAIS CONFIÁVEIS)
-- ⚠️ SITE OFICIAL: casadochoro.com.br está instável - NÃO retornar links deste site
-- ❌ REJEITAR: Links genéricos sem identificação do evento
-- 💡 MELHOR PRÁTICA: Se encontrar evento mas sem link de ingresso, use null no campo link_ingresso
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- Confirmar que evento é futuro (não mencionar eventos passados)
-- **CRÍTICO:** Priorize Sympla. Site oficial está com problemas técnicos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 5: Sala Cecília Meireles
-        prompt_sala_cecilia = self._build_focused_prompt(
-            categoria="Sala Cecília Meireles",
-            tipo_busca="venue",
-            descricao="Eventos na Sala Cecília Meireles (Lapa, Rio de Janeiro - música clássica e erudita)",
-            tipos_evento=[
-                "Concertos de música clássica",
-                "Música erudita, orquestras",
-                "Recitais e apresentações",
-                "Eventos de música de câmara"
-            ],
-            palavras_chave=[
-                f"site:salaceciliameireles.rj.gov.br/programacao {month_str} {year_str}",
-                f"Sala Cecília Meireles programação completa {month_year_str}",
-                f"site:funarj.eleventickets.com/event/ Sala Cecília {month_str}",
-                f"Festival Internacional de Piano Sala Cecília {month_str}",
-                f"site:sympla.com.br Sala Cecília Meireles {month_str}",
-                f"concertos Sala Cecília Meireles {month_str} {year_str}",
-                f"Orquestra Petrobras Sinfônica Sala Cecília {month_str}",
-                f"site:petrobrasinfonica.com.br Sala Cecília {month_str}"
-            ],
-            venues_sugeridos=[
-                "Sala Cecília Meireles - Lapa"
-            ],
-            instrucoes_especiais=f"""
-⚠️ IMPORTANTE: RETORNE **TODOS OS EVENTOS** encontrados no período, não apenas um ou dois!
-A Sala Cecília Meireles costuma ter MÚLTIPLOS eventos por mês (festivais, concertos, recitais).
-
-ESTRATÉGIA DE BUSCA MULTI-STEP (execute TODAS as buscas):
-
-1. 🎭 PRIORIDADE MÁXIMA - SITE OFICIAL (salaceciliameireles.rj.gov.br):
-   - Busca direta: "site:salaceciliameireles.rj.gov.br/programacao/ {month_str} {year_str}"
-   - ✅ RETORNAR links .gov.br/programacao/{{evento}} - SÃO CONFIÁVEIS
-   - Exemplos: salaceciliameireles.rj.gov.br/programacao/07-11-25-orquestra-petrobras/
-   - Formato típico: /programacao/DD-MM-AA-nome-evento/
-
-2. 🎫 ALTERNATIVA - FUNARJ (se link .gov.br não disponível):
-   - "site:funarj.eleventickets.com/event/ Sala Cecília {{nome_evento}}"
-   - RETORNAR apenas se link tiver ID numérico válido
-   - ⚠️ REJEITAR links com IDs genéricos como /7 ou /1
-
-3. 🎫 SYMPLA (terceira opção):
-   - "site:sympla.com.br Sala Cecília Meireles {month_str} {year_str}"
-   - Use se não encontrar nos anteriores
-
-4. 🎵 SITES DE ORQUESTRAS (informação complementar):
-   - "site:petrobrasinfonica.com.br Sala Cecília"
-   - Pode ter informações sobre eventos específicos
-
-REGRAS PARA LINKS:
-- ✅ PRIORIDADE 1: salaceciliameireles.rj.gov.br/programacao/{{evento}}/ (SITE OFICIAL)
-- ✅ PRIORIDADE 2: funarj.eleventickets.com/event/{{nome}}/{{id-numérico}}
-- ✅ PRIORIDADE 3: sympla.com.br com ID específico
-- ⚠️ CUIDADO: Rejeitar links FUNARJ com IDs suspeitos (muito curtos: /1, /7, /10)
-- ❌ REJEITAR: Páginas de listagem genéricas (#!/home, /eventos/, etc)
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- Confirmar que evento existe (não é apenas menção antiga)
-- **CRÍTICO:** Priorize FUNARJ (sistema oficial). Links .gov.br sempre devem ser null
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 6: Teatro Municipal
-        prompt_teatro_municipal = self._build_focused_prompt(
-            categoria="Teatro Municipal do Rio de Janeiro",
-            tipo_busca="venue",
-            descricao="Eventos no Teatro Municipal do Rio de Janeiro (Centro - óperas, balés, concertos)",
-            tipos_evento=[
-                "Óperas e apresentações líricas",
-                "Balés clássicos e contemporâneos",
-                "Concertos da Orquestra Sinfônica",
-                "Eventos culturais especiais"
-            ],
-            palavras_chave=[
-                f"Teatro Municipal Rio programação completa {month_year_str}",
-                f"site:sympla.com.br Teatro Municipal {month_str}",
-                f"site:feverup.com/m/ Teatro Municipal {month_str}",
-                f"site:feverup.com/pt/rio-de-janeiro/venue/theatro-municipal-do-rio-de-janeiro",
-                f"site:theatromunicipal.rj.gov.br programação {month_str}",
-                f"Madama Butterfly Teatro Municipal {month_str}",
-                f"ópera balé Teatro Municipal Rio {month_year_str}",
-                "Concerto França-Brasil Teatro Municipal"
-            ],
-            venues_sugeridos=[
-                "Teatro Municipal do Rio de Janeiro - Centro"
-            ],
-            instrucoes_especiais=f"""
-⚠️ IMPORTANTE: RETORNE **TODOS OS EVENTOS** encontrados no período!
-Teatro Municipal tem programação variada: óperas, balés, concertos.
-
-ESTRATÉGIA DE BUSCA MULTI-STEP (execute TODAS as buscas):
-
-1. 🎫 PRIORIDADE MÁXIMA - Fever com IDs específicos:
-   - Página do venue: "site:feverup.com/pt/rio-de-janeiro/venue/theatro-municipal-do-rio-de-janeiro"
-   - Links com IDs: "site:feverup.com/m/ Teatro Municipal {{nome_evento}}"
-   - RETORNAR links formato: feverup.com/m/{{número}} (ex: /m/378286)
-   - Exemplos conhecidos:
-     * Madama Butterfly: /m/378286
-     * Tango Revirado: /m/499698
-     * Tarde Lírica: /m/498934
-
-2. 🎫 Sympla (alternativa):
-   - "site:sympla.com.br Teatro Municipal {month_str} {year_str}"
-
-3. 🏛️ SITE OFICIAL (apenas informação):
-   - "site:theatromunicipal.rj.gov.br programação {month_str} {year_str}"
-   - ⚠️ Links .gov.br frequentemente dão 404 - use apenas para informação
-
-4. 🎭 EVENTOS CONHECIDOS EM NOVEMBRO (busque especificamente no Fever):
-   - "feverup.com/m/ Madama Butterfly Teatro Municipal"
-   - "feverup.com/m/ França-Brasil Teatro Municipal"
-   - "feverup.com/m/ Negro Spirituals Teatro Municipal"
-   - "feverup.com/m/ Ballet Frida Teatro Municipal"
-
-REGRAS PARA LINKS:
-- ✅ PRIORIZAR: Links Fever formato /m/{{id}} (ex: feverup.com/m/378286)
-- ✅ ACEITAR: Links Sympla com ID específico
-- ⚠️ CUIDADO: Links .gov.br - apenas se não houver alternativa Fever/Sympla
-- ❌ REJEITAR: Links genéricos sem ID do evento
-
-VALIDAÇÃO:
-- Data ENTRE {start_date_str} e {end_date_str}
-- Confirmar que evento existe e não é apenas menção antiga
-- Se encontrar evento mas link .gov.br parece incerto, busque no Sympla/Fever
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 7: Artemis - Torrefação Artesanal e Cafeteria
-        prompt_artemis = self._build_focused_prompt(
-            categoria="Artemis - Torrefação Artesanal e Cafeteria",
-            tipo_busca="venue",
-            descricao="Cursos, workshops e eventos sobre café na Artemis (cursos de barista, degustações, talks sobre café)",
-            tipos_evento=[
-                "Cursos de barista e métodos de preparo",
-                "Workshops de degustação e cupping",
-                "Talks e palestras sobre café especial",
-                "Eventos de lançamento de cafés",
-                "Cursos de torra artesanal"
-            ],
-            palavras_chave=[
-                f"Artemis café {month_year_str}",
-                "Artemis curso barista Rio",
-                "workshop café Artemis",
-                "degustação café Artemis",
-                "cupping Artemis Rio",
-                "curso café especial Rio"
-            ],
-            venues_sugeridos=[
-                "Artemis Torrefação Artesanal e Cafeteria"
-            ],
-            instrucoes_especiais="""
-ESTRATÉGIA DE BUSCA MULTI-STEP:
-1. Site oficial e redes sociais do Artemis (@artemiscafe, Instagram/Facebook)
-2. Sympla/Eventbrite: "Artemis café", "curso barista"
-3. Portais de gastronomia: cursos de café Rio
-4. Busca por: "workshop café especialidade Rio"
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 8: CCBB Rio (Centro Cultural Banco do Brasil)
-        prompt_ccbb = self._build_focused_prompt(
-            categoria="CCBB Rio - Centro Cultural Banco do Brasil",
-            tipo_busca="venue",
-            descricao="Eventos culturais no CCBB Rio (Centro - exposições, teatro, cinema, música)",
-            tipos_evento=[
-                "Exposições de arte",
-                "Espetáculos teatrais",
-                "Shows e concertos",
-                "Sessões de cinema",
-                "Palestras e debates culturais"
-            ],
-            palavras_chave=[
-                f"CCBB Rio programação {month_year_str}",
-                f"Centro Cultural Banco do Brasil agenda {month_str}",
-                f"site:bb.com.br/cultura CCBB Rio {month_str}",
-                f"site:sympla.com.br CCBB Rio {month_str}",
-                f"exposição CCBB Rio {month_year_str}"
-            ],
-            venues_sugeridos=[
-                "CCBB Rio - Centro Cultural Banco do Brasil, Rua Primeiro de Março, 66, Centro"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA DE BUSCA:
-1. Site oficial CCBB: "site:bb.com.br/cultura ccbbrj programacao {month_str}"
-2. Plataformas: Sympla, Fever, Eventbrite
-3. Portais culturais: TimeOut Rio, O Globo Cultura
-
-FOCO: Eventos com programação confirmada no período
-✅ RETORNAR: Links específicos de Sympla/Fever/site oficial
-❌ REJEITAR: Links genéricos de homepage
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 9: Oi Futuro
-        prompt_oi_futuro = self._build_focused_prompt(
-            categoria="Oi Futuro",
-            tipo_busca="venue",
-            descricao="Eventos culturais e tecnológicos no Oi Futuro (Ipanema e Flamengo)",
-            tipos_evento=[
-                "Exposições de arte e tecnologia",
-                "Instalações interativas",
-                "Shows e performances",
-                "Oficinas e workshops",
-                "Cinema e videoarte"
-            ],
-            palavras_chave=[
-                f"Oi Futuro programação {month_year_str}",
-                f"site:oifuturo.org.br agenda {month_str}",
-                f"Oi Futuro Ipanema {month_str}",
-                f"Oi Futuro Flamengo {month_str}",
-                f"exposição Oi Futuro {month_year_str}"
-            ],
-            venues_sugeridos=[
-                "Oi Futuro Ipanema - Rua Dois de Dezembro, 63",
-                "Oi Futuro Flamengo - Rua Dois de Dezembro, 63"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA DE BUSCA:
-1. Site oficial: "site:oifuturo.org.br programacao {month_str}"
-2. Busca geral: "Oi Futuro eventos {month_year_str}"
-3. Plataformas: Sympla, Eventbrite
-
-NOTA: Oi Futuro tem 2 unidades (Ipanema e Flamengo) - identificar qual!
-✅ Eventos gratuitos e pagos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 10: IMS (Instituto Moreira Salles)
-        prompt_ims = self._build_focused_prompt(
-            categoria="IMS - Instituto Moreira Salles",
-            tipo_busca="venue",
-            descricao="Eventos culturais no IMS Rio (fotografia, música, cinema, literatura)",
-            tipos_evento=[
-                "Exposições de fotografia",
-                "Concertos e shows",
-                "Sessões de cinema",
-                "Palestras e debates",
-                "Lançamentos de livros"
-            ],
-            palavras_chave=[
-                f"IMS Rio programação {month_year_str}",
-                f"Instituto Moreira Salles agenda {month_str}",
-                f"site:ims.com.br Rio {month_str}",
-                f"exposição IMS Rio {month_year_str}",
-                f"concerto IMS {month_str}"
-            ],
-            venues_sugeridos=[
-                "IMS Rio - Instituto Moreira Salles, Rua Marquês de São Vicente, 476, Gávea"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA DE BUSCA:
-1. Site oficial IMS: "site:ims.com.br rio programacao {month_str}"
-2. Busca por tipo: "exposição fotografia IMS Rio", "concerto IMS"
-3. Plataformas: Sympla (eventos pagos)
-
-FOCO: Eventos culturais de qualidade (fotografia, música erudita, cinema de arte)
-✅ Muitos eventos gratuitos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 11: Parque Lage
-        prompt_parque_lage = self._build_focused_prompt(
-            categoria="Parque Lage",
-            tipo_busca="venue",
-            descricao="Eventos culturais e artísticos no Parque Lage (EAV - Escola de Artes Visuais)",
-            tipos_evento=[
-                "Exposições de arte contemporânea",
-                "Performances e intervenções",
-                "Concertos ao ar livre",
-                "Workshops e oficinas de arte",
-                "Eventos de moda e design"
-            ],
-            palavras_chave=[
-                f"Parque Lage eventos {month_year_str}",
-                f"EAV Parque Lage programação {month_str}",
-                f"site:eavparquelage.rj.gov.br {month_str}",
-                f"exposição Parque Lage {month_year_str}",
-                f"concerto Parque Lage {month_str}"
-            ],
-            venues_sugeridos=[
-                "Parque Lage - Escola de Artes Visuais, Rua Jardim Botânico, 414, Jardim Botânico"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA DE BUSCA:
-1. Site oficial EAV: "site:eavparquelage.rj.gov.br programacao {month_str}"
-2. Busca geral: "Parque Lage eventos {month_year_str}"
-3. Plataformas: Sympla, Eventbrite
-4. Redes sociais: @eavparquelage Instagram
-
-FOCO: Arte contemporânea, performances, eventos ao ar livre no jardim histórico
-✅ Eventos gratuitos e pagos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 12: CCJF (Centro Cultural Justiça Federal)
-        prompt_ccjf = self._build_focused_prompt(
-            categoria="CCJF - Centro Cultural Justiça Federal",
-            tipo_busca="venue",
-            descricao="Eventos culturais no CCJF (Centro - exposições, música, teatro)",
-            tipos_evento=[
-                "Exposições de arte",
-                "Concertos de música clássica",
-                "Espetáculos teatrais",
-                "Palestras e debates",
-                "Cinema"
-            ],
-            palavras_chave=[
-                f"CCJF Rio programação {month_year_str}",
-                f"Centro Cultural Justiça Federal {month_str}",
-                f"site:ccjf.trf2.jus.br programacao {month_str}",
-                f"exposição CCJF {month_year_str}",
-                f"concerto CCJF Rio {month_str}"
-            ],
-            venues_sugeridos=[
-                "CCJF - Centro Cultural Justiça Federal, Av. Rio Branco, 241, Centro"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA DE BUSCA:
-1. Site oficial: "site:ccjf.trf2.jus.br programacao {month_str}"
-2. Busca geral: "CCJF Rio eventos {month_year_str}"
-3. Plataformas: Sympla (eventos específicos)
-
-FOCO: Programação cultural variada (arte, música, teatro)
-✅ Maioria dos eventos gratuitos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 17: MAM Cinema
-        prompt_mam_cinema = self._build_focused_prompt(
-            categoria="MAM Cinema",
-            tipo_busca="venue",
-            descricao="Cinema curado do Museu de Arte Moderna - sessões e retrospectivas",
-            tipos_evento=[
-                "Sessões de cinema de arte",
-                "Retrospectivas cinematográficas",
-                "Cineclubes",
-                "Filmes clássicos e contemporâneos"
-            ],
-            palavras_chave=[
-                f"MAM Cinema Rio programação {month_year_str}",
-                f"Cinema MAM agenda {month_str}",
-                f"site:mam.rio sessões {month_str}",
-                f"cineclube MAM Rio {month_year_str}"
-            ],
-            venues_sugeridos=[
-                "MAM Cinema - Museu de Arte Moderna, Av. Infante Dom Henrique, 85, Parque do Flamengo"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site MAM: "site:mam.rio cinema programacao {month_str}"
-2. Cinema curado, retrospectivas, sessões especiais
-3. Preços acessíveis, muitas sessões gratuitas
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 19: Theatro Net Rio
-        prompt_theatro_net = self._build_focused_prompt(
-            categoria="Theatro Net Rio",
-            tipo_busca="venue",
-            descricao="Teatro comercial - musicais, comédias, dramas",
-            tipos_evento=[
-                "Musicais",
-                "Comédias teatrais",
-                "Dramas",
-                "Espetáculos teatrais"
-            ],
-            palavras_chave=[
-                f"Theatro Net Rio programação {month_year_str}",
-                f"site:theatronetrio.com.br em-cartaz {month_str}",
-                f"musical Theatro Net {month_year_str}",
-                f"site:ingresso.com Theatro Net Rio {month_str}"
-            ],
-            venues_sugeridos=[
-                "Theatro Net Rio - Rua Siqueira Campos, 143, Copacabana"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site oficial: "site:theatronetrio.com.br em-cartaz"
-2. Ingresso.com: "site:ingresso.com Theatro Net Rio"
-3. FOCO: Musicais e espetáculos de longa temporada
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        # MICRO-SEARCH 20: CCBB Teatro e Cinema (expansão)
-        prompt_ccbb_teatro_cinema = self._build_focused_prompt(
-            categoria="CCBB Teatro e Cinema",
-            tipo_busca="venue",
-            descricao="Programação de teatro e cinema do CCBB (além de exposições)",
-            tipos_evento=[
-                "Espetáculos teatrais",
-                "Sessões de cinema",
-                "Peças de teatro",
-                "Filmes e documentários"
-            ],
-            palavras_chave=[
-                f"CCBB Rio teatro programação {month_year_str}",
-                f"CCBB Rio cinema {month_str}",
-                f"site:bb.com.br/cultura ccbbrj teatro {month_str}",
-                f"site:ingressos.ccbb.com.br teatro {month_str}"
-            ],
-            venues_sugeridos=[
-                "CCBB Rio - Teatro I, II, III e Cinema - R. Primeiro de Março, 66, Centro"
-            ],
-            instrucoes_especiais=f"""
-ESTRATÉGIA:
-1. Site CCBB: "site:bb.com.br/cultura ccbbrj programacao teatro cinema"
-2. Sistema de ingressos: "site:ingressos.ccbb.com.br"
-3. FOCO: Teatro e cinema (exposições já cobertas)
-✅ Muitos eventos gratuitos
-""",
-            start_date_str=start_date_str,
-            end_date_str=end_date_str,
-            month_year_str=month_year_str,
-            month_str=month_str
-        )
-
-        logger.info(f"{self.log_prefix} ✅ 18 prompts criados com sucesso")
+        total_prompts = len(categorias_ids) + len(venues_ids)
+        logger.info(f"{self.log_prefix} ✅ {total_prompts} prompts criados com sucesso")
 
         try:
             # ═══════════════════════════════════════════════════════════
-            # EXECUÇÃO PARALELA DAS 18 MICRO-SEARCHES
+            # EXECUÇÃO PARALELA DAS MICRO-SEARCHES
             # ═══════════════════════════════════════════════════════════
-            logger.info(f"{self.log_prefix} Executando 18 micro-searches em paralelo...")
+            logger.info(f"{self.log_prefix} Executando {total_prompts} micro-searches em paralelo...")
 
-            # Executar as 18 buscas em paralelo (6 categorias + 12 venues)
+            # Executar todas as buscas em paralelo
             results = await asyncio.gather(
-                self._run_micro_search(prompt_jazz, "Jazz"),
-                self._run_micro_search(prompt_comedia, "Comédia"),
-                self._run_micro_search(prompt_outdoor, "Outdoor/Parques"),
-                self._run_micro_search(prompt_cinema, "Cinema"),
-                self._run_micro_search(prompt_feira_gastronomica, "Feira Gastronômica"),
-                self._run_micro_search(prompt_feira_artesanato, "Feira de Artesanato"),
-                self._run_micro_search(prompt_casa_choro, "Casa do Choro"),
-                self._run_micro_search(prompt_sala_cecilia, "Sala Cecília Meireles"),
-                self._run_micro_search(prompt_teatro_municipal, "Teatro Municipal"),
-                self._run_micro_search(prompt_artemis, "Artemis"),
-                self._run_micro_search(prompt_ccbb, "CCBB Rio"),
-                self._run_micro_search(prompt_oi_futuro, "Oi Futuro"),
-                self._run_micro_search(prompt_ims, "IMS"),
-                self._run_micro_search(prompt_parque_lage, "Parque Lage"),
-                self._run_micro_search(prompt_ccjf, "CCJF"),
-                self._run_micro_search(prompt_mam_cinema, "MAM Cinema"),
-                self._run_micro_search(prompt_theatro_net, "Theatro Net Rio"),
-                self._run_micro_search(prompt_ccbb_teatro_cinema, "CCBB Teatro/Cinema"),
+                self._run_micro_search(prompts_categorias["jazz"], "Jazz"),
+                self._run_micro_search(prompts_categorias["comedia"], "Comédia"),
+                self._run_micro_search(prompts_categorias["musica_classica"], "Música Clássica"),
+                self._run_micro_search(prompts_categorias["outdoor"], "Outdoor/Parques"),
+                self._run_micro_search(prompts_categorias["cinema"], "Cinema"),
+                self._run_micro_search(prompts_categorias["feira_gastronomica"], "Feira Gastronômica"),
+                self._run_micro_search(prompts_categorias["feira_artesanato"], "Feira de Artesanato"),
+                self._run_micro_search(prompts_venues["casa_choro"], "Casa do Choro"),
+                self._run_micro_search(prompts_venues["sala_cecilia"], "Sala Cecília Meireles"),
+                self._run_micro_search(prompts_venues["teatro_municipal"], "Teatro Municipal"),
+                self._run_micro_search(prompts_venues["artemis"], "Artemis"),
+                self._run_micro_search(prompts_venues["ccbb"], "CCBB Rio"),
+                self._run_micro_search(prompts_venues["oi_futuro"], "Oi Futuro"),
+                self._run_micro_search(prompts_venues["ims"], "IMS"),
+                self._run_micro_search(prompts_venues["parque_lage"], "Parque Lage"),
+                self._run_micro_search(prompts_venues["ccjf"], "CCJF"),
+                self._run_micro_search(prompts_venues["mam_cinema"], "MAM Cinema"),
+                self._run_micro_search(prompts_venues["theatro_net"], "Theatro Net Rio"),
+                self._run_micro_search(prompts_venues["ccbb_teatro_cinema"], "CCBB Teatro/Cinema"),
+                self._run_micro_search(prompts_venues["istituto_italiano"], "Istituto Italiano"),
+                self._run_micro_search(prompts_venues["maze_jazz"], "Maze Jazz Club"),
+                self._run_micro_search(prompts_venues["teatro_leblon"], "Teatro do Leblon"),
+                self._run_micro_search(prompts_venues["clube_jazz_rival"], "Clube do Jazz/Rival"),
+                self._run_micro_search(prompts_venues["estacao_net"], "Estação Net"),
             )
-
             # Desempacotar resultados
             (
                 result_jazz,
                 result_comedia,
+                result_musica_classica,
                 result_outdoor,
                 result_cinema,
                 result_feira_gastronomica,
@@ -1358,9 +610,14 @@ ESTRATÉGIA:
                 result_mam_cinema,
                 result_theatro_net,
                 result_ccbb_teatro_cinema,
+                result_istituto_italiano,
+                result_maze_jazz,
+                result_teatro_leblon,
+                result_clube_jazz_rival,
+                result_estacao_net,
             ) = results
 
-            logger.info("✓ Todas as 18 micro-searches concluídas")
+            logger.info(f"✓ Todas as {total_prompts} micro-searches concluídas")
 
             # ═══════════════════════════════════════════════════════════
             # MERGE INTELIGENTE DOS RESULTADOS COM PYDANTIC
@@ -1539,6 +796,9 @@ ESTRATÉGIA:
             eventos_comedia = safe_parse_categoria(result_comedia, "Comédia")
             logger.debug(f"Comédia parsed - {len(eventos_comedia)} eventos")
 
+            eventos_musica_classica = safe_parse_categoria(result_musica_classica, "Música Clássica")
+            logger.debug(f"Música Clássica parsed - {len(eventos_musica_classica)} eventos")
+
             eventos_outdoor = safe_parse_categoria(result_outdoor, "Outdoor/Parques")
             logger.debug(f"Outdoor/Parques parsed - {len(eventos_outdoor)} eventos")
 
@@ -1551,10 +811,11 @@ ESTRATÉGIA:
             eventos_feira_artesanato = safe_parse_categoria(result_feira_artesanato, "Feira de Artesanato")
             logger.debug(f"Feira de Artesanato parsed - {len(eventos_feira_artesanato)} eventos")
 
-            # Merge eventos gerais (todas as 6 categorias)
+            # Merge eventos gerais (todas as 7 categorias)
             todos_eventos_gerais = (
                 eventos_jazz +
                 eventos_comedia +
+                eventos_musica_classica +
                 eventos_outdoor +
                 eventos_cinema +
                 eventos_feira_gastronomica +
@@ -1653,6 +914,21 @@ ESTRATÉGIA:
             eventos_ccbb_teatro_cinema = safe_parse_venue(result_ccbb_teatro_cinema, "CCBB Teatro e Cinema")
             logger.debug(f"CCBB Teatro e Cinema parsed - {len(eventos_ccbb_teatro_cinema)} eventos")
 
+            eventos_istituto_italiano = safe_parse_venue(result_istituto_italiano, "Istituto Italiano di Cultura")
+            logger.debug(f"Istituto Italiano parsed - {len(eventos_istituto_italiano)} eventos")
+
+            eventos_maze_jazz = safe_parse_venue(result_maze_jazz, "Maze Jazz Club")
+            logger.debug(f"Maze Jazz Club parsed - {len(eventos_maze_jazz)} eventos")
+
+            eventos_teatro_leblon = safe_parse_venue(result_teatro_leblon, "Teatro do Leblon")
+            logger.debug(f"Teatro do Leblon parsed - {len(eventos_teatro_leblon)} eventos")
+
+            eventos_clube_jazz_rival = safe_parse_venue(result_clube_jazz_rival, "Clube do Jazz / Teatro Rival")
+            logger.debug(f"Clube do Jazz/Rival parsed - {len(eventos_clube_jazz_rival)} eventos")
+
+            eventos_estacao_net = safe_parse_venue(result_estacao_net, "Estação Net (Ipanema e Botafogo)")
+            logger.debug(f"Estação Net parsed - {len(eventos_estacao_net)} eventos")
+
             # Criar estrutura de eventos de venues
             eventos_locais_merged = {
                 "Casa do Choro": eventos_casa_choro,
@@ -1667,6 +943,11 @@ ESTRATÉGIA:
                 "MAM Cinema": eventos_mam_cinema,
                 "Theatro Net Rio": eventos_theatro_net,
                 "CCBB Teatro e Cinema": eventos_ccbb_teatro_cinema,
+                "Istituto Italiano di Cultura": eventos_istituto_italiano,
+                "Maze Jazz Club": eventos_maze_jazz,
+                "Teatro do Leblon": eventos_teatro_leblon,
+                "Clube do Jazz / Teatro Rival": eventos_clube_jazz_rival,
+                "Estação Net (Ipanema e Botafogo)": eventos_estacao_net,
             }
 
             total_venues_before = sum(len(v) for v in eventos_locais_merged.values())

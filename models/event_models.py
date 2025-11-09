@@ -26,6 +26,13 @@ class EventoBase(BaseModel):
     is_temporada: bool = Field(default=False, description="Se é evento contínuo (exposição, mostra)")
     tipo_temporada: Optional[str] = Field(None, description="Tipo: 'exposição', 'mostra', 'feira contínua'")
 
+    # Campos de julgamento de qualidade (preenchidos pelo QualityJudgeAgent)
+    quality_score: Optional[float] = Field(None, ge=0, le=10, description="Nota geral de qualidade (0-10)")
+    prompt_adherence: Optional[float] = Field(None, ge=0, le=10, description="Aderência ao prompt original (0-10)")
+    link_match: Optional[float] = Field(None, ge=0, le=10, description="Correlação entre link e dados (0-10)")
+    quality_notes: Optional[str] = Field(None, description="Observações do julgamento")
+    judged_at: Optional[str] = Field(None, description="Timestamp ISO do julgamento")
+
     @field_validator("data")
     @classmethod
     def validate_date_format(cls, v: str) -> str:
@@ -98,13 +105,14 @@ class EventoVenue(EventoBase):
         "IMS - Instituto Moreira Salles",
         "Parque Lage",
         "CCJF - Centro Cultural Justiça Federal",
-        "Sesc Copacabana",
-        "Sesc Flamengo",
-        "Sesc Tijuca",
-        "Sesc Engenho de Dentro",
         "MAM Cinema",
         "Theatro Net Rio",
         "CCBB Teatro e Cinema",
+        "Istituto Italiano di Cultura",
+        "Maze Jazz Club",
+        "Teatro do Leblon",
+        "Clube do Jazz / Teatro Rival",
+        "Estação Net (Ipanema e Botafogo)",
     ] = Field(..., description="Venue do evento")
 
 

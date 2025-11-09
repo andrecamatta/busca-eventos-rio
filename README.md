@@ -17,11 +17,11 @@ Sistema inteligente de busca e visualização de eventos culturais no Rio de Jan
 - **API RESTful** com 6 endpoints
 
 ### 🤖 Busca Automatizada
-Busca inteligente em 20 venues e categorias:
-- 🎺 **Jazz** - Blue Note Rio e venues especializados
-- 😂 **Teatro comédia** (exceto infantil)
-- 🏛️ **16 venues culturais**: CCBB, Teatro Municipal, Casa do Choro, Sesc Rio (4 unidades), MAM Cinema, IMS, Parque Lage, CCJF, Artemis
-- 🌳 **Eventos ao ar livre** (fim de semana)
+Busca inteligente em 23 micro-searches paralelas:
+- 🎺 **Jazz** - Blue Note Rio, Maze Jazz Club, Clube do Jazz/Rival
+- 😂 **Teatro comédia** - Teatro do Leblon, Theatro Net Rio
+- 🏛️ **17 venues culturais**: CCBB, Teatro Municipal, Casa do Choro, MAM Cinema, IMS, Parque Lage, CCJF, Artemis, Sala Cecília Meireles, Oi Futuro, Istituto Italiano di Cultura, Estação Net
+- 🌳 **Eventos ao ar livre** (fim de semana, cinema ao ar livre, concertos, feiras culturais)
 
 ### Pipeline Multi-Agente
 
@@ -160,7 +160,7 @@ busca-eventos-rio/
 ├── main.py                  # Orquestrador principal
 ├── config.py                # Configurações
 ├── agents/                  # Agentes Agno
-│   ├── search_agent.py      # 20 micro-searches paralelas
+│   ├── search_agent.py      # 23 micro-searches paralelas
 │   ├── verify_agent.py      # Validação de links
 │   ├── validation_agent.py  # Validação LLM de eventos
 │   ├── enrichment_agent.py  # Enriquecimento de descrições

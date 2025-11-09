@@ -18,6 +18,7 @@ MODELS: Final[dict[str, str]] = {
     "search_simple": "perplexity/sonar",        # Busca web simples (mesmo modelo)
     "light": "google/gemini-2.5-flash",         # QueryOptimizer, FormatAgent (10-20x mais rápido, ~90% menor custo)
     "important": "google/gemini-2.5-flash",     # Verify, Validation, Enrichment, Retry (teste de qualidade)
+    "judge": "openai/gpt-5",                    # Julgamento de qualidade de eventos (high effort)
 }
 
 # Configurações de busca
@@ -318,3 +319,9 @@ CONTINUOUS_EVENT_TYPES: Final[dict[str, str]] = {
 
 # Limitação de eventos por venue
 MAX_EVENTS_PER_VENUE: Final[int] = 25  # máximo de eventos por venue individual
+
+# Configurações de julgamento de qualidade
+JUDGE_BATCH_SIZE: Final[int] = 5  # eventos processados por batch
+JUDGE_TIMEOUT: Final[int] = 300  # timeout em segundos por batch (5 minutos)
+JUDGE_EFFORT: Final[str] = "high"  # esforço do modelo GPT-5
+JUDGE_MAX_LINK_CHARS: Final[int] = 2000  # máximo de chars do HTML do link para análise

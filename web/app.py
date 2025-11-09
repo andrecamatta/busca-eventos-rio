@@ -1,10 +1,13 @@
 """Aplicação web FastAPI para visualização de eventos em calendário."""
 
+import asyncio
 import json
 import logging
 import os
 import re
 import shutil
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -50,6 +53,20 @@ job_status = {
     "last_duration_seconds": None,
     "last_stdout": None,
     "last_stderr": None,
+}
+
+# Status do job de julgamento (rastreamento global)
+judge_status = {
+    "is_running": False,
+    "last_started": None,
+    "last_completed": None,
+    "last_result": None,  # "success", "error", ou None
+    "last_error": None,
+    "total_events": 0,
+    "judged_count": 0,
+    "current_batch": 0,
+    "total_batches": 0,
+    "average_score": 0.0,
 }
 
 
@@ -837,6 +854,215 @@ async def clear_logs():
     except Exception as e:
         logger.error(f"❌ Erro ao limpar logs: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao limpar logs: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# JULGAMENTO DE QUALIDADE DE EVENTOS (GPT-5)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def run_judge_quality():
+    """Executa julgamento de qualidade dos eventos em background thread."""
+    import sys
+    sys.path.insert(0, str(BASE_DIR))
+
+    from agents.judge_agent import QualityJudgeAgent
+
+    start_time = time.time()
+    judge_status["is_running"] = True
+    judge_status["last_started"] = datetime.now().isoformat()
+    judge_status["last_result"] = None
+    judge_status["last_error"] = None
+
+    logger.info("=" * 80)
+    logger.info("⚖️  INICIANDO JULGAMENTO DE QUALIDADE DE EVENTOS")
+    logger.info(f"📅 Horário de início: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 80)
+
+    try:
+        # Verificar API key
+        if not os.getenv("OPENROUTER_API_KEY"):
+            error_msg = "OPENROUTER_API_KEY não configurada. Julgamento cancelado."
+            logger.error(f"❌ {error_msg}")
+            judge_status["last_result"] = "error"
+            judge_status["last_error"] = error_msg
+            judge_status["is_running"] = False
+            return
+
+        # Carregar eventos
+        logger.info("📂 Carregando eventos para julgar...")
+        eventos = load_latest_events()
+
+        if not eventos:
+            error_msg = "Nenhum evento encontrado para julgar"
+            logger.warning(f"⚠️  {error_msg}")
+            judge_status["last_result"] = "error"
+            judge_status["last_error"] = error_msg
+            judge_status["is_running"] = False
+            return
+
+        judge_status["total_events"] = len(eventos)
+        logger.info(f"✓ {len(eventos)} eventos carregados")
+
+        # Criar agent
+        logger.info("🤖 Inicializando QualityJudgeAgent...")
+        judge = QualityJudgeAgent()
+
+        # Callback de progresso
+        def progress_callback(batch_num, total_batches):
+            judge_status["current_batch"] = batch_num
+            judge_status["total_batches"] = total_batches
+            judge_status["judged_count"] = min(batch_num * 5, len(eventos))
+            logger.info(
+                f"⚖️  Progresso: batch {batch_num}/{total_batches} "
+                f"({judge_status['judged_count']}/{len(eventos)} eventos)"
+            )
+
+        # Executar julgamento (assíncrono)
+        logger.info("⚖️  Iniciando julgamento...")
+
+        # Criar event loop para executar código assíncrono
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            judged_events = loop.run_until_complete(
+                judge.judge_all_events(eventos, progress_callback)
+            )
+        finally:
+            loop.close()
+
+        # Calcular estatísticas
+        scores = [e.get("quality_score", 0) for e in judged_events]
+        avg_score = sum(scores) / len(scores) if scores else 0
+        judge_status["average_score"] = round(avg_score, 2)
+
+        # Salvar eventos julgados
+        judged_file = LATEST_OUTPUT / "judged_events.json"
+        logger.info(f"💾 Salvando eventos julgados em: {judged_file}")
+
+        with open(judged_file, "w", encoding="utf-8") as f:
+            json.dump(judged_events, f, ensure_ascii=False, indent=2)
+
+        duration = time.time() - start_time
+
+        logger.info("=" * 80)
+        logger.info("✅ JULGAMENTO CONCLUÍDO COM SUCESSO!")
+        logger.info(f"⏱️  Duração: {duration:.2f}s")
+        logger.info(f"📊 Eventos julgados: {len(judged_events)}")
+        logger.info(f"⭐ Nota média: {avg_score:.2f}/10")
+        logger.info("=" * 80)
+
+        judge_status["last_result"] = "success"
+        judge_status["last_completed"] = datetime.now().isoformat()
+        judge_status["is_running"] = False
+
+    except Exception as e:
+        duration = time.time() - start_time
+        error_msg = f"Erro no julgamento: {str(e)}"
+
+        logger.error("=" * 80)
+        logger.error("❌ ERRO NO JULGAMENTO DE QUALIDADE")
+        logger.error("=" * 80)
+        logger.error(f"⏱️  Duração até erro: {duration:.2f}s")
+        logger.error(f"Erro: {e}")
+        logger.exception(e)
+
+        judge_status["last_result"] = "error"
+        judge_status["last_error"] = error_msg
+        judge_status["last_completed"] = datetime.now().isoformat()
+        judge_status["is_running"] = False
+
+
+@app.post("/api/judge")
+async def start_judge():
+    """
+    Inicia julgamento de qualidade dos eventos em background.
+
+    Returns:
+        JSON com status de início do job
+    """
+    # Verificar se já está rodando
+    if judge_status["is_running"]:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": "Julgamento já em andamento",
+                "status": judge_status
+            }
+        )
+
+    # Verificar API key
+    if not os.getenv("OPENROUTER_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="OPENROUTER_API_KEY não configurada"
+        )
+
+    # Iniciar job em background thread
+    thread = threading.Thread(target=run_judge_quality, daemon=True)
+    thread.start()
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "message": "Julgamento iniciado com sucesso",
+            "status": "started",
+            "started_at": judge_status["last_started"]
+        }
+    )
+
+
+@app.get("/api/judge/status")
+async def judge_status_endpoint():
+    """
+    Retorna status atual do julgamento.
+
+    Returns:
+        JSON com informações de progresso
+    """
+    return JSONResponse(content=judge_status)
+
+
+@app.get("/api/judge/results")
+async def judge_results():
+    """
+    Retorna eventos julgados (com notas de qualidade).
+
+    Returns:
+        JSON com lista de eventos e suas avaliações
+    """
+    try:
+        judged_file = LATEST_OUTPUT / "judged_events.json"
+
+        if not judged_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "detail": "Nenhum julgamento disponível ainda. Execute /api/judge primeiro.",
+                    "events": []
+                }
+            )
+
+        with open(judged_file, "r", encoding="utf-8") as f:
+            events = json.load(f)
+
+        # Estatísticas
+        scores = [e.get("quality_score", 0) for e in events if e.get("quality_score")]
+        stats = {
+            "total": len(events),
+            "average_score": round(sum(scores) / len(scores), 2) if scores else 0,
+            "min_score": round(min(scores), 2) if scores else 0,
+            "max_score": round(max(scores), 2) if scores else 0,
+        }
+
+        return JSONResponse(content={
+            "events": events,
+            "stats": stats
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao carregar resultados do julgamento: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

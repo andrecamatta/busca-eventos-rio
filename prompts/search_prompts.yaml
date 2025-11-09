@@ -1,0 +1,932 @@
+# ═══════════════════════════════════════════════════════════
+# PROMPTS DE BUSCA DE EVENTOS - Sistema Busca Eventos Rio
+# ═══════════════════════════════════════════════════════════
+#
+# Este arquivo centraliza todos os prompts usados pelo SearchAgent.
+# Formato: cada entrada tem campos que serão interpolados com dados dinâmicos.
+#
+# Variáveis disponíveis (injetadas em runtime):
+#   - {start_date_str}: Data início (DD/MM/YYYY)
+#   - {end_date_str}: Data fim (DD/MM/YYYY)
+#   - {month_year_str}: Mês/Ano (ex: "novembro 2025")
+#   - {month_str}: Mês curto (ex: "novembro")
+# ═══════════════════════════════════════════════════════════
+
+# Template base para todos os prompts focados
+_template_base:
+  header: |
+    Execute uma busca FOCADA e DETALHADA exclusivamente para: {categoria}
+
+    PERÍODO: {start_date_str} a {end_date_str}
+
+    🎯 FOCO EXCLUSIVO: {descricao}
+
+  fontes_comuns:
+    - Sympla (sympla.com.br), Eventbrite (eventbrite.com.br), Fever (fever.com.br)
+    - "Portais culturais: TimeOut Rio, Veja Rio, O Globo Cultura"
+    - Sites oficiais dos venues e suas redes sociais (Instagram/Facebook)
+    - Bilheterias online oficiais dos locais
+
+  campos_obrigatorios:
+    - "titulo: Nome completo do evento"
+    - "data: formato DD/MM/YYYY"
+    - "horario: formato HH:MM"
+    - "local: Nome do venue + endereço completo"
+    - "preco: valor ou 'Consultar'"
+    - "link_ingresso: URL de compra/info (ou null se não encontrado)"
+    - "descricao: resumo do evento (opcional)"
+
+# ═══════════════════════════════════════════════════════════
+# CATEGORIAS DE EVENTOS
+# ═══════════════════════════════════════════════════════════
+
+categorias:
+  jazz:
+    nome: Jazz
+    tipo_busca: categoria
+    descricao: Shows de jazz no Rio de Janeiro (jazz tradicional, bebop, fusion, bossa nova)
+
+    tipos_evento:
+      - Shows de jazz ao vivo
+      - Jazz tradicional, bebop, fusion
+      - Bossa nova, jazz contemporâneo
+      - Jazz em bares, casas de jazz especializadas
+
+    palavras_chave:
+      - "jazz Rio Janeiro {month_year_str}"
+      - "shows jazz {month_str}"
+      - "Maze Jazz Club {month_str}"
+      - "Clube do Jazz Rio {month_str}"
+      - "jazz ao vivo Rio {month_str}"
+      - "casa de jazz Rio {month_year_str}"
+
+    venues_sugeridos:
+      - Maze Jazz Club
+      - Clube do Jazz
+      - Jazz nos Fundos
+      - Casa do Choro
+      - Bares e hotéis com jazz ao vivo
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar shows de jazz no Rio de Janeiro entre {start_date_str} e {end_date_str}
+
+      OBSERVAÇÃO: Blue Note Rio é extraído via scraper direto (não buscar aqui).
+      Focar em OUTROS venues de jazz e shows de jazz em bares/hotéis.
+
+      ESTRATÉGIA DE BUSCA:
+
+      1. 🎷 CASAS DE JAZZ ESPECIALIZADAS:
+         - Maze Jazz Club
+         - Clube do Jazz
+         - Jazz nos Fundos
+         - Casa do Choro (choro e jazz)
+
+      2. 🏨 BARES E HOTÉIS COM JAZZ:
+         - Hotéis com jazz ao vivo
+         - Bares especializados em jazz
+         - Espaços culturais com programação jazz
+
+      3. 🔍 PORTAIS CULTURAIS:
+         - TimeOut Rio - categoria Jazz
+         - Veja Rio - shows de jazz
+         - Agendas culturais locais
+
+      VALIDAÇÃO:
+      - Data ENTRE {start_date_str} e {end_date_str}
+      - Horário obrigatório (padrão 20:00 se não encontrado)
+      - Links de compra/informação quando disponíveis
+      - Priorizar jazz autêntico sobre tributos
+
+  comedia:
+    nome: Comédia
+    tipo_busca: categoria
+    descricao: Stand-up e peças de comédia no Rio (exceto infantil)
+
+    tipos_evento:
+      - Stand-up comedy
+      - Shows de humor
+      - Peças de comédia (teatro adulto)
+      - Espetáculos cômicos
+
+    palavras_chave:
+      - "stand-up Rio Janeiro {month_year_str}"
+      - "comédia Rio {month_str}"
+      - "show humor Rio {month_str}"
+      - "stand up Rio {month_year_str}"
+      - "teatro comédia Rio {month_str}"
+
+    venues_sugeridos:
+      - Theatro Net Rio
+      - Teatro Riachuelo
+      - Teatro do Leblon
+      - Bares com stand-up
+      - Casas de comédia especializadas
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar shows de comédia/stand-up entre {start_date_str} e {end_date_str}
+
+      ⚠️ FILTROS CRÍTICOS:
+      - ❌ NÃO incluir eventos infantis ou "para toda família"
+      - ❌ NÃO incluir eventos LGBTQIA+ específicos
+      - ✅ APENAS comédia adulta, stand-up, peças cômicas
+
+      VALIDAÇÃO:
+      - Confirmar que NÃO é infantil/família
+      - Priorizar comediantes conhecidos com nome específico
+
+  musica_classica:
+    nome: Música Clássica
+    tipo_busca: categoria
+    descricao: Concertos de música clássica em locais alternativos (exceto venues tradicionais)
+
+    tipos_evento:
+      - Concertos em igrejas
+      - Recitais em museus e galerias
+      - Eventos especiais de orquestras
+      - Música de câmara em locais alternativos
+      - Corais e grupos de câmara
+
+    palavras_chave:
+      - "concerto igreja Rio {month_str}"
+      - "música clássica Candelária {month_year_str}"
+      - "recital museu Rio {month_str}"
+      - "OSB concerto especial {month_year_str}"
+      - "orquestra eventos Rio {month_str}"
+      - "música câmara Rio {month_str}"
+      - "concerto Igreja São Francisco {month_str}"
+      - "recital galeria Rio {month_year_str}"
+
+    venues_sugeridos:
+      - Igreja da Candelária
+      - Igreja São Francisco de Paula
+      - Museus e galerias (não IMS)
+      - Eventos especiais em locais alternativos
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Música clássica em LOCAIS ALTERNATIVOS entre {start_date_str} e {end_date_str}
+
+      ⚠️ NÃO BUSCAR (já cobertos por venues dedicados):
+      - ❌ Sala Cecília Meireles (venue dedicado com scraper)
+      - ❌ Teatro Municipal (venue dedicado)
+      - ❌ CCJF (venue dedicado)
+      - ❌ IMS (venue dedicado)
+      - ❌ Istituto Italiano (venue dedicado)
+
+      ✅ BUSCAR APENAS:
+      - Concertos em igrejas históricas (Candelária, São Francisco de Paula)
+      - Recitais em museus/galerias não tradicionais
+      - OSB/orquestras em locais especiais/alternativos
+      - Música de câmara em espaços culturais alternativos
+      - Eventos pop-up de grupos clássicos
+
+      VALIDAÇÃO:
+      - Confirmar que NÃO é nos venues tradicionais listados acima
+      - Priorizar eventos com nomes de músicos/grupos específicos
+      - Evitar duplicatas com venues dedicados
+
+  outdoor:
+    nome: Outdoor/Parques
+    tipo_busca: categoria
+    descricao: Eventos culturais ao ar livre em fim de semana (cinema, concertos, feiras nichadas)
+
+    tipos_evento:
+      - Cinema ao ar livre
+      - Concertos em parques
+      - Feiras culturais nichadas
+      - Feiras gastronômicas outdoor
+      - Feiras de artesanato em praças
+      - Shows acústicos em jardins
+      - Festivais culturais pequenos/médios
+
+    palavras_chave:
+      - "cinema ao ar livre Rio {month_str}"
+      - "cinema céu aberto Rio {month_year_str}"
+      - "concerto jardim Rio {month_str}"
+      - "concerto parque Rio {month_year_str}"
+      - "música clássica ao ar livre Rio {month_str}"
+      - "Feira Rio Antigo {month_str}"
+      - "Feira Praça XV {month_str}"
+      - "feira artesanato Jardim Botânico {month_year_str}"
+      - "feira gastronômica parque Rio {month_str}"
+      - "Quinta Boa Vista eventos {month_year_str}"
+      - "Aterro Flamengo eventos culturais {month_str}"
+      - "Parque Garota Ipanema eventos {month_str}"
+      - "show acústico jardim Rio {month_year_str}"
+
+    venues_sugeridos:
+      - Jardim Botânico (concertos, cinema ao ar livre)
+      - Quinta da Boa Vista (feiras, shows)
+      - Aterro do Flamengo (festivais, feiras)
+      - Parque Garota de Ipanema (eventos culturais)
+      - Parque Lage (cinema ao ar livre, concertos)
+      - Praça XV (Feira Praça XV)
+      - Largo da Carioca (Feira Rio Antigo)
+      - Praça Mauá (eventos culturais)
+      - Jardins de museus e centros culturais
+
+    fontes_prioritarias:
+      - Riotur (visit.rio/agenda)
+      - Bafafá Rio (bafafa.com.br)
+      - TimeOut Rio
+      - Veja Rio - seção Fim de Semana
+      - Agendas culturais da Prefeitura
+      - Instagram dos parques (@parquelage, @jardimbotanicorj)
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Eventos culturais ESPECÍFICOS ao ar livre em SÁBADO/DOMINGO entre {start_date_str} e {end_date_str}
+
+      ✅ BUSCAR PRIORITARIAMENTE:
+
+      1. 🎬 CINEMA AO AR LIVRE:
+         - "cinema ao ar livre Rio {month_str}"
+         - "cinema céu aberto {month_year_str}"
+         - Jardim Botânico, Parque Lage, Aterro
+         - Sessões gratuitas ou pagas
+
+      2. 🎵 CONCERTOS EM PARQUES:
+         - "concerto Jardim Botânico {month_str}"
+         - "música clássica ao ar livre Rio"
+         - "concerto parque Rio {month_str}"
+         - Música clássica, jazz, MPB autoral
+
+      3. 🛍️ FEIRAS CULTURAIS NICHADAS:
+         - **Feira do Rio Antigo** (Largo da Carioca - 1º sábado)
+         - **Feira da Praça XV** (sábados e domingos)
+         - Feiras de artesanato em parques
+         - Feiras gastronômicas pequenas/médias
+         - Feiras de design e arte
+
+      4. 🌳 EVENTOS EM LOCAIS ESPECÍFICOS:
+         - Jardim Botânico: concertos, cinema, feiras
+         - Quinta da Boa Vista: eventos culturais
+         - Aterro do Flamengo: festivais médios
+         - Parque Garota de Ipanema: eventos culturais
+         - Parque Lage: cinema ao ar livre, shows
+
+      ⚠️ EXCLUSÕES CRÍTICAS - NÃO BUSCAR:
+      - ❌ Samba, pagode, roda de samba, axé, forró
+      - ❌ Shows mainstream (Ivete Sangalo, Thiaguinho, etc)
+      - ❌ Mega shows, turnês nacionais
+      - ❌ Eventos em estádios/arenas
+      - ❌ Corridas, maratonas, eventos esportivos
+      - ❌ Eventos genéricos "para toda família"
+
+      📍 FONTES ESPECIALIZADAS:
+      - Riotur: site:visit.rio agenda eventos {month_str}
+      - Bafafá: site:bafafa.com.br eventos rio {month_str}
+      - TimeOut: site:timeout.com/rio-de-janeiro fim-de-semana
+      - Parques: Instagram @parquelage, @jardimbotanicorj
+
+      VALIDAÇÃO:
+      - Confirmar que é SÁBADO ou DOMINGO
+      - Confirmar que é evento CULTURAL (não esportivo/comercial)
+      - Priorizar eventos com ARTISTAS/TEMA específico (não genérico)
+
+  cinema:
+    nome: Cinema
+    tipo_busca: categoria
+    descricao: Mostras de cinema, cineclubes e sessões especiais
+
+    tipos_evento:
+      - Mostras de cinema
+      - Cineclubes
+      - Sessões especiais
+      - Festivais de cinema
+
+    palavras_chave:
+      - "mostra cinema Rio {month_year_str}"
+      - "cineclube Rio {month_str}"
+      - "festival cinema Rio {month_str}"
+      - "sessão especial cinema Rio"
+
+    venues_sugeridos:
+      - MAM Cinema
+      - CCBB Cinema
+      - Estação Net (Botafogo/Ipanema)
+      - IMS
+      - Cinemas de arte
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Mostras/festivais de cinema entre {start_date_str} e {end_date_str}
+
+      ⚠️ NÃO incluir:
+      - ❌ Filmes comerciais em cartaz normal
+      - ❌ Sessões infantis
+      - ❌ Apenas focar em MOSTRAS, FESTIVAIS, EVENTOS especiais
+
+  feira_gastronomica:
+    nome: Feira Gastronômica
+    tipo_busca: categoria
+    descricao: Feiras gastronômicas e food festivals em fim de semana
+
+    tipos_evento:
+      - Feiras gastronômicas
+      - Food festivals
+      - Mercados gastronômicos
+      - Eventos de gastronomia
+
+    palavras_chave:
+      - "feira gastronômica Rio {month_str}"
+      - "food festival Rio {month_year_str}"
+      - "mercado gastronômico Rio sábado"
+      - "feira comida Rio fim de semana"
+
+    venues_sugeridos:
+      - Parques e praças
+      - Espaços culturais
+      - Galpões e mercados
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Feiras gastronômicas SÁBADO/DOMINGO
+
+  feira_artesanato:
+    nome: Feira de Artesanato
+    tipo_busca: categoria
+    descricao: Feiras de artesanato, arte e design em fim de semana
+
+    tipos_evento:
+      - Feiras de artesanato
+      - Feiras de arte
+      - Feiras culturais
+      - Feiras de design
+
+    palavras_chave:
+      - "feira artesanato Rio {month_str}"
+      - "feira arte Rio sábado domingo"
+      - "feira cultural Rio {month_year_str}"
+      - "feira design Rio fim de semana"
+
+    venues_sugeridos:
+      - Parques e praças
+      - Centros culturais
+      - Espaços de arte
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Feiras de artesanato/arte SÁBADO/DOMINGO
+
+# ═══════════════════════════════════════════════════════════
+# VENUES ESPECÍFICOS
+# ═══════════════════════════════════════════════════════════
+
+venues:
+  casa_choro:
+    nome: Casa do Choro
+    tipo_busca: venue
+    descricao: Programação da Casa do Choro (choro, samba, música brasileira)
+    endereco: "Rua da Carioca, 38, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Shows de choro
+      - Rodas de choro
+      - Samba e música brasileira
+      - Workshops e cursos de música
+
+    palavras_chave:
+      - "Casa do Choro {month_year_str}"
+      - "Casa do Choro programação {month_str}"
+      - "shows Casa Choro Rio"
+
+    fontes_prioritarias:
+      - https://casadochoro.com.br/agenda/
+      - Instagram @casadochorooficial
+      - Facebook Casa do Choro
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Programação oficial da Casa do Choro
+
+      ENDEREÇO CORRETO: Rua da Carioca, 38, Centro, Rio de Janeiro
+
+      ⚠️ VALIDAÇÃO ESTRITA:
+      - Confirmar que é EXATAMENTE neste endereço
+      - Não confundir com outros locais de choro
+      - Priorizar site oficial e redes sociais oficiais
+
+  sala_cecilia:
+    nome: Sala Cecília Meireles
+    tipo_busca: venue
+    descricao: Programação da Sala Cecília Meireles (música clássica, erudita, coral)
+    endereco: "Largo da Lapa, 47, Lapa, Rio de Janeiro"
+
+    tipos_evento:
+      - Concertos de música clássica
+      - Recitais
+      - Apresentações de orquestra
+      - Música de câmara
+
+    palavras_chave:
+      - "Sala Cecília Meireles {month_year_str}"
+      - "Cecília Meireles programação {month_str}"
+      - "concertos Sala Cecília"
+
+    fontes_prioritarias:
+      - https://www.salaceliciameireles.com.br/
+      - https://salaceciliameireles.rj.gov.br/programacao/
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Concertos e recitais na Sala Cecília Meireles
+
+      OBSERVAÇÃO: Scraper customizado também extrai eventos deste venue.
+      Buscar informações complementares e validar dados do scraper.
+
+      ENDEREÇO CORRETO: Largo da Lapa, 47, Lapa, Rio de Janeiro
+
+  teatro_municipal:
+    nome: Teatro Municipal do Rio de Janeiro
+    tipo_busca: venue
+    descricao: Programação do Teatro Municipal (ópera, balé, concertos, teatro clássico)
+    endereco: "Praça Floriano, s/n, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Óperas
+      - Balés clássicos
+      - Concertos sinfônicos
+      - Teatro clássico
+
+    palavras_chave:
+      - "Teatro Municipal Rio {month_year_str}"
+      - "Theatro Municipal programação {month_str}"
+      - "ópera Teatro Municipal"
+      - "balé Teatro Municipal"
+
+    fontes_prioritarias:
+      - https://theatromunicipal.rj.gov.br/
+      - Bilheteria oficial do Teatro Municipal
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Programação oficial do Teatro Municipal
+
+      ENDEREÇO: Praça Floriano (Cinelândia), Centro
+
+  artemis:
+    nome: Artemis - Torrefação Artesanal e Cafeteria
+    tipo_busca: venue
+    descricao: Eventos e cursos de café na Artemis Torrefação
+    endereco: "Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro"
+
+    tipos_evento:
+      - Cursos de barista
+      - Workshops de café
+      - Degustações de café
+      - Eventos sobre café especializado
+
+    palavras_chave:
+      - "Artemis Torrefação {month_year_str}"
+      - "Artemis café curso {month_str}"
+      - "workshop café Artemis Rio"
+      - "Conde de Bonfim café"
+
+    fontes_prioritarias:
+      - Instagram @artemistorrefacao
+      - Site oficial Artemis
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Cursos e eventos de café especializado
+
+      ENDEREÇO: Rua Conde de Bonfim, 751, Tijuca
+
+  ccbb:
+    nome: CCBB Rio - Centro Cultural Banco do Brasil
+    tipo_busca: venue
+    descricao: Programação do CCBB (exposições, teatro, cinema, shows)
+    endereco: "Rua Primeiro de Março, 66, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Exposições de arte
+      - Teatro
+      - Cinema (mostras e festivais)
+      - Shows musicais
+      - Eventos culturais
+
+    palavras_chave:
+      - "CCBB Rio {month_year_str}"
+      - "Centro Cultural Banco Brasil {month_str}"
+      - "exposição CCBB"
+      - "programação CCBB Rio"
+
+    fontes_prioritarias:
+      - https://ccbb.com.br/rio-de-janeiro/programacao/
+      - https://ccbbeducativo.com/
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Programação completa do CCBB Rio
+
+      OBSERVAÇÃO: Scraper customizado também extrai eventos.
+      Buscar informações complementares.
+
+      ⚠️ ATENÇÃO:
+      - Filtrar eventos infantis
+      - Filtrar eventos LGBTQIA+
+      - Filtrar rodas de conversa/debates
+
+  oi_futuro:
+    nome: Oi Futuro
+    tipo_busca: venue
+    descricao: Eventos culturais e tecnológicos no Oi Futuro (Ipanema e Flamengo)
+    endereco: "Rua Dois de Dezembro, 63, Ipanema/Flamengo, Rio de Janeiro"
+
+    tipos_evento:
+      - Exposições de arte e tecnologia
+      - Instalações interativas
+      - Shows e performances
+      - Oficinas e workshops
+      - Cinema e videoarte
+
+    palavras_chave:
+      - "Oi Futuro programação {month_year_str}"
+      - "site:oifuturo.org.br agenda {month_str}"
+      - "Oi Futuro Ipanema {month_str}"
+      - "Oi Futuro Flamengo {month_str}"
+      - "exposição Oi Futuro {month_year_str}"
+
+    fontes_prioritarias:
+      - Site oficial oifuturo.org.br
+      - Sympla
+      - Eventbrite
+
+    instrucoes_especiais: |
+      ESTRATÉGIA DE BUSCA:
+      1. Site oficial: "site:oifuturo.org.br programacao {month_str}"
+      2. Busca geral: "Oi Futuro eventos {month_year_str}"
+      3. Plataformas: Sympla, Eventbrite
+
+      NOTA: Oi Futuro tem 2 unidades (Ipanema e Flamengo) - identificar qual!
+      ✅ Eventos gratuitos e pagos
+
+  ims:
+    nome: IMS - Instituto Moreira Salles
+    tipo_busca: venue
+    descricao: Eventos culturais no IMS Rio (fotografia, música, cinema, literatura)
+    endereco: "Rua Marquês de São Vicente, 476, Gávea, Rio de Janeiro"
+
+    tipos_evento:
+      - Exposições de fotografia
+      - Concertos e shows
+      - Sessões de cinema
+      - Palestras e debates
+      - Lançamentos de livros
+
+    palavras_chave:
+      - "IMS Rio programação {month_year_str}"
+      - "Instituto Moreira Salles agenda {month_str}"
+      - "site:ims.com.br Rio {month_str}"
+      - "exposição IMS Rio {month_year_str}"
+      - "concerto IMS {month_str}"
+
+    fontes_prioritarias:
+      - https://ims.com.br/
+      - Sympla
+
+    instrucoes_especiais: |
+      ESTRATÉGIA DE BUSCA:
+      1. Site oficial IMS: "site:ims.com.br rio programacao {month_str}"
+      2. Busca por tipo: "exposição fotografia IMS Rio", "concerto IMS"
+      3. Plataformas: Sympla (eventos pagos)
+
+      FOCO: Eventos culturais de qualidade (fotografia, música erudita, cinema de arte)
+      ✅ Muitos eventos gratuitos
+
+  parque_lage:
+    nome: Parque Lage
+    tipo_busca: venue
+    descricao: Eventos culturais e artísticos no Parque Lage (EAV - Escola de Artes Visuais)
+    endereco: "Rua Jardim Botânico, 414, Jardim Botânico, Rio de Janeiro"
+
+    tipos_evento:
+      - Exposições de arte contemporânea
+      - Performances e intervenções
+      - Concertos ao ar livre
+      - Workshops e oficinas de arte
+      - Eventos de moda e design
+
+    palavras_chave:
+      - "Parque Lage eventos {month_year_str}"
+      - "EAV Parque Lage programação {month_str}"
+      - "site:eavparquelage.rj.gov.br {month_str}"
+      - "exposição Parque Lage {month_year_str}"
+      - "concerto Parque Lage {month_str}"
+
+    fontes_prioritarias:
+      - https://eavparquelage.rj.gov.br/
+      - Instagram @eavparquelage
+      - Sympla
+      - Eventbrite
+
+    instrucoes_especiais: |
+      ESTRATÉGIA DE BUSCA:
+      1. Site oficial EAV: "site:eavparquelage.rj.gov.br programacao {month_str}"
+      2. Busca geral: "Parque Lage eventos {month_year_str}"
+      3. Plataformas: Sympla, Eventbrite
+      4. Redes sociais: @eavparquelage Instagram
+
+      FOCO: Arte contemporânea, performances, eventos ao ar livre no jardim histórico
+      ✅ Eventos gratuitos e pagos
+
+  ccjf:
+    nome: CCJF - Centro Cultural Justiça Federal
+    tipo_busca: venue
+    descricao: Eventos culturais no CCJF (Centro - exposições, música, teatro)
+    endereco: "Av. Rio Branco, 241, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Exposições de arte
+      - Concertos de música clássica
+      - Espetáculos teatrais
+      - Palestras e debates
+      - Cinema
+
+    palavras_chave:
+      - "CCJF Rio programação {month_year_str}"
+      - "Centro Cultural Justiça Federal {month_str}"
+      - "site:ccjf.trf2.jus.br programacao {month_str}"
+      - "exposição CCJF {month_year_str}"
+      - "concerto CCJF Rio {month_str}"
+
+    fontes_prioritarias:
+      - https://ccjf.trf2.jus.br/
+      - Sympla
+
+    instrucoes_especiais: |
+      ESTRATÉGIA DE BUSCA:
+      1. Site oficial: "site:ccjf.trf2.jus.br programacao {month_str}"
+      2. Busca geral: "CCJF Rio eventos {month_year_str}"
+      3. Plataformas: Sympla (eventos específicos)
+
+      FOCO: Programação cultural variada (arte, música, teatro)
+      ✅ Maioria dos eventos gratuitos
+
+  mam_cinema:
+    nome: MAM Cinema
+    tipo_busca: venue
+    descricao: Cinema curado do Museu de Arte Moderna - sessões e retrospectivas
+    endereco: "Av. Infante Dom Henrique, 85, Parque do Flamengo, Rio de Janeiro"
+
+    tipos_evento:
+      - Sessões de cinema de arte
+      - Retrospectivas cinematográficas
+      - Cineclubes
+      - Filmes clássicos e contemporâneos
+
+    palavras_chave:
+      - "MAM Cinema Rio programação {month_year_str}"
+      - "Cinema MAM agenda {month_str}"
+      - "site:mam.rio sessões {month_str}"
+      - "cineclube MAM Rio {month_year_str}"
+
+    fontes_prioritarias:
+      - https://mam.rio/
+
+    instrucoes_especiais: |
+      ESTRATÉGIA:
+      1. Site MAM: "site:mam.rio cinema programacao {month_str}"
+      2. Cinema curado, retrospectivas, sessões especiais
+      3. Preços acessíveis, muitas sessões gratuitas
+
+  theatro_net:
+    nome: Theatro Net Rio
+    tipo_busca: venue
+    descricao: Teatro comercial - musicais, comédias, dramas
+    endereco: "Rua Siqueira Campos, 143, Copacabana, Rio de Janeiro"
+
+    tipos_evento:
+      - Musicais
+      - Comédias teatrais
+      - Dramas
+      - Espetáculos teatrais
+
+    palavras_chave:
+      - "Theatro Net Rio programação {month_year_str}"
+      - "site:theatronetrio.com.br em-cartaz {month_str}"
+      - "musical Theatro Net {month_year_str}"
+      - "site:ingresso.com Theatro Net Rio {month_str}"
+
+    fontes_prioritarias:
+      - https://theatronetrio.com.br/
+      - https://ingresso.com/
+
+    instrucoes_especiais: |
+      ESTRATÉGIA:
+      1. Site oficial: "site:theatronetrio.com.br em-cartaz"
+      2. Ingresso.com: "site:ingresso.com Theatro Net Rio"
+      3. FOCO: Musicais e espetáculos de longa temporada
+
+  ccbb_teatro_cinema:
+    nome: CCBB Teatro e Cinema
+    tipo_busca: venue
+    descricao: Programação de teatro e cinema do CCBB (além de exposições)
+    endereco: "Rua Primeiro de Março, 66, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Espetáculos teatrais
+      - Sessões de cinema
+      - Peças de teatro
+      - Filmes e documentários
+
+    palavras_chave:
+      - "CCBB Rio teatro programação {month_year_str}"
+      - "CCBB Rio cinema {month_str}"
+      - "site:bb.com.br/cultura ccbbrj teatro {month_str}"
+      - "site:ingressos.ccbb.com.br teatro {month_str}"
+
+    fontes_prioritarias:
+      - https://bb.com.br/cultura/
+      - https://ingressos.ccbb.com.br/
+
+    instrucoes_especiais: |
+      ESTRATÉGIA:
+      1. Site CCBB: "site:bb.com.br/cultura ccbbrj programacao teatro cinema"
+      2. Sistema de ingressos: "site:ingressos.ccbb.com.br"
+      3. FOCO: Teatro e cinema (exposições já cobertas)
+      ✅ Muitos eventos gratuitos
+
+  istituto_italiano:
+    nome: Istituto Italiano di Cultura
+    tipo_busca: venue
+    descricao: Eventos culturais italianos (cinema, música, exposições, palestras)
+    endereco: "Av. Presidente Antônio Carlos, 40, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Cinema italiano
+      - Concertos de música italiana
+      - Exposições de arte italiana
+      - Palestras e debates culturais
+      - Cursos de língua e cultura
+
+    palavras_chave:
+      - "Istituto Italiano di Cultura Rio {month_year_str}"
+      - "Instituto Italiano Rio programação {month_str}"
+      - "site:iicrio.esteri.it eventi {month_str}"
+      - "cinema italiano Rio {month_year_str}"
+      - "cultura italiana Rio {month_str}"
+
+    fontes_prioritarias:
+      - https://iicrio.esteri.it/
+      - Instagram @iicrio
+      - Facebook Istituto Italiano di Cultura Rio
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Programação cultural italiana no Rio
+
+      ESTRATÉGIA DE BUSCA:
+      1. Site oficial: "site:iicrio.esteri.it programacao {month_str}"
+      2. Busca geral: "Istituto Italiano Rio eventos {month_year_str}"
+      3. Redes sociais: @iicrio Instagram/Facebook
+      4. Plataformas: Sympla, Eventbrite
+
+      FOCO:
+      - Cinema italiano (mostras, festivais)
+      - Música clássica e contemporânea italiana
+      - Exposições de arte
+      - Palestras culturais
+      ✅ Muitos eventos gratuitos
+
+  maze_jazz:
+    nome: Maze Jazz Club
+    tipo_busca: venue
+    descricao: Casa de jazz especializada - shows de jazz ao vivo
+    endereco: "Rua Barão de Iguatemi, 388, Praça da Bandeira, Rio de Janeiro"
+
+    tipos_evento:
+      - Shows de jazz ao vivo
+      - Jazz tradicional e contemporâneo
+      - Bebop, fusion, jazz brasileiro
+      - Jams sessions
+
+    palavras_chave:
+      - "Maze Jazz Club {month_year_str}"
+      - "Maze Jazz Rio programação {month_str}"
+      - "shows Maze Jazz {month_str}"
+      - "jazz Praça da Bandeira {month_year_str}"
+
+    fontes_prioritarias:
+      - Instagram @mazejazzclub
+      - Facebook Maze Jazz Club
+      - Sympla
+      - Eventbrite
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Shows de jazz no Maze Jazz Club
+
+      ENDEREÇO CORRETO: Rua Barão de Iguatemi, 388, Praça da Bandeira
+
+      ESTRATÉGIA:
+      1. Instagram: @mazejazzclub (programação semanal)
+      2. Facebook: Maze Jazz Club
+      3. Plataformas: Sympla, Eventbrite
+      4. Busca geral: "Maze Jazz Club shows {month_str}"
+
+      FOCO: Jazz autêntico, músicos de qualidade
+      ✅ Venue especializado em jazz
+
+  teatro_leblon:
+    nome: Teatro do Leblon
+    tipo_busca: venue
+    descricao: Teatro comercial - comédias, musicais, dramas
+    endereco: "Rua Conde Bernadotte, 26, Leblon, Rio de Janeiro"
+
+    tipos_evento:
+      - Comédias teatrais
+      - Stand-up comedy
+      - Musicais
+      - Dramas
+      - Espetáculos teatrais
+
+    palavras_chave:
+      - "Teatro Leblon programação {month_year_str}"
+      - "Teatro do Leblon em cartaz {month_str}"
+      - "site:teatroleblon.com.br {month_str}"
+      - "comédia Teatro Leblon {month_year_str}"
+
+    fontes_prioritarias:
+      - https://teatroleblon.com.br/
+      - https://ingresso.com/
+      - Sympla
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Programação do Teatro do Leblon
+
+      ENDEREÇO: Rua Conde Bernadotte, 26, Leblon
+
+      ESTRATÉGIA:
+      1. Site oficial: "site:teatroleblon.com.br programacao"
+      2. Ingresso.com: "site:ingresso.com Teatro Leblon"
+      3. Busca geral: "Teatro Leblon em cartaz {month_str}"
+
+      FOCO: Comédias, stand-up, musicais comerciais
+      ⚠️ Filtrar eventos infantis
+
+  clube_jazz_rival:
+    nome: Clube do Jazz / Teatro Rival
+    tipo_busca: venue
+    descricao: Shows de jazz no Teatro Rival (Clube do Jazz e outras programações)
+    endereco: "Rua Álvaro Alvim, 33, Cinelândia, Centro, Rio de Janeiro"
+
+    tipos_evento:
+      - Shows de jazz
+      - Música brasileira
+      - MPB e samba jazz
+      - Espetáculos teatrais
+
+    palavras_chave:
+      - "Clube do Jazz Rio {month_year_str}"
+      - "Teatro Rival programação {month_str}"
+      - "Clube Jazz Rival {month_str}"
+      - "jazz Teatro Rival {month_year_str}"
+      - "Cinelândia jazz {month_str}"
+
+    fontes_prioritarias:
+      - Instagram @clubedojazzrj
+      - Instagram @teatrorival
+      - Sympla
+      - Eventbrite
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Shows de jazz no Teatro Rival (Clube do Jazz)
+
+      ENDEREÇO: Rua Álvaro Alvim, 33, Cinelândia, Centro
+
+      ESTRATÉGIA:
+      1. Instagram: @clubedojazzrj, @teatrorival
+      2. Plataformas: Sympla, Eventbrite
+      3. Busca: "Clube do Jazz Teatro Rival {month_str}"
+
+      NOTA: O Clube do Jazz realiza eventos no Teatro Rival
+      FOCO: Jazz e música brasileira de qualidade
+
+  estacao_net:
+    nome: Estação Net (Ipanema e Botafogo)
+    tipo_busca: venue
+    descricao: Cinema de arte - mostras, festivais e sessões especiais (2 unidades)
+    endereco: "Rua Voluntários da Pátria, 88, Botafogo / Rua Visconde de Pirajá, 605, Ipanema"
+
+    tipos_evento:
+      - Mostras de cinema
+      - Festivais de cinema
+      - Sessões especiais
+      - Cinema de arte
+      - Documentários
+
+    palavras_chave:
+      - "Estação Net programação {month_year_str}"
+      - "Estação Net Ipanema {month_str}"
+      - "Estação Net Botafogo {month_str}"
+      - "cinema Estação Net {month_year_str}"
+      - "mostra Estação Net {month_str}"
+
+    fontes_prioritarias:
+      - https://www.estacaonet.com.br/
+      - Ingresso.com
+
+    instrucoes_especiais: |
+      🎯 BUSCAR: Mostras e festivais de cinema na Estação Net
+
+      UNIDADES:
+      - Botafogo: Rua Voluntários da Pátria, 88
+      - Ipanema: Rua Visconde de Pirajá, 605
+
+      ESTRATÉGIA:
+      1. Site oficial: "site:estacaonet.com.br programacao {month_str}"
+      2. Ingresso.com: "site:ingresso.com Estacao Net"
+      3. Busca: "Estacao Net mostras {month_str}"
+
+      FOCO: Cinema de arte, mostras, festivais
+      ⚠️ Identificar qual unidade (Ipanema ou Botafogo)
