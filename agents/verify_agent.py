@@ -127,6 +127,365 @@ class VerifyAgent:
 
         return False
 
+    def _find_consensus(self, links: list[str], event: dict) -> dict[str, Any] | None:
+        """Encontra consenso entre múltiplos links retornados por diferentes buscas.
+
+        Args:
+            links: Lista de links encontrados (pode conter duplicatas e None)
+            event: Dados do evento (para logging)
+
+        Returns:
+            dict com link consensual e metadados, ou None se não houver consenso
+        """
+        from collections import Counter
+        from config import LINK_CONSENSUS_THRESHOLD, LINK_CONSENSUS_USE_GPT5_TIEBREAKER
+
+        titulo = event.get("titulo", "")
+
+        # Filtrar links válidos (remover None, vazios, "NONE")
+        valid_links = [
+            link.strip()
+            for link in links
+            if link and isinstance(link, str) and link.strip() and link.strip().upper() != "NONE"
+        ]
+
+        if not valid_links:
+            logger.warning(f"{self.log_prefix} Nenhum link válido para consenso: {titulo}")
+            return None
+
+        # Normalizar URLs (remover trailing slashes, query params opcionais)
+        def normalize_url(url: str) -> str:
+            """Normaliza URL para comparação (mantém path e domínio)."""
+            # Remove trailing slash
+            normalized = url.rstrip('/')
+            # Remove fragmentos (#)
+            normalized = normalized.split('#')[0]
+            return normalized
+
+        normalized_links = [normalize_url(link) for link in valid_links]
+
+        # Contar ocorrências
+        link_counts = Counter(normalized_links)
+        total_searches = len(links)  # Total de buscas (incluindo falhas)
+        threshold = LINK_CONSENSUS_THRESHOLD
+
+        logger.info(f"{self.log_prefix} Consenso de links para '{titulo}':")
+        logger.info(f"{self.log_prefix}   Total de buscas: {total_searches}")
+        logger.info(f"{self.log_prefix}   Links válidos: {len(valid_links)}")
+        logger.info(f"{self.log_prefix}   Links únicos: {len(link_counts)}")
+
+        # Encontrar link com maior frequência
+        most_common_link, count = link_counts.most_common(1)[0]
+        consensus_ratio = count / total_searches
+
+        logger.info(f"{self.log_prefix}   Link mais comum: {most_common_link}")
+        logger.info(f"{self.log_prefix}   Aparições: {count}/{total_searches} ({consensus_ratio:.1%})")
+
+        # Verificar se atingiu threshold
+        if consensus_ratio >= threshold:
+            logger.info(f"{self.log_prefix} ✅ CONSENSO ATINGIDO ({consensus_ratio:.1%} >= {threshold:.1%})")
+            return {
+                "link": most_common_link,
+                "consensus_ratio": consensus_ratio,
+                "votes": count,
+                "total_votes": total_searches,
+                "method": "majority_vote",
+            }
+
+        # EMPATE ou consenso insuficiente
+        logger.warning(f"{self.log_prefix} ⚠️ CONSENSO INSUFICIENTE ({consensus_ratio:.1%} < {threshold:.1%})")
+
+        # Se habilitado, usar GPT-5 Mini como tiebreaker
+        if LINK_CONSENSUS_USE_GPT5_TIEBREAKER and len(link_counts) > 1:
+            logger.info(f"{self.log_prefix} Usando GPT-5 Mini como desempate...")
+            tiebreaker_link = self._tiebreaker_with_gpt5(list(link_counts.keys()), event)
+            if tiebreaker_link:
+                logger.info(f"{self.log_prefix} ✅ DESEMPATE GPT-5: {tiebreaker_link}")
+                return {
+                    "link": tiebreaker_link,
+                    "consensus_ratio": 0.0,  # Não teve consenso por voto
+                    "votes": 0,
+                    "total_votes": total_searches,
+                    "method": "gpt5_tiebreaker",
+                    "tiebreaker_candidates": list(link_counts.keys()),
+                }
+
+        # Sem consenso e sem desempate
+        logger.warning(f"{self.log_prefix} ❌ Falha no consenso para: {titulo}")
+        return None
+
+    def _tiebreaker_with_gpt5(self, candidate_links: list[str], event: dict) -> str | None:
+        """Usa GPT-5 Mini com web search para escolher o melhor link em caso de empate.
+
+        Args:
+            candidate_links: Links candidatos (2 ou mais)
+            event: Dados do evento
+
+        Returns:
+            URL escolhido pelo GPT-5 Mini, ou None se falhar
+        """
+        from phidata.agent import Agent
+        from phidata.models.openai import OpenAIChat
+        from config import MODELS, OPENROUTER_API_KEY, OPENROUTER_BASE_URL
+
+        titulo = event.get("titulo", "")
+        data = event.get("data", "")
+        local = event.get("local", "")
+
+        logger.info(f"{self.log_prefix} GPT-5 Mini: escolhendo entre {len(candidate_links)} links candidatos")
+
+        # Criar agente GPT-5 Mini com web search
+        tiebreaker_agent = Agent(
+            name="Link Tiebreaker Agent",
+            model=OpenAIChat(
+                id=MODELS["link_consensus"],  # openai/gpt-5-mini:online
+                api_key=OPENROUTER_API_KEY,
+                base_url=OPENROUTER_BASE_URL,
+            ),
+            description="Agente especializado em escolher o melhor link entre candidatos",
+            instructions=[
+                "Usar web search para verificar qual link é mais confiável",
+                "Priorizar links de plataformas oficiais (Sympla, Eventbrite, etc)",
+                "Verificar se o link realmente corresponde ao evento específico",
+                "Retornar APENAS o URL escolhido (nada mais)",
+            ],
+        )
+
+        # Formatar links candidatos
+        links_formatted = "\n".join([f"  {i+1}. {link}" for i, link in enumerate(candidate_links)])
+
+        prompt = f"""Escolha o MELHOR link para este evento entre os candidatos abaixo.
+
+EVENTO:
+- Título: {titulo}
+- Data: {data}
+- Local: {local}
+
+LINKS CANDIDATOS (escolha apenas 1):
+{links_formatted}
+
+CRITÉRIOS DE ESCOLHA:
+1. Link de plataforma oficial de venda (Sympla, Eventbrite, etc) > site do venue > outros
+2. Link que realmente corresponde ao evento específico (não genérico)
+3. Link ativo e acessível (verificar com web search se possível)
+
+RETORNE APENAS:
+- O URL completo do link escolhido (copie exatamente como está acima)
+- NÃO adicione explicações ou justificativas"""
+
+        try:
+            response = tiebreaker_agent.run(prompt)
+            chosen_link = response.content.strip()
+
+            # Validar que é um dos candidatos
+            normalized_chosen = chosen_link.rstrip('/').split('#')[0]
+            for candidate in candidate_links:
+                normalized_candidate = candidate.rstrip('/').split('#')[0]
+                if normalized_chosen == normalized_candidate:
+                    logger.info(f"{self.log_prefix} GPT-5 Mini escolheu: {candidate}")
+                    return candidate
+
+            logger.warning(f"{self.log_prefix} GPT-5 Mini retornou link inválido: {chosen_link}")
+            return None
+
+        except Exception as e:
+            logger.error(f"{self.log_prefix} Erro no tiebreaker GPT-5: {e}")
+            return None
+
+    async def _search_with_variants(self, event: dict, variant_suffix: str = "") -> str | None:
+        """Executa busca com Perplexity com pequenas variações para diversificar resultados.
+
+        Args:
+            event: Dados do evento
+            variant_suffix: Sufixo para adicionar variação na busca (ex: "sympla", "eventbrite")
+
+        Returns:
+            URL encontrado ou None
+        """
+        from phidata.agent import Agent
+        from phidata.models.openai import OpenAIChat
+        from config import MODELS, OPENROUTER_API_KEY, OPENROUTER_BASE_URL
+
+        titulo = event.get("titulo", "") or event.get("nome", "")
+        data = event.get("data", "")
+        local = event.get("local", "")
+
+        # Criar agente de busca com Perplexity
+        search_agent = Agent(
+            name="Link Search Agent",
+            model=OpenAIChat(
+                id=MODELS["search"],  # perplexity/sonar
+                api_key=OPENROUTER_API_KEY,
+                base_url=OPENROUTER_BASE_URL,
+            ),
+            description="Agente especializado em encontrar links oficiais de eventos",
+            instructions=[
+                "Buscar apenas links OFICIAIS de venda/informações",
+                "Priorizar Sympla, Eventbrite, Ticketmaster, site do venue",
+                "NÃO retornar links genéricos de homepage",
+                "Retornar APENAS o URL ou 'NONE' se não encontrar",
+            ],
+        )
+
+        # Adicionar variação à busca se especificada
+        platform_hint = f"\nPRIORIDADE: Buscar preferencialmente em {variant_suffix}" if variant_suffix else ""
+
+        prompt = f"""Encontre o link OFICIAL de compra/venda de ingresso para este evento:
+
+EVENTO:
+- Título: {titulo}
+- Data: {data}
+- Local: {local}{platform_hint}
+
+⚠️ REGRAS:
+1. NÃO retorne homepages ou páginas de listagem
+2. Link DEVE ser específico do evento (com ID/slug único)
+3. Retorne APENAS o URL completo ou "NONE"
+
+RETORNE APENAS:
+- O URL completo (https://...) OU
+- A palavra "NONE" (se não encontrar)"""
+
+        try:
+            response = search_agent.run(prompt)
+            link = response.content.strip()
+
+            if link and link != "NONE" and link.startswith("http"):
+                logger.info(f"{self.log_prefix} Busca{f' ({variant_suffix})' if variant_suffix else ''}: {link}")
+                return link
+            else:
+                logger.warning(f"{self.log_prefix} Busca{f' ({variant_suffix})' if variant_suffix else ''}: NONE")
+                return None
+
+        except Exception as e:
+            logger.error(f"{self.log_prefix} Erro na busca com variante: {e}")
+            return None
+
+    async def _intelligent_link_search_with_consensus(self, event: dict, attempt: int = 1) -> dict[str, Any]:
+        """Versão com consenso multi-modelo do _intelligent_link_search().
+
+        Executa múltiplas buscas independentes e usa consenso para reduzir alucinações.
+
+        Returns:
+            dict com: link (str), quality_score (int), validation (dict), consensus_info (dict)
+        """
+        from config import (
+            LINK_CONSENSUS_ENABLED,
+            LINK_CONSENSUS_SEARCHES,
+            LINK_MAX_INTELLIGENT_SEARCHES,
+            LINK_QUALITY_THRESHOLD,
+        )
+
+        titulo = event.get("titulo", "") or event.get("nome", "")
+
+        # Se consenso desabilitado, usar método tradicional
+        if not LINK_CONSENSUS_ENABLED:
+            return await self._intelligent_link_search(event, attempt)
+
+        if attempt > LINK_MAX_INTELLIGENT_SEARCHES:
+            logger.warning(f"{self.log_prefix} Limite de {LINK_MAX_INTELLIGENT_SEARCHES} tentativas atingido: {titulo}")
+            return None
+
+        logger.info(f"{self.log_prefix} Busca com consenso (tentativa {attempt}/{LINK_MAX_INTELLIGENT_SEARCHES}): {titulo}")
+
+        # Executar múltiplas buscas independentes em paralelo
+        search_tasks = []
+
+        # Primeira busca sem variação
+        search_tasks.append(self._search_with_variants(event, ""))
+
+        # Demais buscas com hints de plataforma (para diversificar)
+        platform_variants = ["sympla", "eventbrite", "site oficial"]
+        for i in range(1, LINK_CONSENSUS_SEARCHES):
+            variant = platform_variants[i % len(platform_variants)]
+            search_tasks.append(self._search_with_variants(event, variant))
+
+        # Executar todas em paralelo
+        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+        # Converter exceções em None
+        links = [result if not isinstance(result, Exception) else None for result in search_results]
+
+        logger.info(f"{self.log_prefix} Resultados de {LINK_CONSENSUS_SEARCHES} buscas: {links}")
+
+        # Encontrar consenso
+        consensus_result = self._find_consensus(links, event)
+
+        if not consensus_result:
+            logger.warning(f"{self.log_prefix} Nenhum consenso encontrado para: {titulo}")
+
+            # Retry se ainda tiver tentativas
+            if attempt < LINK_MAX_INTELLIGENT_SEARCHES:
+                logger.info(f"{self.log_prefix} Tentando novamente com novos critérios...")
+                return await self._intelligent_link_search_with_consensus(event, attempt + 1)
+            else:
+                return None
+
+        # Validar qualidade do link consensual
+        consensus_link = consensus_result["link"]
+
+        # Verificar se link é genérico
+        if self._is_generic_link(consensus_link):
+            logger.warning(f"{self.log_prefix} ❌ Link consensual é genérico: {consensus_link}")
+            if attempt < LINK_MAX_INTELLIGENT_SEARCHES:
+                return await self._intelligent_link_search_with_consensus(event, attempt + 1)
+            else:
+                return None
+
+        # Validar qualidade
+        try:
+            from agents.validation_agent import ValidationAgent
+
+            validation_agent = ValidationAgent()
+            link_info = await validation_agent._fetch_link_info(consensus_link, event)
+
+            quality_validation = link_info.get("quality_validation")
+
+            if quality_validation:
+                score = quality_validation["score"]
+                is_quality = quality_validation["is_quality"]
+
+                if is_quality:
+                    logger.info(f"{self.log_prefix} ✅ Link consensual aprovado (score: {score}/100)")
+                    return {
+                        "link": consensus_link,
+                        "quality_score": score,
+                        "validation": quality_validation,
+                        "consensus_info": consensus_result,
+                        "structured_data": link_info.get("structured_data", {}),
+                    }
+                else:
+                    logger.warning(f"{self.log_prefix} ❌ Link consensual rejeitado (score: {score}/{LINK_QUALITY_THRESHOLD})")
+                    if attempt < LINK_MAX_INTELLIGENT_SEARCHES:
+                        return await self._intelligent_link_search_with_consensus(event, attempt + 1)
+                    else:
+                        # Última tentativa - retornar mesmo com baixa qualidade
+                        return {
+                            "link": consensus_link,
+                            "quality_score": score,
+                            "validation": quality_validation,
+                            "consensus_info": consensus_result,
+                            "low_quality": True,
+                        }
+            else:
+                # Sem validação, aceitar link consensual
+                logger.warning(f"{self.log_prefix} Validação falhou, aceitando link consensual")
+                return {
+                    "link": consensus_link,
+                    "quality_score": None,
+                    "validation": None,
+                    "consensus_info": consensus_result,
+                }
+
+        except Exception as e:
+            logger.error(f"{self.log_prefix} Erro ao validar link consensual: {e}")
+            return {
+                "link": consensus_link,
+                "quality_score": None,
+                "validation": None,
+                "consensus_info": consensus_result,
+            }
+
     def _classify_link_type(self, url: str, event: dict) -> str:
         """Classifica o tipo de link do evento.
 
@@ -590,7 +949,7 @@ RETORNE APENAS:
             stats["total_links"] += 1
             stats["intelligent_searches"] += 1
 
-            link_result = await self._intelligent_link_search(event)
+            link_result = await self._intelligent_link_search_with_consensus(event)
 
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
@@ -600,6 +959,10 @@ RETORNE APENAS:
                 event["link_added_by_ai"] = True  # Novo campo para indicar que foi adicionado (não apenas corrigido)
                 event["link_quality_score"] = link_result.get("quality_score")
                 event["link_quality_validation"] = link_result.get("validation")
+
+                # Armazenar informações de consenso (se disponível)
+                if link_result.get("consensus_info"):
+                    event["link_consensus_info"] = link_result["consensus_info"]
 
                 # Armazenar dados estruturados extraídos do link
                 if link_result.get("structured_data"):
@@ -624,7 +987,7 @@ RETORNE APENAS:
             stats["total_links"] += 1
             stats["intelligent_searches"] += 1
 
-            link_result = await self._intelligent_link_search(event)
+            link_result = await self._intelligent_link_search_with_consensus(event)
 
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
@@ -634,6 +997,10 @@ RETORNE APENAS:
                 event["link_updated_by_ai"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
                 event["link_quality_validation"] = link_result.get("validation")
+
+                # Armazenar informações de consenso (se disponível)
+                if link_result.get("consensus_info"):
+                    event["link_consensus_info"] = link_result["consensus_info"]
 
                 # Armazenar dados estruturados extraídos do link
                 if link_result.get("structured_data"):
@@ -659,7 +1026,7 @@ RETORNE APENAS:
             stats["generic_links_detected"] += 1
             stats["intelligent_searches"] += 1
 
-            link_result = await self._intelligent_link_search(event)
+            link_result = await self._intelligent_link_search_with_consensus(event)
 
             if link_result and link_result.get("link"):
                 new_link = link_result["link"]
@@ -670,6 +1037,10 @@ RETORNE APENAS:
                 event["link_was_generic"] = True
                 event["link_quality_score"] = link_result.get("quality_score")
                 event["link_quality_validation"] = link_result.get("validation")
+
+                # Armazenar informações de consenso (se disponível)
+                if link_result.get("consensus_info"):
+                    event["link_consensus_info"] = link_result["consensus_info"]
 
                 # Armazenar dados estruturados extraídos do link
                 if link_result.get("structured_data"):
@@ -754,7 +1125,7 @@ RETORNE APENAS:
                 stats["intelligent_searches"] += 1
 
                 # Tentar encontrar link correto
-                link_result = await self._intelligent_link_search(event)
+                link_result = await self._intelligent_link_search_with_consensus(event)
 
                 if link_result and link_result.get("link"):
                     new_link = link_result["link"]
@@ -764,6 +1135,10 @@ RETORNE APENAS:
                     event["link_recovered_from_content_error"] = True
                     event["link_quality_score"] = link_result.get("quality_score")
                     event["link_quality_validation"] = link_result.get("validation")
+
+                    # Armazenar informações de consenso (se disponível)
+                    if link_result.get("consensus_info"):
+                        event["link_consensus_info"] = link_result["consensus_info"]
 
                     # Armazenar dados estruturados extraídos do link
                     if link_result.get("structured_data"):
@@ -796,7 +1171,7 @@ RETORNE APENAS:
         stats["intelligent_searches"] += 1
 
         # Tentar encontrar link alternativo
-        link_result = await self._intelligent_link_search(event)
+        link_result = await self._intelligent_link_search_with_consensus(event)
 
         if link_result and link_result.get("link"):
             new_link = link_result["link"]
@@ -808,6 +1183,10 @@ RETORNE APENAS:
             event["link_original_error"] = f"{status_code} - {reason}" if status_code else reason
             event["link_quality_score"] = link_result.get("quality_score")
             event["link_quality_validation"] = link_result.get("validation")
+
+            # Armazenar informações de consenso (se disponível)
+            if link_result.get("consensus_info"):
+                event["link_consensus_info"] = link_result["consensus_info"]
 
             # Armazenar dados estruturados extraídos do link
             if link_result.get("structured_data"):

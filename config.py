@@ -22,6 +22,7 @@ MODELS: Final[dict[str, str]] = {
     "light": "google/gemini-2.5-flash",         # QueryOptimizer, FormatAgent (10-20x mais rápido, ~90% menor custo)
     "important": "google/gemini-2.5-flash",     # Verify, Validation, Enrichment, Retry (teste de qualidade)
     "judge": "openai/gpt-5",                    # Julgamento de qualidade de eventos (high effort)
+    "link_consensus": "openai/gpt-5-mini:online",  # Tiebreaker para consenso de links (GPT-5 Mini com web search)
 }
 
 # Configurações de busca
@@ -297,6 +298,12 @@ ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "open mic",
     "sarau",
 ]  # tipos de eventos que aceitam "músicos da casa"
+
+# Configurações de consenso de links (Fase 2 - Anti-alucinação)
+LINK_CONSENSUS_ENABLED: Final[bool] = True  # Habilitar consenso multi-modelo
+LINK_CONSENSUS_SEARCHES: Final[int] = 3  # Número de buscas independentes no Perplexity
+LINK_CONSENSUS_THRESHOLD: Final[float] = 0.67  # 2/3 precisam concordar (67%)
+LINK_CONSENSUS_USE_GPT5_TIEBREAKER: Final[bool] = True  # Usar GPT-5 Mini como desempate em caso de empate
 
 # Configurações de eventos contínuos (temporadas, exposições)
 # NOTA: "mostra" removido para evitar consolidação indevida de filmes de festivais de cinema
