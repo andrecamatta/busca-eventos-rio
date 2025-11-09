@@ -1191,16 +1191,13 @@ OBJETIVO:
 
         try:
             response = self.search_agent.run(prompt)
-            content = response.content.strip()
 
-            # Limpar markdown
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-
-            # Parse JSON
-            links_map = json.loads(content)
+            # Usar safe_json_parse para extração consistente
+            from utils.json_helpers import safe_json_parse
+            links_map = safe_json_parse(
+                response.content,
+                default={}
+            )
 
             # Converter chaves para int se necessário e validar formato
             result = {}
@@ -1330,51 +1327,10 @@ OBJETIVO:
         data_geral = raw_events.get("perplexity_geral", "{}")
         data_especial = raw_events.get("perplexity_especial", "{}")
 
-        # Limpar markdown code blocks e comentários
-        def clean_json(data):
-            # Remover markdown code blocks
-            if "```json" in data:
-                data = data.split("```json")[1].split("```")[0].strip()
-            elif "```" in data:
-                data = data.split("```")[1].split("```")[0].strip()
-
-            # Remover comentários JavaScript (// comentários) linha por linha
-            lines = data.split("\n")
-            cleaned_lines = []
-            for line in lines:
-                # Se a linha contém //, remover tudo a partir daí (exceto se estiver dentro de string)
-                if "//" in line:
-                    # Verificar se está dentro de string
-                    in_string = False
-                    quote_char = None
-                    result = []
-                    i = 0
-                    while i < len(line):
-                        char = line[i]
-                        if char in ['"', "'"]:
-                            if not in_string:
-                                in_string = True
-                                quote_char = char
-                            elif char == quote_char and (i == 0 or line[i - 1] != "\\"):
-                                in_string = False
-                                quote_char = None
-                            result.append(char)
-                        elif char == "/" and i + 1 < len(line) and line[i + 1] == "/" and not in_string:
-                            # Comentário encontrado fora de string, parar aqui
-                            break
-                        else:
-                            result.append(char)
-                        i += 1
-                    line = "".join(result).rstrip()
-                cleaned_lines.append(line)
-
-            # Remover linhas vazias
-            cleaned_lines = [line for line in cleaned_lines if line.strip()]
-
-            return "\n".join(cleaned_lines)
-
-        data_geral_clean = clean_json(data_geral)
-        data_especial_clean = clean_json(data_especial)
+        # Usar clean_json_response do json_helpers (centralizado)
+        from utils.json_helpers import clean_json_response
+        data_geral_clean = clean_json_response(data_geral)
+        data_especial_clean = clean_json_response(data_especial)
 
         # Combinar em um único JSON
         combined = f'{{"eventos_gerais": {data_geral_clean}, "eventos_locais_especiais": {data_especial_clean}}}'

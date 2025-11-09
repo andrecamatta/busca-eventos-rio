@@ -1382,15 +1382,12 @@ IMPORTANTE:
 
         try:
             response = self.agent.run(prompt)
-            content = response.content
-
-            # Tentar extrair JSON da resposta
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-
-            verified_data = json.loads(content)
+            # Usar safe_json_parse para extração consistente
+            from utils.json_helpers import safe_json_parse
+            verified_data = safe_json_parse(
+                response.content,
+                default={"verified_events": [], "validation_summary": {"total": 0, "approved": 0, "rejected": 0}}
+            )
             return verified_data
 
         except Exception as e:

@@ -733,21 +733,13 @@ Retorne JSON:
 
         try:
             response = self.agent.run(prompt)
-            content = response.content
 
-            # Extrair JSON da resposta
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-
-            # Fallback: tentar encontrar JSON com regex
-            if not content or content[0] not in ['{', '[']:
-                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', content, re.DOTALL)
-                if json_match:
-                    content = json_match.group(0)
-
-            decision = json.loads(content)
+            # Usar safe_json_parse para extração consistente
+            from utils.json_helpers import safe_json_parse
+            decision = safe_json_parse(
+                response.content,
+                default={"approved": False, "reason": "Erro ao processar resposta", "quality_score": 0}
+            )
 
             # Garantir campos obrigatórios
             if "approved" not in decision:
