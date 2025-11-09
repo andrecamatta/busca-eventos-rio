@@ -70,13 +70,33 @@ class ValidationAgent(BaseAgent):
         local = event.get('local', '').lower()
 
         TRUSTED_VENUES = [
+            # Teatros oficiais
             'teatro municipal', 'theatro municipal',
-            'sala cecília meireles', 'cecilia meireles',
-            'blue note', 'bluenote',
-            'casa do choro',
-            'ccbb', 'centro cultural banco do brasil',
-            'oi futuro', 'centro cultural oi futuro',
             'cidade das artes',
+            'theatro net', 'teatro net rio',
+
+            # Salas de concerto
+            'sala cecília meireles', 'cecilia meireles',
+
+            # Casas de show especializadas
+            'blue note', 'bluenote',
+            'casa do choro', 'casa de choro',
+
+            # Centros culturais públicos/institucionais
+            'ccbb', 'centro cultural banco do brasil',
+            'ccjf', 'centro cultural justiça federal',
+            'oi futuro', 'centro cultural oi futuro',
+            'parque lage', 'escola de artes visuais parque lage',
+            'ims', 'instituto moreira salles',
+            'mam', 'museu de arte moderna',
+
+            # SESCs (programação curada)
+            'sesc', 'sesc copacabana', 'sesc flamengo', 'sesc tijuca', 'sesc engenho',
+
+            # Cinemas de referência
+            'espaço itaú', 'itau de cinema',
+            'estação net', 'estacao net',
+            'kinoplex',
         ]
 
         is_trusted_venue = any(venue in local for venue in TRUSTED_VENUES)

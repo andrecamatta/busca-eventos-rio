@@ -188,6 +188,11 @@ class EnrichmentAgent(BaseAgent):
         desc = event.get("descricao_enriquecida") or event.get("descricao", "")
         desc_words = len(desc.split())
 
+        # OTIMIZAÇÃO: Pular enriquecimento se tiver link válido + descrição razoável (>= 20 palavras)
+        # Links válidos já garantem qualidade do evento
+        if event.get("link_valid") is True and desc_words >= 20:
+            return False, ""
+
         # Critério 1: Descrição muito curta
         if desc_words < ENRICHMENT_MIN_DESC_LENGTH:
             return True, f"descrição curta ({desc_words} palavras)"

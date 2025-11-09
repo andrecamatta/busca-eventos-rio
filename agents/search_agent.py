@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from agents.base_agent import BaseAgent
 from config import SEARCH_CONFIG, MAX_EVENTS_PER_VENUE
 from models.event_models import ResultadoBuscaCategoria
+from utils.deduplicator import deduplicate_events
 from utils.prompt_templates import PromptBuilder
 from utils.prompt_loader import get_prompt_loader
 
@@ -519,12 +520,12 @@ OBJETIVO:
         else:
             logger.warning("⚠️  Nenhum evento CCBB encontrado no scraper")
 
-        # Teatro Municipal
-        teatro_municipal_scraped = EventimScraper.scrape_teatro_municipal_events()
-        if teatro_municipal_scraped:
-            logger.info(f"✓ Encontrados {len(teatro_municipal_scraped)} eventos Teatro Municipal")
-        else:
-            logger.warning("⚠️  Nenhum evento Teatro Municipal encontrado no scraper")
+        # Teatro Municipal - REMOVIDO
+        # Site oficial não tem estrutura adequada para scraping
+        # Fever carrega eventos via JavaScript (não scrapável)
+        # Perplexity consegue encontrar os eventos via busca web
+        teatro_municipal_scraped = []
+        logger.info("✓ Teatro Municipal: delegado para Perplexity (Fever usa JS)")
 
         # ═══════════════════════════════════════════════════════════
         # CARREGAR PROMPTS DO YAML
@@ -842,6 +843,17 @@ OBJETIVO:
                 eventos_feira_gastronomica +
                 eventos_feira_artesanato
             )
+
+            # OTIMIZAÇÃO: Deduplicação precoce ANTES de validação/enriquecimento
+            # Economiza chamadas de API processando apenas eventos únicos
+            eventos_antes_dedup = len(todos_eventos_gerais)
+            todos_eventos_gerais = deduplicate_events(todos_eventos_gerais)
+            eventos_removidos = eventos_antes_dedup - len(todos_eventos_gerais)
+            if eventos_removidos > 0:
+                logger.info(
+                    f"🔄 Deduplicação precoce: {eventos_removidos} eventos duplicados removidos "
+                    f"({eventos_antes_dedup} → {len(todos_eventos_gerais)})"
+                )
 
             # Criar estrutura de eventos gerais
             eventos_gerais_merged = {"eventos": todos_eventos_gerais}
