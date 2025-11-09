@@ -920,10 +920,13 @@ class EventimScraper:
                             link = f"https://feverup.com{link}"
 
                         # Data e horário - difícil extrair do HTML renderizado por JS
-                        # Usar placeholders e deixar validation agent preencher
+                        # Usar data do início do período de busca como placeholder
+                        start_date = config.SEARCH_CONFIG['start_date']
+                        placeholder_date = start_date.strftime("%d/%m/%Y")
+
                         evento = {
                             "titulo": titulo,
-                            "data": "01/01/2025",  # Placeholder
+                            "data": placeholder_date,  # Placeholder: primeira data do período
                             "horario": "19:00",
                             "link": link,
                         }
