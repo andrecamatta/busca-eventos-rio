@@ -20,11 +20,13 @@ from agents.enrichment_agent import EnrichmentAgent
 from agents.format_agent import FormatAgent
 from agents.retry_agent import RetryAgent
 from agents.search_agent import SearchAgent
+from agents.title_enhancement_agent import enhance_event_titles
 from agents.verify_agent import VerifyAgent
 from config import ENRICHMENT_ENABLED, MIN_EVENTS_THRESHOLD, OPENROUTER_API_KEY, SEARCH_CONFIG
 from utils.continuous_event_handler import consolidate_continuous_events
 from utils.deduplicator import deduplicate_events
 from utils.event_classifier import classify_events
+from utils.event_consolidator import EventConsolidator
 from utils.event_merger import EventMerger
 from utils.file_manager import EventFileManager
 
@@ -114,6 +116,14 @@ class EventSearchOrchestrator:
             else:
                 logger.info("\n[FASE 3/5] ⏭️  Enriquecimento desabilitado ou sem eventos, pulando...")
 
+            # Fase 3.1: Title Enhancement (enriquecer títulos genéricos)
+            if len(verified_events.get("verified_events", [])) > 0:
+                logger.info("\n[FASE 3.1/5] ✨ Enriquecendo títulos genéricos...")
+                verified_events["verified_events"] = await enhance_event_titles(
+                    verified_events.get("verified_events", [])
+                )
+                logger.info(f"✓ Títulos processados")
+
             # Fase 3.5: Retry Agent (se necessário)
             logger.info(f"\n[FASE 3.5/5] 🔄 Verificando threshold mínimo ({MIN_EVENTS_THRESHOLD} eventos)...")
             needs_retry, analysis = self.retry_agent.needs_retry(verified_events)
@@ -178,8 +188,21 @@ class EventSearchOrchestrator:
             )
             logger.info(f"✓ Eventos classificados em categorias")
 
+            # Consolidação de eventos recorrentes (mesmo evento em múltiplas datas)
+            logger.info("\n[FASE 3.9/5] 🔁 Consolidando eventos recorrentes...")
+            before_recurring = len(verified_events.get("verified_events", []))
+            consolidator = EventConsolidator()
+            verified_events["verified_events"] = consolidator.consolidate_recurring_events(
+                verified_events.get("verified_events", [])
+            )
+            after_recurring = len(verified_events.get("verified_events", []))
+            if before_recurring != after_recurring:
+                logger.info(f"✓ Eventos recorrentes consolidados: {before_recurring} -> {after_recurring} eventos")
+            else:
+                logger.info(f"✓ Nenhum evento recorrente detectado")
+
             # Consolidação de eventos contínuos (exposições, mostras, temporadas)
-            logger.info("\n[FASE 3.9/5] 📅 Consolidando eventos contínuos (exposições/mostras)...")
+            logger.info("\n[FASE 3.10/5] 📅 Consolidando eventos contínuos (exposições/mostras)...")
             before_consolidation = len(verified_events.get("verified_events", []))
             verified_events["verified_events"] = consolidate_continuous_events(
                 verified_events.get("verified_events", [])
