@@ -53,12 +53,12 @@ categorias:
       - Jazz em bares, casas de jazz especializadas
 
     palavras_chave:
-      - "jazz Rio Janeiro {month_year_str}"
-      - "shows jazz {month_str}"
-      - "Maze Jazz Club {month_str}"
-      - "Clube do Jazz Rio {month_str}"
-      - "jazz ao vivo Rio {month_str}"
-      - "casa de jazz Rio {month_year_str}"
+      - "jazz Rio Janeiro {month_range_str}"
+      - "shows jazz entre {start_date_str} e {end_date_str}"
+      - "Maze Jazz Club {month_range_str}"
+      - "Clube do Jazz Rio {month_range_str}"
+      - "jazz ao vivo Rio {month_range_str}"
+      - "casa de jazz Rio {month_range_str}"
 
     venues_sugeridos:
       - Maze Jazz Club
@@ -68,34 +68,28 @@ categorias:
       - Bares e hotéis com jazz ao vivo
 
     instrucoes_especiais: |
-      🎯 OBJETIVO: Buscar shows de jazz no Rio de Janeiro entre {start_date_str} e {end_date_str}
+      ⚠️ RETORNAR JSON: {{"eventos": [{{eventos}}]}}
+      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
 
-      OBSERVAÇÃO: Blue Note Rio é extraído via scraper direto (não buscar aqui).
-      Focar em OUTROS venues de jazz e shows de jazz em bares/hotéis.
+      BUSCAR: Shows de jazz no Rio (EXCETO Blue Note - tem scraper próprio)
 
-      ESTRATÉGIA DE BUSCA:
+      FONTES PRIORITÁRIAS (nesta ordem):
+      1. Sympla: "jazz Rio {month_range_str}" entre {start_date_str} e {end_date_str}
+      2. TimeOut Rio - seção Jazz
+      3. Instagram @becodasgarrafas, @mazejazzclub
+      4. Google: "jazz ao vivo Rio {month_range_str}"
 
-      1. 🎷 CASAS DE JAZZ ESPECIALIZADAS:
-         - Maze Jazz Club
-         - Clube do Jazz
-         - Jazz nos Fundos
-         - Casa do Choro (choro e jazz)
+      VENUES PRIORITÁRIOS:
+      - Bottle's Bar/Little Club (Beco das Garrafas)
+      - Maze Jazz Club
+      - Clube do Jazz
+      - Dolores Club, Jazz nos Fundos
 
-      2. 🏨 BARES E HOTÉIS COM JAZZ:
-         - Hotéis com jazz ao vivo
-         - Bares especializados em jazz
-         - Espaços culturais com programação jazz
-
-      3. 🔍 PORTAIS CULTURAIS:
-         - TimeOut Rio - categoria Jazz
-         - Veja Rio - shows de jazz
-         - Agendas culturais locais
-
-      VALIDAÇÃO:
-      - Data ENTRE {start_date_str} e {end_date_str}
-      - Horário obrigatório (padrão 20:00 se não encontrado)
-      - Links de compra/informação quando disponíveis
-      - Priorizar jazz autêntico sobre tributos
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Tipo: Shows de jazz/bossa (não MPB genérica)
+      ✓ Link: URL específica do evento (Sympla preferível)
+      ✓ Artista: Nome específico (não "músicos da casa")
 
   comedia:
     nome: Comédia
@@ -109,11 +103,11 @@ categorias:
       - Espetáculos cômicos
 
     palavras_chave:
-      - "stand-up Rio Janeiro {month_year_str}"
-      - "comédia Rio {month_str}"
-      - "show humor Rio {month_str}"
-      - "stand up Rio {month_year_str}"
-      - "teatro comédia Rio {month_str}"
+      - "stand-up Rio Janeiro {month_range_str}"
+      - "comédia Rio {month_range_str}"
+      - "show humor Rio {month_range_str}"
+      - "stand up Rio entre {start_date_str} e {end_date_str}"
+      - "teatro comédia Rio {month_range_str}"
 
     venues_sugeridos:
       - Theatro Net Rio
@@ -147,14 +141,14 @@ categorias:
       - Corais e grupos de câmara
 
     palavras_chave:
-      - "concerto igreja Rio {month_str}"
-      - "música clássica Candelária {month_year_str}"
-      - "recital museu Rio {month_str}"
-      - "OSB concerto especial {month_year_str}"
-      - "orquestra eventos Rio {month_str}"
-      - "música câmara Rio {month_str}"
-      - "concerto Igreja São Francisco {month_str}"
-      - "recital galeria Rio {month_year_str}"
+      - "concerto igreja Rio {month_range_str}"
+      - "música clássica Candelária {month_range_str}"
+      - "recital museu Rio {month_range_str}"
+      - "OSB concerto especial {month_range_str}"
+      - "orquestra eventos Rio {month_range_str}"
+      - "música câmara Rio entre {start_date_str} e {end_date_str}"
+      - "concerto Igreja São Francisco {month_range_str}"
+      - "recital galeria Rio {month_range_str}"
 
     venues_sugeridos:
       - Igreja da Candelária
@@ -175,7 +169,7 @@ categorias:
 
       ✅ BUSCAR OBRIGATORIAMENTE:
       - 🏛️ **CIDADE DAS ARTES** - Av. das Américas, 5300, Barra da Tijuca
-        * Buscar especificamente: "Cidade das Artes concerto {month_str}", "OSB Cidade das Artes"
+        * Buscar especificamente: "Cidade das Artes concerto {month_range_str}", "OSB Cidade das Artes"
         * Procurar em: cidadedasartes.rio.rj.gov.br, Sympla, Eventbrite
         * Tipos: concertos OSB, ópera, ballet, recitais
         * MÍNIMO: 1-2 eventos (venue premium importante)
@@ -205,19 +199,19 @@ categorias:
       - Festivais culturais pequenos/médios
 
     palavras_chave:
-      - "cinema ao ar livre Rio sábado {month_str}"
-      - "cinema céu aberto Rio {month_year_str}"
-      - "concerto jardim sábado Rio {month_str}"
-      - "concerto parque fim de semana Rio {month_year_str}"
-      - "música clássica ao ar livre Rio sábado {month_str}"
-      - "Feira Rio Antigo {month_str}"
-      - "Feira Praça XV sábado {month_str}"
-      - "feira artesanato Jardim Botânico fim de semana {month_year_str}"
-      - "feira gastronômica parque Rio sábado {month_str}"
-      - "Quinta Boa Vista eventos sábado {month_year_str}"
-      - "Aterro Flamengo eventos culturais sábado {month_str}"
-      - "Parque Garota Ipanema eventos fim de semana {month_str}"
-      - "show acústico jardim sábado Rio {month_year_str}"
+      - "cinema ao ar livre Rio sábado {month_range_str}"
+      - "cinema céu aberto Rio {month_range_str}"
+      - "concerto jardim sábado Rio {month_range_str}"
+      - "concerto parque fim de semana Rio {month_range_str}"
+      - "música clássica ao ar livre Rio sábado {month_range_str}"
+      - "Feira Rio Antigo entre {start_date_str} e {end_date_str}"
+      - "Feira Praça XV sábado {month_range_str}"
+      - "feira artesanato Jardim Botânico fim de semana {month_range_str}"
+      - "feira gastronômica parque Rio sábado {month_range_str}"
+      - "Quinta Boa Vista eventos sábado {month_range_str}"
+      - "Aterro Flamengo eventos culturais sábado {month_range_str}"
+      - "Parque Garota Ipanema eventos fim de semana {month_range_str}"
+      - "show acústico jardim sábado Rio {month_range_str}"
 
     venues_sugeridos:
       - Jardim Botânico (concertos, cinema ao ar livre)
@@ -239,59 +233,30 @@ categorias:
       - Instagram dos parques (@parquelage, @jardimbotanicorj)
 
     instrucoes_especiais: |
-      🎯 OBJETIVO: Eventos culturais ESPECÍFICOS ao ar livre em SÁBADO/DOMINGO entre {start_date_str} e {end_date_str}
+      ⚠️ PERÍODO: {start_date_str} a {end_date_str}
+      ⚠️ APENAS eventos culturais ao ar livre em SÁBADOS/DOMINGOS
 
-      🚨 **PRIORIDADE MÁXIMA - COBERTURA DE TODOS OS SÁBADOS:**
-      Garantir pelo menos 1 evento para CADA sábado do período de busca.
-      Focar especialmente em eventos recorrentes e programação fixa aos sábados.
+      BUSCAR (nesta ordem):
+      1. Cinema ao ar livre (Parque Lage, Jardim Botânico, Aterro)
+      2. Concertos em parques (música clássica, jazz, MPB)
+      3. Feira do Rio Antigo (1º sábado) + Feira Praça XV (sábados/domingos)
+      4. Feiras gastronômicas/artesanato outdoor
 
-      ✅ BUSCAR PRIORITARIAMENTE:
+      LOCAIS COM PROGRAMAÇÃO REGULAR:
+      - Jardim Botânico, Quinta Boa Vista, Aterro Flamengo
+      - Parque Lage (Varanda Sonora aos sábados)
 
-      1. 🎬 CINEMA AO AR LIVRE (ESPECIALMENTE AOS SÁBADOS):
-         - "cinema ao ar livre Rio sábado {month_str}"
-         - "cinema céu aberto {month_year_str}"
-         - Jardim Botânico, Parque Lage, Aterro
-         - Sessões gratuitas ou pagas
-         - Buscar programação fixa de sábados
+      FONTES:
+      - Riotur (visit.rio), Bafafá, TimeOut Rio
+      - Instagram @parquelage, @jardimbotanicorj
 
-      2. 🎵 CONCERTOS EM PARQUES (FOCO EM SÁBADOS):
-         - "concerto Jardim Botânico sábado {month_str}"
-         - "música clássica ao ar livre Rio fim de semana"
-         - "concerto parque sábado Rio {month_str}"
-         - Música clássica, jazz, MPB autoral
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data é SÁBADO ou DOMINGO entre {start_date_str} e {end_date_str}
+      ✓ Evento é CULTURAL (não esportivo/comercial)
+      ✓ Tem artista/tema específico (não genérico)
 
-      3. 🛍️ FEIRAS CULTURAIS NICHADAS (RECORRENTES AOS SÁBADOS):
-         - **Feira do Rio Antigo** (Largo da Carioca - 1º sábado do mês)
-         - **Feira da Praça XV** (sábados e domingos - recorrente)
-         - Feiras de artesanato em parques
-         - Feiras gastronômicas pequenas/médias
-         - Feiras de design e arte
-
-      4. 🌳 EVENTOS EM LOCAIS ESPECÍFICOS (PROGRAMAÇÃO REGULAR):
-         - Jardim Botânico: concertos, cinema, feiras (verificar agenda sábados)
-         - Quinta da Boa Vista: eventos culturais
-         - Aterro do Flamengo: festivais médios
-         - Parque Garota de Ipanema: eventos culturais
-         - Parque Lage: cinema ao ar livre, shows (Varanda Sonora aos sábados?)
-
-      ⚠️ EXCLUSÕES CRÍTICAS - NÃO BUSCAR:
-      - ❌ Samba, pagode, roda de samba, axé, forró
-      - ❌ Shows mainstream (Ivete Sangalo, Thiaguinho, etc)
-      - ❌ Mega shows, turnês nacionais
-      - ❌ Eventos em estádios/arenas
-      - ❌ Corridas, maratonas, eventos esportivos
-      - ❌ Eventos genéricos "para toda família"
-
-      📍 FONTES ESPECIALIZADAS:
-      - Riotur: site:visit.rio agenda eventos {month_str}
-      - Bafafá: site:bafafa.com.br eventos rio {month_str}
-      - TimeOut: site:timeout.com/rio-de-janeiro fim-de-semana
-      - Parques: Instagram @parquelage, @jardimbotanicorj
-
-      VALIDAÇÃO:
-      - Confirmar que é SÁBADO ou DOMINGO
-      - Confirmar que é evento CULTURAL (não esportivo/comercial)
-      - Priorizar eventos com ARTISTAS/TEMA específico (não genérico)
+      EXCLUIR:
+      ❌ Samba/pagode/forró, shows mainstream, mega eventos, esportes
 
   cinema:
     nome: Cinema
@@ -478,9 +443,28 @@ venues:
       - Bilheteria oficial do Teatro Municipal
 
     instrucoes_especiais: |
-      🎯 BUSCAR: Programação oficial do Teatro Municipal
+      ⚠️ RETORNAR JSON: {{"Teatro Municipal do Rio de Janeiro": [{{eventos}}]}}
+      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
 
-      ENDEREÇO: Praça Floriano (Cinelândia), Centro
+      BUSCAR: Programação do Teatro Municipal (Theatro Municipal RJ)
+
+      FONTES PRIORITÁRIAS (nesta ordem):
+      1. https://theatromunicipal.rj.gov.br/programacao-beta
+      2. Sympla: "Teatro Municipal Rio" ou "Theatro Municipal"
+      3. Fever: Teatro Municipal Rio de Janeiro
+      4. Google: "teatro municipal rio programação {month_year_str}"
+
+      TIPOS DE EVENTOS:
+      - Ópera (Madama Butterfly, La Bohème, Tosca, etc.)
+      - Balé clássico (O Quebra-Nozes, Lago dos Cisnes, etc.)
+      - Concertos sinfônicos (Orquestra Sinfônica Brasileira)
+      - Música de câmara, recitais
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Local: "Teatro Municipal" ou "Theatro Municipal" ou "Praça Floriano"
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Link: URL específica do evento (Sympla/Fever/site oficial)
+      ✓ Tipo: Ópera, balé, concerto ou recital (não shows populares)
 
   artemis:
     nome: Artemis - Torrefação Artesanal e Cafeteria
@@ -509,53 +493,25 @@ venues:
       - Site oficial Artemis
 
     instrucoes_especiais: |
-      🎯 BUSCA ULTRA-PRIORITÁRIA: Cursos de café AGENDADOS na Artemis Torrefação
+      ⚠️ RETORNAR JSON: {{"Artemis - Torrefação Artesanal e Cafeteria": [{{eventos}}]}}
+      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
 
-      ENDEREÇO: Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro
+      BUSCAR: Cursos e workshops de café na Artemis Torrefação (Tijuca, Rio de Janeiro)
 
-      ESTRATÉGIA DE BUSCA (ORDEM OBRIGATÓRIA):
+      FONTES PRIORITÁRIAS (nesta ordem):
+      1. https://www.sympla.com.br/produtor/artemistorrefacao
+      2. Instagram @artemistorrefacao (posts sobre "curso" ou "inscrições")
+      3. Google: "artemis torrefação curso {month_year_str}"
 
-      1. 🔍 **Sympla - BUSCA PRINCIPAL** (executar TODAS as buscas abaixo):
-         ✅ BUSCA DIRETA DO PRODUTOR:
-         - https://www.sympla.com.br/produtor/artemistorrefacao
-         - site:sympla.com.br/produtor/artemistorrefacao
+      TIPOS DE EVENTOS:
+      - Curso de Barismo, Regulagem de Espresso, Latte Art
+      - Degustações e workshops de café especial
 
-         ✅ BUSCAR EVENTOS ESPECÍFICOS:
-         - site:sympla.com.br "artemis torrefação" "curso" novembro 2025
-         - site:sympla.com.br "artemis torrefação" "curso" dezembro 2025
-         - site:sympla.com.br "artemis" "barista" "{month_str}"
-         - site:sympla.com.br/evento "artemis" "café"
-
-         ✅ BUSCAR POR TIPO DE CURSO:
-         - site:sympla.com.br "curso de barismo" artemis
-         - site:sympla.com.br "regulagem de espresso" artemis
-         - site:sympla.com.br "latte art" artemis tijuca
-
-      2. 🔍 **Instagram @artemistorrefacao**:
-         - Procurar posts recentes sobre cursos agendados
-         - Buscar: "curso de barista", "próximas turmas", "inscrições abertas"
-
-      3. 🔍 **Google direto**:
-         - "artemis torrefação curso barista {month_year_str}"
-         - "curso café tijuca artemis"
-         - "barismo artemis rio de janeiro"
-
-      TIPOS DE CURSOS/EVENTOS ESPERADOS:
-      - 📚 Curso de Barismo Completo (8h, sábados 10:30-18:30)
-      - 📚 Curso de Regulagem de Espresso (4h, sábados 10:30-14:30)
-      - 📚 Curso de Latte Art (4h)
-      - 🍵 Degustações guiadas de café especial
-      - ☕ Workshops de extração, torra, cupping
-
-      ⚠️ REQUISITOS CRÍTICOS:
-      1. Buscar APENAS eventos AGENDADOS com data específica (DD/MM/YYYY)
-      2. CONFIRMAR que o evento é na Artemis Torrefação (não confundir com outros locais)
-      3. Verificar se evento está no período de busca ({start_date_str} a {end_date_str})
-      4. Incluir link direto do evento no Sympla (URL específica do evento)
-      5. Artemis é VENUE OBRIGATÓRIO - se não encontrar eventos, tentar variações de busca
-
-      💡 DICA: Se Sympla não retornar eventos, verificar se há cursos fixos aos sábados
-      (exemplo: "Curso de Barismo Completo" acontece todo sábado 10:30)
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Local: "Artemis Torrefação" ou "Rua Conde de Bonfim, 751"
+      ✓ Tipo: Curso/workshop de CAFÉ (não confundir com outros eventos)
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Link: URL específica do evento (Sympla preferível)
 
   ccbb:
     nome: CCBB Rio - Centro Cultural Banco do Brasil

@@ -177,6 +177,14 @@ class PromptLoader:
             ... )
             >>> context["start_date_str"]
             '08/11/2025'
+
+            >>> # Cross-month scenario
+            >>> context = loader.build_context(
+            ...     datetime(2025, 11, 25),
+            ...     datetime(2025, 12, 5)
+            ... )
+            >>> context["month_year_str"]
+            'novembro/dezembro 2025'
         """
         # Mapeamento de meses em português
         meses = {
@@ -185,14 +193,31 @@ class PromptLoader:
             9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
         }
 
-        month_str = meses[start_date.month]
-        month_year_str = f"{month_str} {start_date.year}"
+        start_month_str = meses[start_date.month]
+        end_month_str = meses[end_date.month]
+
+        # Detectar busca cross-month
+        if start_date.month != end_date.month or start_date.year != end_date.year:
+            # Cross-month: incluir ambos os meses
+            if start_date.year == end_date.year:
+                # Mesmo ano: "novembro/dezembro 2025"
+                month_year_str = f"{start_month_str}/{end_month_str} {start_date.year}"
+                month_range_str = f"{start_month_str}/{end_month_str} {start_date.year}"
+            else:
+                # Anos diferentes: "dezembro 2025/janeiro 2026"
+                month_year_str = f"{start_month_str} {start_date.year}/{end_month_str} {end_date.year}"
+                month_range_str = f"{start_month_str} {start_date.year}/{end_month_str} {end_date.year}"
+        else:
+            # Single month: manter comportamento original
+            month_year_str = f"{start_month_str} {start_date.year}"
+            month_range_str = f"{start_month_str} {start_date.year}"
 
         return {
             "start_date_str": start_date.strftime("%d/%m/%Y"),
             "end_date_str": end_date.strftime("%d/%m/%Y"),
-            "month_str": month_str,
+            "month_str": start_month_str,
             "month_year_str": month_year_str,
+            "month_range_str": month_range_str,
         }
 
 

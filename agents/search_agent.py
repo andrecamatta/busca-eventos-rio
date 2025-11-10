@@ -14,6 +14,7 @@ from models.event_models import ResultadoBuscaCategoria
 from utils.deduplicator import deduplicate_events
 from utils.prompt_templates import PromptBuilder
 from utils.prompt_loader import get_prompt_loader
+from utils.date_helpers import DateParser
 
 logger = logging.getLogger(__name__)
 
@@ -637,12 +638,12 @@ IMPORTANTE:
         else:
             logger.warning("⚠️  Nenhum evento CCBB encontrado no scraper")
 
-        # Teatro Municipal - REMOVIDO
-        # Site oficial não tem estrutura adequada para scraping
-        # Fever carrega eventos via JavaScript (não scrapável)
-        # Perplexity consegue encontrar os eventos via busca web
-        teatro_municipal_scraped = []
-        logger.info("✓ Teatro Municipal: delegado para Perplexity (Fever usa JS)")
+        # Teatro Municipal (Fever - JSON-LD)
+        teatro_municipal_scraped = EventimScraper.scrape_teatro_municipal_fever_events()
+        if teatro_municipal_scraped:
+            logger.info(f"✓ Encontrados {len(teatro_municipal_scraped)} eventos Teatro Municipal (Fever)")
+        else:
+            logger.warning("⚠️  Nenhum evento Teatro Municipal encontrado no scraper Fever")
 
         # ═══════════════════════════════════════════════════════════
         # CARREGAR PROMPTS DO YAML
@@ -783,6 +784,64 @@ IMPORTANTE:
             # ═══════════════════════════════════════════════════════════
             logger.info("🔗 Fazendo merge dos resultados...")
 
+            # Helper function: Filter events by date
+            def filter_events_by_date(eventos: list[dict], search_name: str) -> list[dict]:
+                """
+                Filtra eventos com datas inválidas (fora do período).
+
+                CRÍTICO: Perplexity retorna 5-48% de eventos fora do período,
+                mesmo com instruções explícitas. Este filtro é obrigatório.
+                """
+                if not eventos:
+                    return []
+
+                start_date = SEARCH_CONFIG['start_date']
+                end_date = SEARCH_CONFIG['end_date']
+
+                valid_events = []
+                invalid_events = []
+
+                for evento in eventos:
+                    # Tentar múltiplos campos de data
+                    date_str = (
+                        evento.get('data') or
+                        evento.get('data_completa') or
+                        evento.get('data_inicio') or
+                        ''
+                    )
+
+                    if not date_str:
+                        invalid_events.append((evento.get('titulo', 'SEM TÍTULO'), 'Sem campo de data'))
+                        continue
+
+                    # Validar data
+                    validation = DateParser.validate_event_date(date_str, start_date, end_date)
+
+                    if validation['is_valid']:
+                        valid_events.append(evento)
+                    else:
+                        titulo = evento.get('titulo', 'SEM TÍTULO')
+                        invalid_events.append((titulo, validation['reason']))
+
+                # Log estatísticas de filtro
+                total = len(eventos)
+                filtered = len(invalid_events)
+
+                if filtered > 0:
+                    pct = (filtered / total * 100) if total > 0 else 0
+                    logger.warning(
+                        f"⚠️  {search_name}: Filtrados {filtered}/{total} eventos ({pct:.0f}%) "
+                        f"com datas inválidas"
+                    )
+                    for titulo, reason in invalid_events[:3]:  # Log primeiros 3
+                        logger.debug(f"   • {titulo}: {reason}")
+                    if len(invalid_events) > 3:
+                        logger.debug(f"   ... e mais {len(invalid_events) - 3} eventos")
+                else:
+                    logger.info(f"✓ {search_name}: Todos os {total} eventos têm datas válidas")
+
+                return valid_events
+
             # Helper function: Clean markdown from JSON
             def clean_json_from_markdown(text: str) -> str:
                 """Remove markdown code blocks and extra text from JSON responses.
@@ -862,7 +921,10 @@ IMPORTANTE:
                     resultado = ResultadoBuscaCategoria.model_validate_json(clean_json)
                     logger.info(f"✓ Busca {search_name}: {len(resultado.eventos)} eventos validados")
                     # Converter Pydantic models para dicts
-                    return [evento.model_dump() for evento in resultado.eventos]
+                    eventos = [evento.model_dump() for evento in resultado.eventos]
+                    # FILTRO CRÍTICO: Remover eventos com datas inválidas
+                    eventos_filtrados = filter_events_by_date(eventos, search_name)
+                    return eventos_filtrados
                 except ValidationError as e:
                     logger.error(f"❌ Schema inválido na busca {search_name}:")
                     for error in e.errors():
@@ -913,10 +975,12 @@ IMPORTANTE:
 
                     if eventos:
                         logger.info(f"✓ Busca {venue_name}: {len(eventos)} eventos encontrados")
+                        # FILTRO CRÍTICO: Remover eventos com datas inválidas
+                        eventos_filtrados = filter_events_by_date(eventos, venue_name)
+                        return eventos_filtrados
                     else:
                         logger.warning(f"⚠️  Nenhum evento encontrado para {venue_name} (chaves disponíveis: {list(data.keys())})")
-
-                    return eventos
+                        return []
                 except json.JSONDecodeError as e:
                     logger.error(f"❌ JSON inválido na busca {venue_name}: {e}")
                     logger.error(f"   Conteúdo (primeiros 200 chars): {result_str[:200]}")
