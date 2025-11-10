@@ -467,11 +467,8 @@ OBJETIVO: Encontrar NO MÍNIMO {events_needed} eventos adicionais VÁLIDOS.
 """
 
         try:
-            # Forçar JSON válido usando response_format (OpenRouter suporta nativamente)
-            response = self.agent.run(
-                prompt,
-                response_format={"type": "json_object"}  # ✅ Força JSON válido - evita erros de parsing
-            )
+            # JSON válido é configurado automaticamente pelo model_type="search"
+            response = self.agent.run(prompt)
             content = response.content
 
             # Log da resposta bruta para debug

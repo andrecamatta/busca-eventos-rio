@@ -509,36 +509,53 @@ venues:
       - Site oficial Artemis
 
     instrucoes_especiais: |
-      🎯 BUSCAR OBRIGATÓRIO: Cursos e eventos de café especializado na Artemis Torrefação
+      🎯 BUSCA ULTRA-PRIORITÁRIA: Cursos de café AGENDADOS na Artemis Torrefação
 
       ENDEREÇO: Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro
 
-      ESTRATÉGIA DE BUSCA:
-      1. 🔍 **Sympla** (fonte principal):
+      ESTRATÉGIA DE BUSCA (ORDEM OBRIGATÓRIA):
+
+      1. 🔍 **Sympla - BUSCA PRINCIPAL** (executar TODAS as buscas abaixo):
+         ✅ BUSCA DIRETA DO PRODUTOR:
+         - https://www.sympla.com.br/produtor/artemistorrefacao
          - site:sympla.com.br/produtor/artemistorrefacao
-         - site:sympla.com.br "artemis torrefação" {month_str}
 
-      2. 🔍 **Eventbrite**:
-         - site:eventbrite.com.br "artemis" "café" rio
+         ✅ BUSCAR EVENTOS ESPECÍFICOS:
+         - site:sympla.com.br "artemis torrefação" "curso" novembro 2025
+         - site:sympla.com.br "artemis torrefação" "curso" dezembro 2025
+         - site:sympla.com.br "artemis" "barista" "{month_str}"
+         - site:sympla.com.br/evento "artemis" "café"
 
-      3. 🔍 **Redes sociais**:
-         - Instagram @artemistorrefacao (posts sobre eventos)
+         ✅ BUSCAR POR TIPO DE CURSO:
+         - site:sympla.com.br "curso de barismo" artemis
+         - site:sympla.com.br "regulagem de espresso" artemis
+         - site:sympla.com.br "latte art" artemis tijuca
 
-      4. 🔍 **Palavras-chave específicas**:
-         - "artemis torrefação degustação {month_year_str}"
-         - "curso barista artemis rio {month_str}"
-         - "workshop café conde de bonfim"
+      2. 🔍 **Instagram @artemistorrefacao**:
+         - Procurar posts recentes sobre cursos agendados
+         - Buscar: "curso de barista", "próximas turmas", "inscrições abertas"
 
-      TIPOS DE EVENTOS:
-      - Cursos de barista (iniciante, intermediário, avançado)
-      - Degustações guiadas (cafés especiais, origem única, microlotes)
-      - Workshops de torra, extração, latte art
-      - Eventos especiais de café
+      3. 🔍 **Google direto**:
+         - "artemis torrefação curso barista {month_year_str}"
+         - "curso café tijuca artemis"
+         - "barismo artemis rio de janeiro"
 
-      ⚠️ IMPORTANTE:
-      - Buscar eventos CONFIRMADOS com data específica (DD/MM/YYYY)
-      - Ignorar eventos passados ou sem data definida
-      - Artemis é VENUE OBRIGATÓRIO - esforço extra para encontrar eventos
+      TIPOS DE CURSOS/EVENTOS ESPERADOS:
+      - 📚 Curso de Barismo Completo (8h, sábados 10:30-18:30)
+      - 📚 Curso de Regulagem de Espresso (4h, sábados 10:30-14:30)
+      - 📚 Curso de Latte Art (4h)
+      - 🍵 Degustações guiadas de café especial
+      - ☕ Workshops de extração, torra, cupping
+
+      ⚠️ REQUISITOS CRÍTICOS:
+      1. Buscar APENAS eventos AGENDADOS com data específica (DD/MM/YYYY)
+      2. CONFIRMAR que o evento é na Artemis Torrefação (não confundir com outros locais)
+      3. Verificar se evento está no período de busca ({start_date_str} a {end_date_str})
+      4. Incluir link direto do evento no Sympla (URL específica do evento)
+      5. Artemis é VENUE OBRIGATÓRIO - se não encontrar eventos, tentar variações de busca
+
+      💡 DICA: Se Sympla não retornar eventos, verificar se há cursos fixos aos sábados
+      (exemplo: "Curso de Barismo Completo" acontece todo sábado 10:30)
 
   ccbb:
     nome: CCBB Rio - Centro Cultural Banco do Brasil

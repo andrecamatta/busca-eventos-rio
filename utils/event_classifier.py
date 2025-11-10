@@ -28,7 +28,7 @@ CLASSIFICATION_PROMPT = """Você é um classificador de eventos culturais. Class
 
 CATEGORIAS VÁLIDAS:
 1. Jazz - Shows de jazz, bossa nova, jam sessions de jazz, música instrumental
-2. Música Clássica - Concertos, orquestras, música erudita, ópera, coral, recitais
+2. Música Clássica - Concertos, orquestras, música erudita, ópera, coral, recitais, piano solo
 3. Teatro - Peças dramáticas, performances teatrais (EXCETO comédia)
 4. Comédia - Stand-up, peças de comédia, shows de humor
 5. Cinema - Sessões de cinema, mostras de filmes, festivais de cinema
@@ -37,11 +37,29 @@ CATEGORIAS VÁLIDAS:
 8. Outdoor/Parques - Eventos ao ar livre em parques (fim de semana, culturais)
 9. Cursos de Café - Workshops, cursos e degustações de café
 
-REGRAS:
+REGRAS GERAIS:
 - Use EXATAMENTE o nome da categoria acima (ex: "Jazz", não "jazz" ou "Shows de Jazz")
 - Se o evento se encaixa em múltiplas categorias, escolha a MAIS ESPECÍFICA
 - Se NÃO se encaixa em nenhuma, use "Geral"
 - Considere: título, descrição E local/venue do evento
+
+REGRAS ESPECÍFICAS PARA MÚSICA CLÁSSICA (PRIORIDADE ALTA):
+✅ CLASSIFICAR COMO "Música Clássica" SE:
+- Local é "Sala Cecília Meireles", "Teatro Municipal", "Cidade das Artes"
+- Título/descrição contém: "concerto", "orquestra", "sinfônica", "piano", "recital", "camerata"
+- Título/descrição contém: "ópera", "coral", "música erudita", "música de câmara"
+- Festival de piano, festival de música clássica, música barroca, música contemporânea
+
+⚠️ EXCEÇÃO - NÃO classificar como Música Clássica SE:
+- Evento é EXPLICITAMENTE de dança moderna/contemporânea (ex: "Cia de Dança")
+- OU é musical/teatro com música (nesse caso: "Teatro")
+- OU é show popular/MPB em teatro (nesse caso: categoria do gênero musical)
+
+💡 DICA: Em caso de DÚVIDA entre Dança e Música Clássica:
+- Se há piano/orquestra AO VIVO → "Música Clássica"
+- Se foco é coreografia/dança → "Teatro" ou "Geral"
+
+OUTRAS PRIORIDADES:
 - PRIORIZE jazz autêntico sobre tributos quando houver dúvida
 
 EVENTOS PARA CLASSIFICAR:
