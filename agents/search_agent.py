@@ -175,6 +175,180 @@ class SearchAgent(BaseAgent):
         logger.info(f"   ✓ Busca concluída: {search_name}")
         return result
 
+    def _deduplicate_events_by_title(self, events: list[dict]) -> list[dict]:
+        """
+        Deduplica eventos por similaridade de título.
+
+        Remove eventos duplicados baseado em:
+        1. Títulos idênticos (case-insensitive)
+        2. Títulos muito similares (>85% de similaridade)
+
+        Args:
+            events: Lista de eventos para deduplicar
+
+        Returns:
+            Lista de eventos únicos, priorizando os mais completos
+        """
+        from difflib import SequenceMatcher
+
+        if not events:
+            return []
+
+        unique_events = []
+        seen_titles = []
+
+        # Ordenar por completude (eventos com link e descrição primeiro)
+        sorted_events = sorted(
+            events,
+            key=lambda e: (
+                bool(e.get('link_ingresso')),
+                bool(e.get('descricao')),
+                len(str(e.get('titulo', '')))
+            ),
+            reverse=True
+        )
+
+        for event in sorted_events:
+            titulo = str(event.get('titulo', '')).strip().lower()
+            if not titulo:
+                continue
+
+            # Verificar se é similar a algum título já visto
+            is_duplicate = False
+            for seen_title in seen_titles:
+                similarity = SequenceMatcher(None, titulo, seen_title).ratio()
+                if similarity > 0.85:  # 85% de similaridade
+                    is_duplicate = True
+                    logger.debug(f"      Duplicata detectada: '{titulo}' vs '{seen_title}' ({similarity:.2%})")
+                    break
+
+            if not is_duplicate:
+                unique_events.append(event)
+                seen_titles.append(titulo)
+
+        return unique_events
+
+    async def _run_parallel_micro_search(
+        self,
+        prompt: str,
+        search_name: str,
+        n_parallel: int = 3
+    ) -> list[dict]:
+        """
+        Executa múltiplas buscas paralelas e merge os resultados.
+
+        Estratégia: Fazer N consultas simultâneas ao Perplexity para aumentar
+        cobertura, já que cada chamada pode retornar eventos diferentes devido
+        à variabilidade do modelo.
+
+        Args:
+            prompt: Prompt de busca
+            search_name: Nome da busca (para logs)
+            n_parallel: Número de consultas paralelas (padrão: 3)
+
+        Returns:
+            Lista de eventos únicos (deduplificados) de todas as consultas
+        """
+        import json
+
+        logger.info(f"   🔍⚡ Iniciando {n_parallel} buscas paralelas: {search_name}")
+
+        # Executar N buscas em paralelo
+        tasks = [
+            self._run_micro_search(prompt, f"{search_name} #{i+1}")
+            for i in range(n_parallel)
+        ]
+
+        results = await asyncio.gather(*tasks)
+
+        # Parsear e coletar todos os eventos
+        all_events = []
+        successful_queries = 0
+
+        for i, result_str in enumerate(results, 1):
+            try:
+                # Limpar JSON de markdown/texto extra
+                clean_json = self._clean_json_from_markdown(result_str)
+                if not clean_json:
+                    logger.warning(f"      Query #{i}: JSON vazio após limpeza")
+                    continue
+
+                data = json.loads(clean_json)
+                events = data.get('eventos', [])
+
+                if events:
+                    all_events.extend(events)
+                    successful_queries += 1
+                    logger.info(f"      Query #{i}: {len(events)} eventos encontrados")
+                else:
+                    logger.info(f"      Query #{i}: Nenhum evento encontrado")
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"      Query #{i}: Erro ao parsear JSON - {e}")
+            except Exception as e:
+                logger.error(f"      Query #{i}: Erro inesperado - {e}")
+
+        # Deduplicar eventos
+        unique_events = self._deduplicate_events_by_title(all_events)
+
+        logger.info(
+            f"   ✓ Busca paralela concluída: {search_name} - "
+            f"{len(all_events)} eventos brutos → {len(unique_events)} únicos "
+            f"({successful_queries}/{n_parallel} queries OK)"
+        )
+
+        return unique_events
+
+    def _clean_json_from_markdown(self, text: str) -> str:
+        """Remove markdown code blocks e texto extra do JSON.
+
+        Já existe implementação similar, mas criando versão standalone.
+        """
+        import re
+
+        if not text or text.strip() == "":
+            return ""
+
+        text = text.strip()
+
+        # STEP 1: Extrair JSON de dentro de ```json blocks
+        code_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+        matches = re.findall(code_block_pattern, text)
+        if matches:
+            text = matches[-1].strip()
+
+        # STEP 2: Remover texto ANTES do primeiro { ou [
+        json_start_brace = text.find('{')
+        json_start_bracket = text.find('[')
+        valid_starts = [pos for pos in [json_start_brace, json_start_bracket] if pos != -1]
+        if valid_starts:
+            json_start = min(valid_starts)
+            text = text[json_start:]
+
+        # STEP 3: Remover texto DEPOIS do último } ou ]
+        if text.startswith('{'):
+            depth = 0
+            for i, char in enumerate(text):
+                if char == '{':
+                    depth += 1
+                elif char == '}':
+                    depth -= 1
+                    if depth == 0:
+                        text = text[:i+1]
+                        break
+        elif text.startswith('['):
+            depth = 0
+            for i, char in enumerate(text):
+                if char == '[':
+                    depth += 1
+                elif char == ']':
+                    depth -= 1
+                    if depth == 0:
+                        text = text[:i+1]
+                        break
+
+        return text.strip()
+
     def _build_focused_prompt(
         self,
         categoria: str,
@@ -607,6 +781,28 @@ IMPORTANTE:
             month_str=context["month_str"]
         )
 
+    def _get_search_task(self, prompt: str, search_name: str, config: dict):
+        """
+        Retorna tarefa de busca (paralela ou sequencial) baseado em configuração.
+
+        Args:
+            prompt: Prompt de busca
+            search_name: Nome da busca (para logs)
+            config: Configuração do YAML com campo opcional 'parallel_queries'
+
+        Returns:
+            Coroutine para asyncio.gather()
+        """
+        n_parallel = config.get("parallel_queries", 1)
+
+        if n_parallel <= 1:
+            # Busca sequencial
+            return self._run_micro_search(prompt, search_name)
+        else:
+            # Busca paralela
+            logger.info(f"   ⚡ Configurando busca paralela para {search_name} ({n_parallel} queries)")
+            return self._run_parallel_micro_search(prompt, search_name, n_parallel)
+
     async def search_all_sources(self) -> dict[str, Any]:
         """Busca eventos usando Perplexity Sonar Pro com 6 micro-searches focadas."""
         logger.info(f"{self.log_prefix} Iniciando busca de eventos com Perplexity Sonar Pro...")
@@ -660,10 +856,12 @@ IMPORTANTE:
         # Carregar configurações de categorias e construir prompts
         categorias_ids = ["jazz", "comedia", "musica_classica", "outdoor", "cinema", "feira_gastronomica", "feira_artesanato"]
         prompts_categorias = {}
+        configs_categorias = {}  # Guardar configs para uso posterior
 
         for cat_id in categorias_ids:
             config = self.prompt_loader.get_categoria(cat_id, context)
             prompts_categorias[cat_id] = self._build_prompt_from_config(config, context)
+            configs_categorias[cat_id] = config
 
         # Carregar configurações de venues e construir prompts
         venues_ids = [
@@ -673,10 +871,12 @@ IMPORTANTE:
             "istituto_italiano", "maze_jazz", "teatro_leblon", "clube_jazz_rival", "estacao_net"
         ]
         prompts_venues = {}
+        configs_venues = {}  # Guardar configs para uso posterior
 
         for venue_id in venues_ids:
             config = self.prompt_loader.get_venue(venue_id, context)
             prompts_venues[venue_id] = self._build_prompt_from_config(config, context)
+            configs_venues[venue_id] = config
 
         # ═══════════════════════════════════════════════════════════
         # BUSCAS SEPARADAS PARA SÁBADOS OUTDOOR (dinâmico)
@@ -707,38 +907,39 @@ IMPORTANTE:
 
             # Preparar lista de searches (categorias + sábados + venues)
             searches = [
-                self._run_micro_search(prompts_categorias["jazz"], "Jazz"),
-                self._run_micro_search(prompts_categorias["comedia"], "Comédia"),
-                self._run_micro_search(prompts_categorias["musica_classica"], "Música Clássica"),
+                self._get_search_task(prompts_categorias["jazz"], "Jazz", configs_categorias["jazz"]),
+                self._get_search_task(prompts_categorias["comedia"], "Comédia", configs_categorias["comedia"]),
+                self._get_search_task(prompts_categorias["musica_classica"], "Música Clássica", configs_categorias["musica_classica"]),
                 # OUTDOOR: substituído por buscas separadas por sábado
-                self._run_micro_search(prompts_categorias["cinema"], "Cinema"),
-                self._run_micro_search(prompts_categorias["feira_gastronomica"], "Feira Gastronômica"),
-                self._run_micro_search(prompts_categorias["feira_artesanato"], "Feira de Artesanato"),
+                self._get_search_task(prompts_categorias["cinema"], "Cinema", configs_categorias["cinema"]),
+                self._get_search_task(prompts_categorias["feira_gastronomica"], "Feira Gastronômica", configs_categorias["feira_gastronomica"]),
+                self._get_search_task(prompts_categorias["feira_artesanato"], "Feira de Artesanato", configs_categorias["feira_artesanato"]),
             ]
 
-            # Adicionar buscas de sábados outdoor
+            # Adicionar buscas de sábados outdoor (usa config de outdoor)
+            outdoor_config = configs_categorias["outdoor"]
             for i, saturday_prompt in enumerate(saturday_prompts):
-                searches.append(self._run_micro_search(saturday_prompt, saturday_names[i]))
+                searches.append(self._get_search_task(saturday_prompt, saturday_names[i], outdoor_config))
 
             # Adicionar buscas de venues
             searches.extend([
-                self._run_micro_search(prompts_venues["casa_choro"], "Casa do Choro"),
-                self._run_micro_search(prompts_venues["sala_cecilia"], "Sala Cecília Meireles"),
-                self._run_micro_search(prompts_venues["teatro_municipal"], "Teatro Municipal"),
-                self._run_micro_search(prompts_venues["artemis"], "Artemis"),
-                self._run_micro_search(prompts_venues["ccbb"], "CCBB Rio"),
-                self._run_micro_search(prompts_venues["oi_futuro"], "Oi Futuro"),
-                self._run_micro_search(prompts_venues["ims"], "IMS"),
-                self._run_micro_search(prompts_venues["parque_lage"], "Parque Lage"),
-                self._run_micro_search(prompts_venues["ccjf"], "CCJF"),
-                self._run_micro_search(prompts_venues["mam_cinema"], "MAM Cinema"),
-                self._run_micro_search(prompts_venues["theatro_net"], "Theatro Net Rio"),
-                self._run_micro_search(prompts_venues["ccbb_teatro_cinema"], "CCBB Teatro/Cinema"),
-                self._run_micro_search(prompts_venues["istituto_italiano"], "Istituto Italiano"),
-                self._run_micro_search(prompts_venues["maze_jazz"], "Maze Jazz Club"),
-                self._run_micro_search(prompts_venues["teatro_leblon"], "Teatro do Leblon"),
-                self._run_micro_search(prompts_venues["clube_jazz_rival"], "Clube do Jazz/Rival"),
-                self._run_micro_search(prompts_venues["estacao_net"], "Estação Net"),
+                self._get_search_task(prompts_venues["casa_choro"], "Casa do Choro", configs_venues["casa_choro"]),
+                self._get_search_task(prompts_venues["sala_cecilia"], "Sala Cecília Meireles", configs_venues["sala_cecilia"]),
+                self._get_search_task(prompts_venues["teatro_municipal"], "Teatro Municipal", configs_venues["teatro_municipal"]),
+                self._get_search_task(prompts_venues["artemis"], "Artemis", configs_venues["artemis"]),
+                self._get_search_task(prompts_venues["ccbb"], "CCBB Rio", configs_venues["ccbb"]),
+                self._get_search_task(prompts_venues["oi_futuro"], "Oi Futuro", configs_venues["oi_futuro"]),
+                self._get_search_task(prompts_venues["ims"], "IMS", configs_venues["ims"]),
+                self._get_search_task(prompts_venues["parque_lage"], "Parque Lage", configs_venues["parque_lage"]),
+                self._get_search_task(prompts_venues["ccjf"], "CCJF", configs_venues["ccjf"]),
+                self._get_search_task(prompts_venues["mam_cinema"], "MAM Cinema", configs_venues["mam_cinema"]),
+                self._get_search_task(prompts_venues["theatro_net"], "Theatro Net Rio", configs_venues["theatro_net"]),
+                self._get_search_task(prompts_venues["ccbb_teatro_cinema"], "CCBB Teatro/Cinema", configs_venues["ccbb_teatro_cinema"]),
+                self._get_search_task(prompts_venues["istituto_italiano"], "Istituto Italiano", configs_venues["istituto_italiano"]),
+                self._get_search_task(prompts_venues["maze_jazz"], "Maze Jazz Club", configs_venues["maze_jazz"]),
+                self._get_search_task(prompts_venues["teatro_leblon"], "Teatro do Leblon", configs_venues["teatro_leblon"]),
+                self._get_search_task(prompts_venues["clube_jazz_rival"], "Clube do Jazz/Rival", configs_venues["clube_jazz_rival"]),
+                self._get_search_task(prompts_venues["estacao_net"], "Estação Net", configs_venues["estacao_net"]),
             ])
 
             # Executar todas as buscas em paralelo
@@ -1004,7 +1205,8 @@ IMPORTANTE:
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
-                        "categoria": "Jazz"
+                        "categoria": "Jazz",
+                        "link_valid": True  # Scraper oficial = link confiável
                     }
                     eventos_jazz.append(jazz_event)
                     logger.debug(f"   ✓ Scraper: {jazz_event['titulo']}")
@@ -1106,7 +1308,8 @@ IMPORTANTE:
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
-                        "venue": "Sala Cecília Meireles"
+                        "venue": "Sala Cecília Meireles",
+                        "link_valid": True  # Scraper oficial = link confiável
                     }
                     eventos_sala_cecilia.append(cecilia_event)
                     logger.debug(f"   ✓ Scraper: {cecilia_event['titulo']}")
@@ -1151,7 +1354,8 @@ IMPORTANTE:
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
-                        "venue": "Teatro Municipal do Rio de Janeiro"
+                        "venue": "Teatro Municipal do Rio de Janeiro",
+                        "link_valid": True  # Scraper oficial = link confiável
                     }
                     eventos_teatro_municipal.append(municipal_event)
                     logger.debug(f"   ✓ Scraper: {municipal_event['titulo']}")
@@ -1199,7 +1403,8 @@ IMPORTANTE:
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
-                        "venue": "CCBB Rio - Centro Cultural Banco do Brasil"
+                        "venue": "CCBB Rio - Centro Cultural Banco do Brasil",
+                        "link_valid": True  # Scraper oficial = link confiável
                     }
                     eventos_ccbb.append(ccbb_event)
                     logger.debug(f"   ✓ Scraper: {ccbb_event['titulo']}")

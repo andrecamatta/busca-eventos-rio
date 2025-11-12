@@ -45,6 +45,7 @@ categorias:
     nome: Jazz
     tipo_busca: categoria
     descricao: Shows de jazz no Rio de Janeiro (jazz tradicional, bebop, fusion, bossa nova)
+    parallel_queries: 3  # Alta variabilidade em venues, múltiplas fontes
 
     tipos_evento:
       - Shows de jazz ao vivo
@@ -95,6 +96,7 @@ categorias:
     nome: Comédia
     tipo_busca: categoria
     descricao: Stand-up e peças de comédia no Rio (exceto infantil)
+    parallel_queries: 2  # Bom ROI, teatros distribuídos
 
     tipos_evento:
       - Stand-up comedy
@@ -132,6 +134,7 @@ categorias:
     nome: Música Clássica
     tipo_busca: categoria
     descricao: Concertos de música clássica em locais alternativos (exceto venues tradicionais)
+    parallel_queries: 1  # Menos variável, scrapers cobrem bem
 
     tipos_evento:
       - Concertos em igrejas
@@ -187,81 +190,94 @@ categorias:
   outdoor:
     nome: Outdoor/Parques
     tipo_busca: categoria
-    descricao: Eventos culturais ao ar livre em fim de semana (cinema, concertos, feiras nichadas)
+    descricao: Cinema ao ar livre, concertos em parques e feiras culturais aos fins de semana
+    parallel_queries: 3  # Crítico - ganho 150%+, múltiplas feiras/parques
 
     tipos_evento:
-      - Cinema ao ar livre
-      - Concertos em parques
-      - Feiras culturais nichadas
-      - Feiras gastronômicas outdoor
-      - Feiras de artesanato em praças
-      - Shows acústicos em jardins
-      - Festivais culturais pequenos/médios
+      - Cinema ao ar livre em parques
+      - Concertos e shows acústicos em jardins
+      - Feira Rio Antigo e Feira Praça XV
+      - Feiras gastronômicas e de artesanato outdoor
+      - Festivais culturais pequenos
 
     palavras_chave:
       - "cinema ao ar livre Rio sábado {month_range_str}"
-      - "cinema céu aberto Rio {month_range_str}"
+      - "Varanda Sonora Parque Lage {month_range_str}"
       - "concerto jardim sábado Rio {month_range_str}"
-      - "concerto parque fim de semana Rio {month_range_str}"
-      - "música clássica ao ar livre Rio sábado {month_range_str}"
-      - "Feira Rio Antigo entre {start_date_str} e {end_date_str}"
+      - "Feira Rio Antigo {month_range_str}"
       - "Feira Praça XV sábado {month_range_str}"
-      - "feira artesanato Jardim Botânico fim de semana {month_range_str}"
-      - "feira gastronômica parque Rio sábado {month_range_str}"
-      - "Quinta Boa Vista eventos sábado {month_range_str}"
-      - "Aterro Flamengo eventos culturais sábado {month_range_str}"
-      - "Parque Garota Ipanema eventos fim de semana {month_range_str}"
-      - "show acústico jardim sábado Rio {month_range_str}"
+      - "feira Jardim Botânico fim de semana {month_range_str}"
+      - "eventos Parque Lage sábado {month_range_str}"
+      - "show acústico parque Rio {month_range_str}"
 
     venues_sugeridos:
-      - Jardim Botânico (concertos, cinema ao ar livre)
-      - Quinta da Boa Vista (feiras, shows)
-      - Aterro do Flamengo (festivais, feiras)
-      - Parque Garota de Ipanema (eventos culturais)
-      - Parque Lage (cinema ao ar livre, concertos)
+      - Parque Lage (Varanda Sonora - sábados)
+      - Jardim Botânico (cinema, concertos)
+      - Quinta da Boa Vista
+      - Aterro do Flamengo
       - Praça XV (Feira Praça XV)
-      - Largo da Carioca (Feira Rio Antigo)
-      - Praça Mauá (eventos culturais)
-      - Jardins de museus e centros culturais
+      - Largo da Carioca (Feira Rio Antigo - 1º sábado)
 
     fontes_prioritarias:
       - Riotur (visit.rio/agenda)
-      - Bafafá Rio (bafafa.com.br)
-      - TimeOut Rio
-      - Veja Rio - seção Fim de Semana
-      - Agendas culturais da Prefeitura
-      - Instagram dos parques (@parquelage, @jardimbotanicorj)
-
-    instrucoes_especiais: |
-      ⚠️ PERÍODO: {start_date_str} a {end_date_str}
-      ⚠️ APENAS eventos culturais ao ar livre em SÁBADOS/DOMINGOS
-
-      BUSCAR (nesta ordem):
-      1. Cinema ao ar livre (Parque Lage, Jardim Botânico, Aterro)
-      2. Concertos em parques (música clássica, jazz, MPB)
-      3. Feira do Rio Antigo (1º sábado) + Feira Praça XV (sábados/domingos)
-      4. Feiras gastronômicas/artesanato outdoor
-
-      LOCAIS COM PROGRAMAÇÃO REGULAR:
-      - Jardim Botânico, Quinta Boa Vista, Aterro Flamengo
-      - Parque Lage (Varanda Sonora aos sábados)
-
-      FONTES:
-      - Riotur (visit.rio), Bafafá, TimeOut Rio
+      - TimeOut Rio - seção Fim de Semana
+      - Bafafá Rio
       - Instagram @parquelage, @jardimbotanicorj
 
-      VALIDAÇÃO OBRIGATÓRIA:
-      ✓ Data é SÁBADO ou DOMINGO entre {start_date_str} e {end_date_str}
-      ✓ Evento é CULTURAL (não esportivo/comercial)
-      ✓ Tem artista/tema específico (não genérico)
+    instrucoes_especiais: |
+      🚨 FORMATO DE RESPOSTA - CRÍTICO:
+      - RETORNAR APENAS JSON PURO (sem texto antes ou depois)
+      - NÃO adicionar explicações, comentários ou markdown
+      - NÃO usar blocos ```json ou ```
+      - INICIAR resposta com {{ e TERMINAR com }}
+      - Se não encontrar eventos: {{"eventos": []}}
 
-      EXCLUIR:
-      ❌ Samba/pagode/forró, shows mainstream, mega eventos, esportes
+      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
+
+      🎯 OBJETIVO: Buscar TODOS os eventos culturais ao ar livre em SÁBADOS/DOMINGOS no Rio
+      ⚠️ NÃO se limitar aos exemplos - buscar QUALQUER evento outdoor cultural no período
+
+      FONTES PRIORITÁRIAS (consultar TODAS):
+      1. **Bafafá Rio** (bafafa.com.br) - FONTE PRINCIPAL (agregador de eventos)
+         - Buscar: "site:bafafa.com.br eventos outdoor Rio {month_range_str}"
+      2. **TimeOut Rio** (timeout.com/rio-de-janeiro) - Seção "Coisas para fazer"
+         - Buscar: "site:timeout.com/rio-de-janeiro eventos fim de semana {month_range_str}"
+      3. **Riotur** (visit.rio) - Agenda oficial da cidade
+      4. **Sympla/Eventbrite** - Filtrar por "ao ar livre" ou "outdoor"
+      5. **Instagram** de venues: @parquelage, @jardimbotanicorj, @quintadaboavista
+
+      TIPOS DE EVENTOS (incluindo mas NÃO limitado a):
+      ✅ Cinema ao ar livre (qualquer parque/praia)
+      ✅ Concertos e shows acústicos em jardins/parques
+      ✅ Feiras: culturais, gastronômicas, artesanato (Rio Antigo, Praça XV, Glória, Junta Local)
+      ✅ Festivais de rua e música
+      ✅ Shows em praias (Arpoador, Copacabana, Ipanema)
+      ✅ Eventos culturais em praças públicas
+      ✅ Yoga/meditação com música ao vivo
+      ✅ Apresentações teatrais ao ar livre
+
+      EXEMPLOS de eventos conhecidos (se acontecerem no período):
+      - Varanda Sonora (Parque Lage - sábados)
+      - Feira Rio Antigo (1º sábado do mês)
+      - Junta Local (vários locais)
+      - Cinema em parques (Lage, Jardim Botânico, Aterro)
+      - Sunset no Arpoador com música
+
+      VALIDAÇÃO:
+      ✓ Data: SÁBADO ou DOMINGO entre {start_date_str} e {end_date_str}
+      ✓ Ao ar livre (outdoor/open air)
+      ✓ Cultural (não puramente comercial)
+      ✓ Local específico no Rio de Janeiro
+
+      EXCLUIR APENAS:
+      ❌ Eventos esportivos (corridas, futebol, ciclismo)
+      ❌ Mega shows comerciais pagos (>1000 pessoas, >R$100)
 
   cinema:
     nome: Cinema
     tipo_busca: categoria
     descricao: Mostras de cinema, cineclubes e sessões especiais
+    parallel_queries: 2  # Mostras diversas, cineclubes diferentes
 
     tipos_evento:
       - Mostras de cinema
@@ -308,6 +324,7 @@ categorias:
     nome: Feira Gastronômica
     tipo_busca: categoria
     descricao: Feiras gastronômicas e food festivals em fim de semana
+    parallel_queries: 2  # Múltiplas feiras paralelas
 
     tipos_evento:
       - Feiras gastronômicas
@@ -333,6 +350,7 @@ categorias:
     nome: Feira de Artesanato
     tipo_busca: categoria
     descricao: Feiras de artesanato, arte e design em fim de semana
+    parallel_queries: 2  # Múltiplas feiras paralelas
 
     tipos_evento:
       - Feiras de artesanato
@@ -364,6 +382,7 @@ venues:
     tipo_busca: venue
     descricao: Programação da Casa do Choro (choro, samba, música brasileira)
     endereco: "Rua da Carioca, 38, Centro, Rio de Janeiro"
+    parallel_queries: 2  # Boa cobertura com 2 queries
 
     tipos_evento:
       - Shows de choro
@@ -396,6 +415,7 @@ venues:
     tipo_busca: venue
     descricao: Programação da Sala Cecília Meireles (música clássica, erudita, coral)
     endereco: "Largo da Lapa, 47, Lapa, Rio de Janeiro"
+    parallel_queries: 1  # Scraper oficial cobre bem
 
     tipos_evento:
       - Concertos de música clássica
@@ -425,6 +445,7 @@ venues:
     tipo_busca: venue
     descricao: Programação do Teatro Municipal (ópera, balé, concertos, teatro clássico)
     endereco: "Praça Floriano, s/n, Centro, Rio de Janeiro"
+    parallel_queries: 1  # Scraper oficial + programação concentrada
 
     tipos_evento:
       - Óperas
@@ -471,6 +492,7 @@ venues:
     tipo_busca: venue
     descricao: Eventos e cursos de café na Artemis Torrefação
     endereco: "Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro"
+    parallel_queries: 2  # Cursos pontuais, bom com 2 queries
 
     tipos_evento:
       - Cursos de barista
@@ -518,6 +540,7 @@ venues:
     tipo_busca: venue
     descricao: Programação do CCBB (exposições, teatro, cinema, shows)
     endereco: "Rua Primeiro de Março, 66, Centro, Rio de Janeiro"
+    parallel_queries: 2  # Múltiplas salas/tipos (Teatro, Cinema, Exposições)
 
     tipos_evento:
       - Exposições de arte
@@ -552,6 +575,7 @@ venues:
     tipo_busca: venue
     descricao: Eventos culturais e tecnológicos no Oi Futuro (Ipanema e Flamengo)
     endereco: "Rua Dois de Dezembro, 63, Ipanema/Flamengo, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Exposições de arte e tecnologia
@@ -586,6 +610,7 @@ venues:
     tipo_busca: venue
     descricao: Eventos culturais no IMS Rio (fotografia, música, cinema, literatura)
     endereco: "Rua Marquês de São Vicente, 476, Gávea, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Exposições de fotografia
@@ -619,6 +644,7 @@ venues:
     tipo_busca: venue
     descricao: Eventos culturais e artísticos no Parque Lage (EAV - Escola de Artes Visuais)
     endereco: "Rua Jardim Botânico, 414, Jardim Botânico, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Exposições de arte contemporânea
@@ -655,6 +681,7 @@ venues:
     tipo_busca: venue
     descricao: Eventos culturais no CCJF (Centro - exposições, música, teatro)
     endereco: "Av. Rio Branco, 241, Centro, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Exposições de arte
@@ -688,6 +715,7 @@ venues:
     tipo_busca: venue
     descricao: Cinema curado do Museu de Arte Moderna - sessões e retrospectivas
     endereco: "Av. Infante Dom Henrique, 85, Parque do Flamengo, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Sessões de cinema de arte
@@ -715,6 +743,7 @@ venues:
     tipo_busca: venue
     descricao: Teatro comercial - musicais, comédias, dramas
     endereco: "Rua Siqueira Campos, 143, Copacabana, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Musicais
@@ -743,6 +772,7 @@ venues:
     tipo_busca: venue
     descricao: Programação de teatro e cinema do CCBB (além de exposições)
     endereco: "Rua Primeiro de Março, 66, Centro, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Espetáculos teatrais
@@ -772,6 +802,7 @@ venues:
     tipo_busca: venue
     descricao: Eventos culturais italianos (cinema, música, exposições, palestras)
     endereco: "Av. Presidente Antônio Carlos, 40, Centro, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Cinema italiano
@@ -809,10 +840,11 @@ venues:
       ✅ Muitos eventos gratuitos
 
   maze_jazz:
-    nome: Maze Jazz Club
+    nome: Maze Jazz Club (The Maze / Casa do Bob)
     tipo_busca: venue
     descricao: Casa de jazz especializada - shows de jazz ao vivo
-    endereco: "Rua Barão de Iguatemi, 388, Praça da Bandeira, Rio de Janeiro"
+    endereco: "Rua Tavares Bastos, 414, Catete, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Shows de jazz ao vivo
@@ -833,9 +865,9 @@ venues:
       - Eventbrite
 
     instrucoes_especiais: |
-      🎯 BUSCAR: Shows de jazz no Maze Jazz Club
+      🎯 BUSCAR: Shows de jazz no Maze Jazz Club (The Maze / Casa do Bob)
 
-      ENDEREÇO CORRETO: Rua Barão de Iguatemi, 388, Praça da Bandeira
+      ENDEREÇO CORRETO: Rua Tavares Bastos, 414, Catete (Morro Tavares Bastos)
 
       ESTRATÉGIA:
       1. Instagram: @mazejazzclub (programação semanal)
@@ -851,6 +883,7 @@ venues:
     tipo_busca: venue
     descricao: Teatro comercial - comédias, musicais, dramas
     endereco: "Rua Conde Bernadotte, 26, Leblon, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Comédias teatrais
@@ -888,6 +921,7 @@ venues:
     tipo_busca: venue
     descricao: Shows de jazz no Teatro Rival (Clube do Jazz e outras programações)
     endereco: "Rua Álvaro Alvim, 33, Cinelândia, Centro, Rio de Janeiro"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Shows de jazz
@@ -926,6 +960,7 @@ venues:
     tipo_busca: venue
     descricao: Cinema de arte - mostras, festivais e sessões especiais (2 unidades)
     endereco: "Rua Voluntários da Pátria, 88, Botafogo / Rua Visconde de Pirajá, 605, Ipanema"
+    parallel_queries: 2  # Ganho modesto mas positivo
 
     tipos_evento:
       - Mostras de cinema
