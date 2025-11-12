@@ -1,9 +1,68 @@
 """Pydantic models para eventos."""
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 from pydantic import BaseModel, Field, field_validator
+
+from utils.prompt_loader import get_prompt_loader
+
+
+# Gerar Literal de categorias dinamicamente baseado no YAML
+def _get_dynamic_category_literals() -> tuple[list[str], str]:
+    """
+    Extrai nomes de categorias do YAML e gera lista para Literal.
+
+    Returns:
+        Tuple com (lista_categorias, nome_display_padrao)
+    """
+    try:
+        loader = get_prompt_loader()
+        categorias_ids = loader.get_all_categorias()
+
+        # Extrair nome_display de cada categoria
+        categorias = []
+        for cat_id in categorias_ids:
+            try:
+                config = loader.get_categoria(cat_id, {})
+                if "nome" in config:
+                    categorias.append(config["nome"])
+                else:
+                    # Fallback para o ID se nome não existir
+                    categorias.append(cat_id.replace("_", " ").title())
+            except Exception:
+                # Se falhar ao carregar categoria, usar ID formatado
+                categorias.append(cat_id.replace("_", " ").title())
+
+        # Deduplicar mantendo ordem
+        categorias_unicas = list(dict.fromkeys(categorias))
+
+        # Adicionar categorias alternativas comuns (compatibilidade)
+        categorias_extras = ["Outdoor-FimDeSemana", "Outdoor", "Geral", "Jazz"]
+        for extra in categorias_extras:
+            if extra not in categorias_unicas:
+                categorias_unicas.append(extra)
+
+        return categorias_unicas, "categorias do YAML"
+    except Exception as e:
+        # Fallback para lista fixa em caso de erro
+        print(f"Aviso: Não foi carregar categorias do YAML: {e}")
+        print("Usando categorias padrão como fallback...")
+        return [
+            "Jazz",
+            "Música Clássica",
+            "Teatro",
+            "Comédia",
+            "Cinema",
+            "Outdoor/Parques",
+            "Outdoor-FimDeSemana",
+            "Outdoor",
+            "Geral"
+        ], "fallback (erro ao carregar YAML)"
+
+
+# Gerar Literal dinâmico
+CATEGORY_LITERALS, CATEGORY_SOURCE = _get_dynamic_category_literals()
 
 
 class EventoBase(BaseModel):
@@ -75,22 +134,10 @@ class EventoBase(BaseModel):
 
 
 class EventoCategoria(EventoBase):
-    """Evento baseado em categoria (9 categorias granulares)."""
+    """Evento baseado em categoria (categorias dinâmicas do YAML)."""
 
-    categoria: Literal[
-        "Jazz",
-        "Música Clássica",
-        "Teatro",
-        "Comédia",
-        "Cinema",
-        "Feira Gastronômica",
-        "Feira de Artesanato",
-        "Outdoor/Parques",
-        "Outdoor-FimDeSemana",
-        "Outdoor",
-        "Cursos de Café"
-    ] = Field(
-        ..., description="Categoria do evento"
+    categoria: Literal[tuple(CATEGORY_LITERALS)] = Field(
+        ..., description=f"Categoria do evento ({CATEGORY_SOURCE})"
     )
 
 
