@@ -1009,45 +1009,61 @@ OBJETIVO:
                 return text.strip()
 
             # Helper function: Parse categoria com Pydantic
-            def safe_parse_categoria(result_str: str, search_name: str) -> list[dict]:
+            def safe_parse_categoria(result_data, search_name: str) -> list[dict]:
                 """Parse categoria usando Pydantic validation."""
                 try:
-                    # 🔍 DEBUG: Mostrar detalhes da string recebida
-                    logger.info(f"🔍 DEBUG [{search_name}] String recebida:")
-                    logger.info(f"   • Tipo: {type(result_str)}")
-                    logger.info(f"   • Length: {len(result_str) if result_str else 'None'}")
-                    if result_str:
-                        logger.info(f"   • Primeiros 50 chars (repr): {repr(result_str[:50])}")
-                        logger.info(f"   • Últimos 50 chars (repr): {repr(result_str[-50:])}")
-                        logger.info(f"   • Apenas whitespace? {result_str.isspace()}")
-                        logger.info(f"   • Length após strip(): {len(result_str.strip())}")
-                    else:
-                        logger.info(f"   • String é None ou vazia")
+                    # 🔍 DEBUG: Mostrar detalhes dos dados recebidos
+                    logger.info(f"🔍 DEBUG [{search_name}] Dados recebidos:")
+                    logger.info(f"   • Tipo: {type(result_data)}")
 
-                    if not result_str or not isinstance(result_str, str) or result_str.strip() == "":
-                        logger.warning(f"⚠️  Busca {search_name} retornou vazio")
+                    # 🛠️ CORREÇÃO: Aceitar tanto string quanto list
+                    if isinstance(result_data, list):
+                        logger.info(f"   • Dados em formato LIST - processamento direto")
+                        logger.info(f"   • Length: {len(result_data)}")
+                        # Dados já são lista de eventos - usar diretamente
+                        if not result_data:
+                            logger.warning(f"⚠️  Busca {search_name} retornou lista vazia")
+                            return []
+                        eventos = result_data
+                        # FILTRO CRÍTICO: Remover eventos com datas inválidas
+                        eventos_filtrados = filter_events_by_date(eventos, search_name)
+                        logger.info(f"✓ Busca {search_name}: {len(eventos_filtrados)} eventos processados (lista direta)")
+                        return eventos_filtrados
+                    elif isinstance(result_data, str):
+                        logger.info(f"   • Dados em formato STRING - parseando JSON")
+                        logger.info(f"   • Length: {len(result_data)}")
+                        if result_data.strip() == "":
+                            logger.warning(f"⚠️  Busca {search_name} retornou string vazia")
+                            return []
+                        # Limpar markdown antes de parsear
+                        clean_json = clean_json_from_markdown(result_data)
+                        if not clean_json:
+                            logger.warning(f"⚠️  Busca {search_name} retornou JSON vazio após limpeza")
+                            return []
+                        # Use Pydantic para validar e parsear
+                        resultado = ResultadoBuscaCategoria.model_validate_json(clean_json)
+                        logger.info(f"✓ Busca {search_name}: {len(resultado.eventos)} eventos validados")
+                        # Converter Pydantic models para dicts
+                        eventos = [evento.model_dump() for evento in resultado.eventos]
+                        # FILTRO CRÍTICO: Remover eventos com datas inválidas
+                        eventos_filtrados = filter_events_by_date(eventos, search_name)
+                        return eventos_filtrados
+                    else:
+                        logger.error(f"❌ Tipo de dados inesperado na busca {search_name}: {type(result_data)}")
                         return []
-                    # Limpar markdown antes de parsear
-                    clean_json = clean_json_from_markdown(result_str)
-                    if not clean_json:
-                        logger.warning(f"⚠️  Busca {search_name} retornou JSON vazio após limpeza")
-                        return []
-                    # Use Pydantic para validar e parsear
-                    resultado = ResultadoBuscaCategoria.model_validate_json(clean_json)
-                    logger.info(f"✓ Busca {search_name}: {len(resultado.eventos)} eventos validados")
-                    # Converter Pydantic models para dicts
-                    eventos = [evento.model_dump() for evento in resultado.eventos]
-                    # FILTRO CRÍTICO: Remover eventos com datas inválidas
-                    eventos_filtrados = filter_events_by_date(eventos, search_name)
-                    return eventos_filtrados
+
                 except ValidationError as e:
                     logger.error(f"❌ Schema inválido na busca {search_name}:")
                     for error in e.errors():
                         logger.error(f"   • {error['loc']}: {error['msg']}")
-                    logger.error(f"   Conteúdo (primeiros 200 chars): {result_str[:200]}")
+                    if isinstance(result_data, str):
+                        logger.error(f"   Conteúdo (primeiros 200 chars): {result_data[:200]}")
+                    else:
+                        logger.error(f"   Dados: {result_data}")
                     return []
                 except Exception as e:
                     logger.error(f"❌ Erro inesperado na busca {search_name}: {e}")
+                    logger.error(f"   Tipo: {type(result_data)}")
                     return []
 
             # Helper function: Parse venue (formato diferente, mantém dict)
