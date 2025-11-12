@@ -3,6 +3,8 @@
 import json
 import logging
 import os
+import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -38,14 +40,41 @@ class EventFileManager:
         """Cria ou atualiza symlink 'latest' para a pasta da execução atual."""
         latest_link = self.base_output_dir / "latest"
 
-        # Remover symlink antigo se existir
+        # Remover symlink/diretório antigo se existir (com retry para Windows)
         if latest_link.exists() or latest_link.is_symlink():
-            latest_link.unlink()
+            for attempt in range(3):
+                try:
+                    if latest_link.is_dir() and not latest_link.is_symlink():
+                        # É um diretório real, não um symlink - remover com shutil
+                        shutil.rmtree(latest_link, ignore_errors=True)
+                    else:
+                        # É um symlink - remover com unlink
+                        latest_link.unlink()
+                    break
+                except PermissionError:
+                    if attempt < 2:
+                        time.sleep(0.5)  # Aguardar e tentar novamente
+                    else:
+                        logger.warning(f"⚠️  Não foi possível remover '{latest_link}' (em uso). Pulando atualização do link 'latest'.")
+                        return
 
-        # Criar novo symlink relativo
+        # Criar novo symlink relativo (fallback para diretório se symlink falhar no Windows)
         relative_target = self.output_dir.name
-        latest_link.symlink_to(relative_target)
-        logger.info(f"✓ Symlink 'latest' atualizado: {latest_link} -> {relative_target}")
+        try:
+            latest_link.symlink_to(relative_target)
+            logger.info(f"✓ Symlink 'latest' atualizado: {latest_link} -> {relative_target}")
+        except (OSError, NotImplementedError):
+            # Windows sem privilégios de admin - criar diretório junction como fallback
+            try:
+                import subprocess
+                subprocess.run(
+                    ["cmd", "/c", "mklink", "/J", str(latest_link), str(self.output_dir)],
+                    check=True,
+                    capture_output=True
+                )
+                logger.info(f"✓ Diretório 'latest' criado (Windows): {latest_link}")
+            except Exception as e:
+                logger.warning(f"⚠️  Não foi possível criar link 'latest': {e}")
 
     def save_json(self, data: dict | str, filename: str) -> Path:
         """

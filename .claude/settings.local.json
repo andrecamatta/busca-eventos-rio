@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(sh:*)",
+      "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
+      "Bash(uv pip install:*)",
+      "Bash(uv venv:*)",
+      "Bash(source .venv/Scripts/activate)",
+      "Bash(playwright install:*)",
+      "Bash(python:*)",
+      "Bash(uv run:*)",
+      "Bash(timeout /t 30)",
+      "Bash(nul)",
+      "Bash(cat:*)",
+      "Bash(tee:*)",
+      "Bash($env:PYTHONIOENCODING=\"utf-8\")",
+      "Bash(Out-File -Encoding utf8 judge_output.txt)",
+      "Bash(Get-Content judge_output.txt)",
+      "Bash(cmd.exe /c \"dir /s /b \"\"C:\\Program Files\\claude.exe\"\" 2>nul\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Implementa 4 melhorias críticas de qualidade (meta 7.8-8.4/10)\n\nMELHORIAS IMPLEMENTADAS:\n\n1. Endereço Blue Note Corrigido (config.py)\n   - Atualizado para \"Av. Atlântica, 1910 - Copacabana, Rio de Janeiro - RJ\"\n   - Adicionada variante \"Av. Atlântica, 1910, Leme, Rio de Janeiro\"\n   - Impacto esperado: +0.3 a +0.5 pontos (~15 eventos afetados)\n\n2. Validação Robusta de Links com Redirects (utils/http_client.py)\n   - Não segue redirects automaticamente (follow_redirects=False)\n   - Valida destino final de redirects explicitamente\n   - Detecta redirects que levam a páginas 404 ou genéricas\n   - Resolve race condition entre verify_agent e judge_agent\n   - Impacto esperado: +0.4 a +0.6 pontos (~12 eventos com links 404 corrigidos)\n\n3. Judge Agent Mais Permissivo para Correlatos (agents/judge_agent.py)\n   - Aceita eventos correlatos e similares ao prompt\n   - Exemplos válidos: Concertos + Recitais, Jazz + Bossa Nova, Teatro + Stand-up\n   - Instruções explícitas sobre eventos relacionados\n   - Impacto esperado: +0.3 a +0.5 pontos (~8 eventos correlatos agora válidos)\n\n4. Critérios de Julgamento Separados - 4 ao invés de 3 (agents/judge_agent.py)\n   - Separação de data/horário em critério próprio (30% de peso)\n   - Nova estrutura de pesos: 30% Aderência + 30% Correlação + 30% Data + 10% Completude\n   - Penalização mais severa para erros críticos de data (diferença de meses/anos)\n   - Eventos com bom conteúdo mas data errada não são mais penalizados duplamente\n   - Impacto esperado: +0.2 a +0.4 pontos (melhora scoring de ~10 eventos)\n\nBASELINE ATUAL: 6.62/10 (5 alta qualidade, 47 média, 3 baixa)\nRESULTADO ESPERADO: 7.8 a 8.4/10\n\nGenerated with Claude Code (https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Priorizar scrapers oficiais e exibir scores de qualidade\n\nMudanças principais:\n\n1. **Priorização de scrapers sobre Perplexity** (search_agent.py)\n   - Blue Note: Links oficiais de bluenoterio.com.br têm prioridade\n   - Sala Cecília Meireles: Links do site governamental têm prioridade\n   - CCBB: Links oficiais de ccbb.com.br têm prioridade\n   - Reduz links quebrados ao priorizar fontes oficiais\n   - Perplexity usado como complemento para eventos não encontrados\n\n2. **Exibição de scores de qualidade no calendário** (web/app.py)\n   - API /api/events agora carrega judged_events.json se disponível\n   - Scores aparecem automaticamente no modal do calendário\n   - Fallback para arquivos anteriores se julgamento não executado\n\n3. **Correções de consolidação de cinema** (config.py, prompts/search_prompts.yaml)\n   - Removido \"mostra\" de CONTINUOUS_EVENT_KEYWORDS\n   - Prompt de cinema especifica: 1 filme = 1 evento separado\n   - Threshold de similaridade aumentado de 0.90 para 0.98\n   - Exceção para eventos de cinema no consolidador\n\n4. **Melhorias no julgamento de qualidade** (judge_agent.py)\n   - Critério de consistência título vs descrição\n   - Penalização para eventos genéricos com descrições específicas\n   - Batch size otimizado: 5 → 10 eventos por chamada GPT-5\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(iconv:*)",
+      "Bash(git commit:*)",
+      "Bash(dir:*)",
+      "Bash(\"c:\\Users\\andre\\Documents\\busca-eventos-rio\\test_teatro_municipal_scraper.py\")",
+      "Bash(\"c:\\Users\\andre\\Documents\\busca-eventos-rio\\test_cecilia_meireles_links.py\")",
+      "Bash(chcp:*)",
+      "Bash(del:*)",
+      "Bash(pip install:*)",
+      "Bash(findstr:*)",
+      "Bash(git stash:*)",
+      "Bash(cmd /c \"dir output\\latest\")",
+      "Bash(Get-ChildItem :*)",
+      "Bash(Sort-Object LastWriteTime -Descending)",
+      "Bash(Select-Object -First 10 FullName, LastWriteTime)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

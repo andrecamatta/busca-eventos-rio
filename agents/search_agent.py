@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from agents.base_agent import BaseAgent
-from config import SEARCH_CONFIG, MAX_EVENTS_PER_VENUE
+from config import SEARCH_CONFIG, MAX_EVENTS_PER_VENUE, ENABLED_CATEGORIES, ENABLED_VENUES
 from models.event_models import ResultadoBuscaCategoria
 from utils.deduplicator import deduplicate_events
 from utils.prompt_templates import PromptBuilder
@@ -667,88 +667,6 @@ OBJETIVO:
 
         return saturdays
 
-    def _build_saturday_outdoor_prompt(self, saturday_date_str: str, month_str: str) -> str:
-        """
-        Constrói prompt ultra-focado para buscar eventos outdoor em UM sábado específico.
-
-        Args:
-            saturday_date_str: Data do sábado no formato DD/MM/YYYY
-            month_str: Nome do mês em inglês (ex: "november")
-
-        Returns:
-            Prompt completo formatado
-        """
-        return f"""
-🎯 BUSCA ULTRA-FOCADA: Eventos Outdoor no Rio APENAS no dia {saturday_date_str} (SÁBADO)
-
-OBJETIVO: Encontrar eventos culturais ao ar livre ESPECIFICAMENTE neste sábado.
-
-TIPOS DE EVENTOS:
-- 🎬 Cinema ao ar livre
-- 🎵 Concertos em parques
-- 🛍️ Feiras culturais nichadas
-- 🌳 Eventos em parques/jardins
-
-ESTRATÉGIA DE BUSCA - FOCO EM EVENTOS RECORRENTES:
-
-1. 🔍 **Feiras Recorrentes aos Sábados**:
-   - Feira da Praça XV (todos os sábados): site:bafafa.com.br "feira praça xv" {saturday_date_str}
-   - Feira Rio Antigo (1º sábado): site:visit.rio "feira rio antigo" {month_str}
-   - Feiras de artesanato em parques: site:timeout.com/rio-de-janeiro feira {month_str}
-
-2. 🔍 **Cinema ao Ar Livre**:
-   - "cinema ao ar livre rio sábado {saturday_date_str}"
-   - Parque Lage, Jardim Botânico, Aterro: site:parquelage.rj.gov.br cinema {month_str}
-
-3. 🔍 **Concertos em Parques**:
-   - "concerto jardim botânico {saturday_date_str}"
-   - "música ao ar livre rio {saturday_date_str}"
-
-4. 🔍 **Eventos em Locais Específicos**:
-   - Jardim Botânico: Instagram @jardimbotanicorj
-   - Parque Lage: Instagram @parquelage
-   - Quinta da Boa Vista: eventos culturais
-
-FONTES OBRIGATÓRIAS:
-- site:bafafa.com.br eventos rio {saturday_date_str}
-- site:visit.rio agenda {saturday_date_str}
-- site:timeout.com/rio-de-janeiro fim-de-semana
-
-⚠️ EXCLUSÕES:
-- ❌ Samba, pagode, forró, axé
-- ❌ Eventos esportivos (corridas, maratonas)
-- ❌ Mega shows em estádios
-
-INFORMAÇÕES OBRIGATÓRIAS:
-- titulo: Nome do evento
-- data: {saturday_date_str} (fixo - este sábado)
-- horario: HH:MM (obrigatório)
-- local: Nome + endereço completo
-- preco: Valor ou "Gratuito"
-- link_ingresso: URL específica ou null
-- descricao: Resumo do evento
-
-FORMATO DE RETORNO:
-{{
-  "eventos": [
-    {{
-      "categoria": "Outdoor/Parques",
-      "titulo": "Nome do evento",
-      "data": "{saturday_date_str}",
-      "horario": "HH:MM",
-      "local": "Nome + Endereço",
-      "preco": "Valor",
-      "link_ingresso": "URL ou null",
-      "descricao": "Resumo"
-    }}
-  ]
-}}
-
-IMPORTANTE:
-- Retornar APENAS eventos confirmados para {saturday_date_str}
-- Se não encontrar eventos: retornar {{"eventos": []}}
-- Priorizar eventos RECORRENTES (feiras fixas aos sábados)
-"""
 
     def _build_prompt_from_config(self, config: dict, context: dict) -> str:
         """
@@ -852,26 +770,29 @@ IMPORTANTE:
 
         logger.info(f"{self.log_prefix} Criando prompts a partir do YAML...")
 
+        # ═══════════════════════════════════════════════════════════
+        # CARREGAMENTO DINÂMICO DE CATEGORIAS E VENUES (baseado em config.py)
+        # ═══════════════════════════════════════════════════════════
+        # Importar configurações habilitadas
+        categorias_ids = ENABLED_CATEGORIES  # Vem de config.py
+        venues_ids = ENABLED_VENUES  # Vem de config.py
 
-        # Carregar configurações de categorias e construir prompts
-        categorias_ids = ["jazz", "comedia", "musica_classica", "outdoor", "cinema", "feira_gastronomica", "feira_artesanato"]
+        logger.info(f"{self.log_prefix} Configuração ativa:")
+        logger.info(f"{self.log_prefix}   Categorias habilitadas ({len(categorias_ids)}): {', '.join(categorias_ids) if categorias_ids else 'NENHUMA'}")
+        logger.info(f"{self.log_prefix}   Venues habilitados ({len(venues_ids)}): {', '.join(venues_ids) if venues_ids else 'NENHUM'}")
+
+        # Carregar configurações de categorias habilitadas e construir prompts
         prompts_categorias = {}
-        configs_categorias = {}  # Guardar configs para uso posterior
+        configs_categorias = {}
 
         for cat_id in categorias_ids:
             config = self.prompt_loader.get_categoria(cat_id, context)
             prompts_categorias[cat_id] = self._build_prompt_from_config(config, context)
             configs_categorias[cat_id] = config
 
-        # Carregar configurações de venues e construir prompts
-        venues_ids = [
-            "casa_choro", "sala_cecilia", "teatro_municipal", "artemis", "ccbb",
-            "oi_futuro", "ims", "parque_lage", "ccjf", "mam_cinema",
-            "theatro_net", "ccbb_teatro_cinema",
-            "istituto_italiano", "maze_jazz", "teatro_leblon", "clube_jazz_rival", "estacao_net"
-        ]
+        # Carregar configurações de venues habilitados e construir prompts
         prompts_venues = {}
-        configs_venues = {}  # Guardar configs para uso posterior
+        configs_venues = {}
 
         for venue_id in venues_ids:
             config = self.prompt_loader.get_venue(venue_id, context)
@@ -879,106 +800,87 @@ IMPORTANTE:
             configs_venues[venue_id] = config
 
         # ═══════════════════════════════════════════════════════════
-        # BUSCAS SEPARADAS PARA SÁBADOS OUTDOOR (dinâmico)
+        # Calcular total de prompts
         # ═══════════════════════════════════════════════════════════
-        start_date = SEARCH_CONFIG['start_date']
-        end_date = SEARCH_CONFIG['end_date']
-        saturdays = self._get_saturdays_in_period(start_date, end_date)
-        saturday_prompts = []
-        saturday_names = []
-
-        for saturday in saturdays:
-            saturday_date_str = saturday["date_str"]
-            month_str = saturday["date"].strftime("%B").lower()
-            prompt = self._build_saturday_outdoor_prompt(saturday_date_str, month_str)
-            saturday_prompts.append(prompt)
-            saturday_names.append(f"Outdoor Sábado {saturday_date_str}")
-
-        logger.info(f"{self.log_prefix} 🗓️  {len(saturdays)} sábados identificados no período: {[s['date_str'] for s in saturdays]}")
-
-        total_prompts = len(categorias_ids) - 1 + len(saturday_prompts) + len(venues_ids)  # -1 para remover "outdoor" genérico
+# Calcular total de prompts (categorias + venues)
+        total_categorias = len(categorias_ids)
+        total_prompts = total_categorias + len(venues_ids)
         logger.info(f"{self.log_prefix} ✅ {total_prompts} prompts criados com sucesso")
 
         try:
             # ═══════════════════════════════════════════════════════════
-            # EXECUÇÃO PARALELA DAS MICRO-SEARCHES
+            # EXECUÇÃO PARALELA DAS MICRO-SEARCHES (DINÂMICO)
             # ═══════════════════════════════════════════════════════════
             logger.info(f"{self.log_prefix} Executando {total_prompts} micro-searches em paralelo...")
 
-            # Preparar lista de searches (categorias + sábados + venues)
-            searches = [
-                self._get_search_task(prompts_categorias["jazz"], "Jazz", configs_categorias["jazz"]),
-                self._get_search_task(prompts_categorias["comedia"], "Comédia", configs_categorias["comedia"]),
-                self._get_search_task(prompts_categorias["musica_classica"], "Música Clássica", configs_categorias["musica_classica"]),
-                # OUTDOOR: substituído por buscas separadas por sábado
-                self._get_search_task(prompts_categorias["cinema"], "Cinema", configs_categorias["cinema"]),
-                self._get_search_task(prompts_categorias["feira_gastronomica"], "Feira Gastronômica", configs_categorias["feira_gastronomica"]),
-                self._get_search_task(prompts_categorias["feira_artesanato"], "Feira de Artesanato", configs_categorias["feira_artesanato"]),
-            ]
+            # Construir lista de searches dinamicamente com metadados
+            searches = []
+            search_metadata = []  # Rastreamento de tipo/id/nome para cada busca
 
-            # Adicionar buscas de sábados outdoor (usa config de outdoor)
-            outdoor_config = configs_categorias["outdoor"]
-            for i, saturday_prompt in enumerate(saturday_prompts):
-                searches.append(self._get_search_task(saturday_prompt, saturday_names[i], outdoor_config))
+            # Adicionar categorias habilitadas (exceto outdoor_parques - tratado separadamente)
+            for cat_id in categorias_ids:
+                if cat_id == "outdoor_parques":
+                    continue  # Substituído por buscas de sábados
 
-            # Adicionar buscas de venues
-            searches.extend([
-                self._get_search_task(prompts_venues["casa_choro"], "Casa do Choro", configs_venues["casa_choro"]),
-                self._get_search_task(prompts_venues["sala_cecilia"], "Sala Cecília Meireles", configs_venues["sala_cecilia"]),
-                self._get_search_task(prompts_venues["teatro_municipal"], "Teatro Municipal", configs_venues["teatro_municipal"]),
-                self._get_search_task(prompts_venues["artemis"], "Artemis", configs_venues["artemis"]),
-                self._get_search_task(prompts_venues["ccbb"], "CCBB Rio", configs_venues["ccbb"]),
-                self._get_search_task(prompts_venues["oi_futuro"], "Oi Futuro", configs_venues["oi_futuro"]),
-                self._get_search_task(prompts_venues["ims"], "IMS", configs_venues["ims"]),
-                self._get_search_task(prompts_venues["parque_lage"], "Parque Lage", configs_venues["parque_lage"]),
-                self._get_search_task(prompts_venues["ccjf"], "CCJF", configs_venues["ccjf"]),
-                self._get_search_task(prompts_venues["mam_cinema"], "MAM Cinema", configs_venues["mam_cinema"]),
-                self._get_search_task(prompts_venues["theatro_net"], "Theatro Net Rio", configs_venues["theatro_net"]),
-                self._get_search_task(prompts_venues["ccbb_teatro_cinema"], "CCBB Teatro/Cinema", configs_venues["ccbb_teatro_cinema"]),
-                self._get_search_task(prompts_venues["istituto_italiano"], "Istituto Italiano", configs_venues["istituto_italiano"]),
-                self._get_search_task(prompts_venues["maze_jazz"], "Maze Jazz Club", configs_venues["maze_jazz"]),
-                self._get_search_task(prompts_venues["teatro_leblon"], "Teatro do Leblon", configs_venues["teatro_leblon"]),
-                self._get_search_task(prompts_venues["clube_jazz_rival"], "Clube do Jazz/Rival", configs_venues["clube_jazz_rival"]),
-                self._get_search_task(prompts_venues["estacao_net"], "Estação Net", configs_venues["estacao_net"]),
-            ])
+                # Obter display name do YAML
+                display_name = configs_categorias[cat_id].get("nome", cat_id)
+
+                searches.append(self._get_search_task(
+                    prompts_categorias[cat_id],
+                    display_name,
+                    configs_categorias[cat_id]
+                ))
+                search_metadata.append({
+                    "type": "category",
+                    "id": cat_id,
+                    "name": display_name
+                })
+                logger.debug(f"   ✓ Adicionada busca de categoria: {display_name}")
+
+            # Adicionar venues habilitados
+            for venue_id in venues_ids:
+                # Obter display name do YAML
+                display_name = configs_venues[venue_id].get("nome", venue_id)
+
+                searches.append(self._get_search_task(
+                    prompts_venues[venue_id],
+                    display_name,
+                    configs_venues[venue_id]
+                ))
+                search_metadata.append({
+                    "type": "venue",
+                    "id": venue_id,
+                    "name": display_name
+                })
+                logger.debug(f"   ✓ Adicionada busca de venue: {display_name}")
+
+            logger.info(f"{self.log_prefix} ✅ {len(searches)} buscas preparadas: {len([m for m in search_metadata if m['type'] == 'category'])} categorias, {len([m for m in search_metadata if m['type'] == 'saturday'])} sábados, {len([m for m in search_metadata if m['type'] == 'venue'])} venues")
 
             # Executar todas as buscas em paralelo
             results = await asyncio.gather(*searches)
 
-            # Desempacotar resultados
-            # Formato: [jazz, comedia, musica_classica, cinema, feira_gast, feira_art, sábados..., venues...]
-            result_jazz = results[0]
-            result_comedia = results[1]
-            result_musica_classica = results[2]
-            result_cinema = results[3]
-            result_feira_gastronomica = results[4]
-            result_feira_artesanato = results[5]
-
-            # Resultados dos sábados outdoor (dinâmico) - consolidar todos
-            saturday_results = results[6:6 + len(saturdays)]
-            logger.info(f"🗓️  Processando {len(saturday_results)} resultados de sábados outdoor...")
-
-            # Resultados dos venues (após sábados)
-            venues_start_idx = 6 + len(saturdays)
-            result_casa_choro = results[venues_start_idx]
-            result_sala_cecilia = results[venues_start_idx + 1]
-            result_teatro_municipal = results[venues_start_idx + 2]
-            result_artemis = results[venues_start_idx + 3]
-            result_ccbb = results[venues_start_idx + 4]
-            result_oi_futuro = results[venues_start_idx + 5]
-            result_ims = results[venues_start_idx + 6]
-            result_parque_lage = results[venues_start_idx + 7]
-            result_ccjf = results[venues_start_idx + 8]
-            result_mam_cinema = results[venues_start_idx + 9]
-            result_theatro_net = results[venues_start_idx + 10]
-            result_ccbb_teatro_cinema = results[venues_start_idx + 11]
-            result_istituto_italiano = results[venues_start_idx + 12]
-            result_maze_jazz = results[venues_start_idx + 13]
-            result_teatro_leblon = results[venues_start_idx + 14]
-            result_clube_jazz_rival = results[venues_start_idx + 15]
-            result_estacao_net = results[venues_start_idx + 16]
-
             logger.info(f"✓ Todas as {total_prompts} micro-searches concluídas")
+
+            # ═══════════════════════════════════════════════════════════
+            # PROCESSAR RESULTADOS DINAMICAMENTE (baseado em search_metadata)
+            # ═══════════════════════════════════════════════════════════
+            # Resultados são organizados por índice seguindo a ordem de search_metadata
+            logger.info(f"{self.log_prefix} 📦 Processando {len(results)} resultados...")
+
+            # Mapear resultados para seus metadados
+            results_map = {}
+            for i, metadata in enumerate(search_metadata):
+                result_type = metadata["type"]
+                result_id = metadata["id"]
+                result_name = metadata["name"]
+
+                # Armazenar resultado com seus metadados
+                results_map[i] = {
+                    "result": results[i],
+                    "metadata": metadata
+                }
+
+                logger.debug(f"   [{i}] {result_type.upper()}: {result_name}")
 
             # ═══════════════════════════════════════════════════════════
             # MERGE INTELIGENTE DOS RESULTADOS COM PYDANTIC
@@ -1188,92 +1090,152 @@ IMPORTANTE:
                     return []
 
             # ═══════════════════════════════════════════════════════════
-            # MERGE JAZZ: Scraper Blue Note TEM PRIORIDADE sobre Perplexity
+            # PARSE DINÂMICO DE RESULTADOS (baseado em search_metadata)
             # ═══════════════════════════════════════════════════════════
-            eventos_jazz = []
+            logger.info(f"{self.log_prefix} 🔄 Iniciando parse dinâmico de {len(results)} resultados...")
 
-            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
-            if blue_note_scraped:
-                logger.info(f"🎫 [PRIORIDADE] Adicionando {len(blue_note_scraped)} eventos Blue Note do scraper oficial...")
-                for scraped_event in blue_note_scraped:
-                    # Converter para formato EventoCategoria
-                    jazz_event = {
+            # Coleções de eventos por tipo
+            eventos_categorias = {}  # {categoria_id: [eventos]}
+            eventos_outdoor_saturdays = []  # Lista consolidada de eventos outdoor de sábados
+            eventos_venues = {}  # {venue_display_name: [eventos]}
+
+            # Iterar sobre todos os resultados usando metadados
+            for i, result_data in results_map.items():
+                result_str = result_data["result"]
+                metadata = result_data["metadata"]
+                result_type = metadata["type"]
+                result_id = metadata["id"]
+                result_name = metadata["name"]
+
+                logger.debug(f"{self.log_prefix} Processando resultado {i}: {result_type}/{result_id}")
+
+                # ═══════════════════════════════════════════════════════════
+                # CATEGORIAS: Parse com safe_parse_categoria
+                # ═══════════════════════════════════════════════════════════
+                if result_type == "category":
+                    eventos_parsed = safe_parse_categoria(result_str, result_name)
+                    eventos_categorias[result_id] = eventos_parsed
+                    logger.debug(f"   ✓ Categoria '{result_name}': {len(eventos_parsed)} eventos")
+
+                # ═══════════════════════════════════════════════════════════
+                # SÁBADOS OUTDOOR: Consolidar todos em uma única lista
+                # ═══════════════════════════════════════════════════════════
+                elif result_type == "saturday":
+                    eventos_parsed = safe_parse_categoria(result_str, result_name)
+                    saturday_date = metadata["saturday_data"]["date_str"]
+                    if eventos_parsed:
+                        logger.info(f"   ✓ Sábado {saturday_date}: {len(eventos_parsed)} eventos outdoor")
+                        eventos_outdoor_saturdays.extend(eventos_parsed)
+                    else:
+                        logger.debug(f"   ⚠️  Sábado {saturday_date}: 0 eventos outdoor")
+
+                # ═══════════════════════════════════════════════════════════
+                # VENUES: Parse com safe_parse_venue
+                # ═══════════════════════════════════════════════════════════
+                elif result_type == "venue":
+                    eventos_parsed = safe_parse_venue(result_str, result_name)
+                    eventos_venues[result_name] = eventos_parsed
+                    logger.debug(f"   ✓ Venue '{result_name}': {len(eventos_parsed)} eventos")
+
+            # ═══════════════════════════════════════════════════════════
+            # SCRAPER PRIORITY: Adicionar eventos de scrapers com prioridade
+            # ═══════════════════════════════════════════════════════════
+            # Mapeamento de scrapers para categoria/venue
+            scraper_mappings = {
+                "jazz": ("categoria", "jazz", blue_note_scraped, "Blue Note Rio - Av. Atlântica, 1910, Copacabana, Rio de Janeiro", "Jazz"),
+                "sala_cecilia": ("venue", "Sala Cecília Meireles", cecilia_meireles_scraped, "Sala Cecília Meireles - Rua da Lapa, 47, Centro, Rio de Janeiro", "Sala Cecília Meireles"),
+                "teatro_municipal": ("venue", "Teatro Municipal do Rio de Janeiro", teatro_municipal_scraped, "Teatro Municipal do Rio de Janeiro - Praça Floriano, s/n, Centro, Rio de Janeiro", "Teatro Municipal do Rio de Janeiro"),
+                "ccbb": ("venue", "CCBB Rio - Centro Cultural Banco do Brasil", ccbb_scraped, "CCBB Rio - Centro Cultural Banco do Brasil - Rua Primeiro de Março, 66, Centro, Rio de Janeiro", "CCBB Rio - Centro Cultural Banco do Brasil"),
+            }
+
+            for scraper_key, (target_type, target_key, scraped_events, location, field_value) in scraper_mappings.items():
+                if not scraped_events:
+                    continue
+
+                logger.info(f"🎫 [PRIORIDADE] Processando {len(scraped_events)} eventos do scraper {scraper_key}...")
+
+                # Preparar eventos do scraper
+                scraper_formatted = []
+                for scraped_event in scraped_events:
+                    event_dict = {
                         "titulo": scraped_event["titulo"],
                         "data": scraped_event["data"],
                         "horario": scraped_event["horario"],
-                        "local": "Blue Note Rio - Av. Atlântica, 1910, Copacabana, Rio de Janeiro",
+                        "local": location,
                         "preco": "Consultar link",
                         "link_ingresso": scraped_event["link"],
                         "descricao": None,  # Será enriquecido depois
-                        "categoria": "Jazz",
                         "link_valid": True  # Scraper oficial = link confiável
                     }
-                    eventos_jazz.append(jazz_event)
-                    logger.debug(f"   ✓ Scraper: {jazz_event['titulo']}")
-                logger.info(f"✓ {len(eventos_jazz)} eventos do scraper Blue Note adicionados")
 
-            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
-            eventos_jazz_perplexity = safe_parse_categoria(result_jazz, "Jazz")
-            logger.debug(f"Jazz parsed from Perplexity - {len(eventos_jazz_perplexity)} eventos")
-
-            if eventos_jazz_perplexity:
-                duplicatas_perplexity = 0
-                for perplexity_event in eventos_jazz_perplexity:
-                    # Verificar duplicata por título (case-insensitive)
-                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
-                               for e in eventos_jazz):
-                        eventos_jazz.append(perplexity_event)
-                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
+                    # Adicionar campo apropriado (categoria ou venue)
+                    if target_type == "categoria":
+                        event_dict["categoria"] = field_value
                     else:
-                        duplicatas_perplexity += 1
-                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
+                        event_dict["venue"] = field_value
 
-                if duplicatas_perplexity > 0:
-                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
+                    scraper_formatted.append(event_dict)
 
-            logger.info(f"✓ Total de eventos Jazz após merge: {len(eventos_jazz)} eventos")
+                # Adicionar scraped events com prioridade (primeiro na lista)
+                if target_type == "categoria":
+                    # Categoria: mesclar com eventos Perplexity, removendo duplicatas
+                    existing_events = eventos_categorias.get(target_key, [])
+                    merged_events = scraper_formatted.copy()
 
-            eventos_comedia = safe_parse_categoria(result_comedia, "Comédia")
-            logger.debug(f"Comédia parsed - {len(eventos_comedia)} eventos")
+                    # Adicionar eventos Perplexity que não são duplicatas
+                    duplicates_count = 0
+                    for perplexity_event in existing_events:
+                        if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
+                                   for e in merged_events):
+                            merged_events.append(perplexity_event)
+                        else:
+                            duplicates_count += 1
 
-            eventos_musica_classica = safe_parse_categoria(result_musica_classica, "Música Clássica")
-            logger.debug(f"Música Clássica parsed - {len(eventos_musica_classica)} eventos")
+                    eventos_categorias[target_key] = merged_events
+                    logger.info(f"✓ Scraper {scraper_key}: {len(scraped_events)} eventos adicionados, {duplicates_count} duplicatas Perplexity removidas")
 
-            # Processar eventos outdoor dos sábados (consolidar todos os resultados)
-            eventos_outdoor = []
-            for i, saturday_result in enumerate(saturday_results):
-                saturday_date = saturdays[i]["date_str"]
-                eventos_sab = safe_parse_categoria(saturday_result, "Outdoor/Parques")
-                if eventos_sab:
-                    logger.info(f"   ✓ Sábado {saturday_date}: {len(eventos_sab)} eventos outdoor")
-                    eventos_outdoor.extend(eventos_sab)
+                else:  # venue
+                    # Venue: mesclar com eventos Perplexity, removendo duplicatas
+                    existing_events = eventos_venues.get(target_key, [])
+                    merged_events = scraper_formatted.copy()
+
+                    # Adicionar eventos Perplexity que não são duplicatas
+                    duplicates_count = 0
+                    for perplexity_event in existing_events:
+                        if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
+                                   for e in merged_events):
+                            merged_events.append(perplexity_event)
+                        else:
+                            duplicates_count += 1
+
+                    eventos_venues[target_key] = merged_events
+                    logger.info(f"✓ Scraper {scraper_key}: {len(scraped_events)} eventos adicionados, {duplicates_count} duplicatas Perplexity removidas")
+
+            # Log consolidado de sábados outdoor
+            if eventos_outdoor_saturdays:
+                logger.info(f"✓ Total eventos outdoor (todos os sábados): {len(eventos_outdoor_saturdays)} eventos")
+
+            # ═══════════════════════════════════════════════════════════
+            # CONSOLIDAR EVENTOS OUTDOOR DOS SÁBADOS (adicionar à categoria outdoor_parques)
+            # ═══════════════════════════════════════════════════════════
+            if eventos_outdoor_saturdays:
+                # Se outdoor_parques está habilitado, adicionar eventos dos sábados
+                if "outdoor_parques" in eventos_categorias:
+                    # Já existe - deveria estar vazio (outdoor genérico foi substituído por sábados)
+                    eventos_categorias["outdoor_parques"].extend(eventos_outdoor_saturdays)
                 else:
-                    logger.debug(f"   ⚠️  Sábado {saturday_date}: 0 eventos outdoor")
+                    # Criar categoria outdoor_parques com eventos dos sábados
+                    eventos_categorias["outdoor_parques"] = eventos_outdoor_saturdays
 
-            logger.info(f"✓ Total eventos outdoor (todos os sábados): {len(eventos_outdoor)} eventos")
-
-            eventos_cinema = safe_parse_categoria(result_cinema, "Cinema")
-            logger.debug(f"Cinema parsed - {len(eventos_cinema)} eventos")
-
-            eventos_feira_gastronomica = safe_parse_categoria(result_feira_gastronomica, "Feira Gastronômica")
-            logger.debug(f"Feira Gastronômica parsed - {len(eventos_feira_gastronomica)} eventos")
-
-            eventos_feira_artesanato = safe_parse_categoria(result_feira_artesanato, "Feira de Artesanato")
-            logger.debug(f"Feira de Artesanato parsed - {len(eventos_feira_artesanato)} eventos")
-
-            # Merge eventos gerais (todas as 7 categorias)
-            todos_eventos_gerais = (
-                eventos_jazz +
-                eventos_comedia +
-                eventos_musica_classica +
-                eventos_outdoor +
-                eventos_cinema +
-                eventos_feira_gastronomica +
-                eventos_feira_artesanato
-            )
+            # ═══════════════════════════════════════════════════════════
+            # MONTAR ESTRUTURA DE EVENTOS GERAIS (todas as categorias)
+            # ═══════════════════════════════════════════════════════════
+            todos_eventos_gerais = []
+            for cat_id, eventos_cat in eventos_categorias.items():
+                todos_eventos_gerais.extend(eventos_cat)
+                logger.debug(f"   Categoria '{cat_id}': {len(eventos_cat)} eventos adicionados ao merge geral")
 
             # OTIMIZAÇÃO: Deduplicação precoce ANTES de validação/enriquecimento
-            # Economiza chamadas de API processando apenas eventos únicos
             eventos_antes_dedup = len(todos_eventos_gerais)
             todos_eventos_gerais = deduplicate_events(todos_eventos_gerais)
             eventos_removidos = eventos_antes_dedup - len(todos_eventos_gerais)
@@ -1283,214 +1245,17 @@ IMPORTANTE:
                     f"({eventos_antes_dedup} → {len(todos_eventos_gerais)})"
                 )
 
-            # Criar estrutura de eventos gerais
+            # Estrutura final de eventos gerais
             eventos_gerais_merged = {"eventos": todos_eventos_gerais}
 
-            # Parse eventos de venues
-            eventos_casa_choro = safe_parse_venue(result_casa_choro, "Casa do Choro")
-            logger.debug(f"Casa do Choro parsed - {len(eventos_casa_choro)} eventos")
-
             # ═══════════════════════════════════════════════════════════
-            # MERGE SALA CECÍLIA MEIRELES: Scraper TEM PRIORIDADE sobre Perplexity
+            # ESTRUTURA DE EVENTOS DE VENUES (já está pronta)
             # ═══════════════════════════════════════════════════════════
-            eventos_sala_cecilia = []
-
-            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
-            if cecilia_meireles_scraped:
-                logger.info(f"🎼 [PRIORIDADE] Adicionando {len(cecilia_meireles_scraped)} eventos Sala Cecília Meireles do scraper oficial...")
-                for scraped_event in cecilia_meireles_scraped:
-                    # Converter para formato EventoVenue
-                    cecilia_event = {
-                        "titulo": scraped_event["titulo"],
-                        "data": scraped_event["data"],
-                        "horario": scraped_event["horario"],
-                        "local": "Sala Cecília Meireles - Rua da Lapa, 47, Centro, Rio de Janeiro",
-                        "preco": "Consultar link",
-                        "link_ingresso": scraped_event["link"],
-                        "descricao": None,  # Será enriquecido depois
-                        "venue": "Sala Cecília Meireles",
-                        "link_valid": True  # Scraper oficial = link confiável
-                    }
-                    eventos_sala_cecilia.append(cecilia_event)
-                    logger.debug(f"   ✓ Scraper: {cecilia_event['titulo']}")
-                logger.info(f"✓ {len(eventos_sala_cecilia)} eventos do scraper Sala Cecília Meireles adicionados")
-
-            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
-            eventos_sala_cecilia_perplexity = safe_parse_venue(result_sala_cecilia, "Sala Cecília Meireles")
-            logger.debug(f"Sala Cecília Meireles parsed from Perplexity - {len(eventos_sala_cecilia_perplexity)} eventos")
-
-            if eventos_sala_cecilia_perplexity:
-                duplicatas_perplexity = 0
-                for perplexity_event in eventos_sala_cecilia_perplexity:
-                    # Verificar duplicata por título (case-insensitive)
-                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
-                               for e in eventos_sala_cecilia):
-                        eventos_sala_cecilia.append(perplexity_event)
-                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
-                    else:
-                        duplicatas_perplexity += 1
-                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
-
-                if duplicatas_perplexity > 0:
-                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
-
-            logger.info(f"✓ Total de eventos Sala Cecília Meireles após merge: {len(eventos_sala_cecilia)} eventos")
-
-            # ═══════════════════════════════════════════════════════════
-            # MERGE TEATRO MUNICIPAL: Scraper TEM PRIORIDADE sobre Perplexity
-            # ═══════════════════════════════════════════════════════════
-            eventos_teatro_municipal = []
-
-            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
-            if teatro_municipal_scraped:
-                logger.info(f"🎭 [PRIORIDADE] Adicionando {len(teatro_municipal_scraped)} eventos Teatro Municipal do scraper oficial...")
-                for scraped_event in teatro_municipal_scraped:
-                    # Converter para formato EventoVenue
-                    municipal_event = {
-                        "titulo": scraped_event["titulo"],
-                        "data": scraped_event["data"],
-                        "horario": scraped_event["horario"],
-                        "local": "Teatro Municipal do Rio de Janeiro - Praça Floriano, s/n, Centro, Rio de Janeiro",
-                        "preco": "Consultar link",
-                        "link_ingresso": scraped_event["link"],
-                        "descricao": None,  # Será enriquecido depois
-                        "venue": "Teatro Municipal do Rio de Janeiro",
-                        "link_valid": True  # Scraper oficial = link confiável
-                    }
-                    eventos_teatro_municipal.append(municipal_event)
-                    logger.debug(f"   ✓ Scraper: {municipal_event['titulo']}")
-                logger.info(f"✓ {len(eventos_teatro_municipal)} eventos do scraper Teatro Municipal adicionados")
-
-            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
-            eventos_teatro_municipal_perplexity = safe_parse_venue(result_teatro_municipal, "Teatro Municipal do Rio de Janeiro")
-            logger.debug(f"Teatro Municipal parsed from Perplexity - {len(eventos_teatro_municipal_perplexity)} eventos")
-
-            if eventos_teatro_municipal_perplexity:
-                duplicatas_perplexity = 0
-                for perplexity_event in eventos_teatro_municipal_perplexity:
-                    # Verificar duplicata por título (case-insensitive)
-                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
-                               for e in eventos_teatro_municipal):
-                        eventos_teatro_municipal.append(perplexity_event)
-                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
-                    else:
-                        duplicatas_perplexity += 1
-                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
-
-                if duplicatas_perplexity > 0:
-                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
-
-            logger.info(f"✓ Total de eventos Teatro Municipal após merge: {len(eventos_teatro_municipal)} eventos")
-
-            eventos_artemis = safe_parse_venue(result_artemis, "Artemis - Torrefação Artesanal e Cafeteria")
-            logger.debug(f"Artemis parsed - {len(eventos_artemis)} eventos")
-
-            # ═══════════════════════════════════════════════════════════
-            # MERGE CCBB: Scraper TEM PRIORIDADE sobre Perplexity
-            # ═══════════════════════════════════════════════════════════
-            eventos_ccbb = []
-
-            # PASSO 1: Adicionar eventos do SCRAPER primeiro (prioridade alta - links oficiais)
-            if ccbb_scraped:
-                logger.info(f"🎨 [PRIORIDADE] Adicionando {len(ccbb_scraped)} eventos CCBB do scraper oficial...")
-                for scraped_event in ccbb_scraped:
-                    # Converter para formato EventoVenue
-                    ccbb_event = {
-                        "titulo": scraped_event["titulo"],
-                        "data": scraped_event["data"],
-                        "horario": scraped_event["horario"],
-                        "local": "CCBB Rio - Centro Cultural Banco do Brasil - Rua Primeiro de Março, 66, Centro, Rio de Janeiro",
-                        "preco": "Consultar link",
-                        "link_ingresso": scraped_event["link"],
-                        "descricao": None,  # Será enriquecido depois
-                        "venue": "CCBB Rio - Centro Cultural Banco do Brasil",
-                        "link_valid": True  # Scraper oficial = link confiável
-                    }
-                    eventos_ccbb.append(ccbb_event)
-                    logger.debug(f"   ✓ Scraper: {ccbb_event['titulo']}")
-                logger.info(f"✓ {len(eventos_ccbb)} eventos do scraper CCBB adicionados")
-
-            # PASSO 2: Adicionar eventos do PERPLEXITY como complemento (apenas não-duplicatas)
-            eventos_ccbb_perplexity = safe_parse_venue(result_ccbb, "CCBB Rio - Centro Cultural Banco do Brasil")
-            logger.debug(f"CCBB Rio parsed from Perplexity - {len(eventos_ccbb_perplexity)} eventos")
-
-            if eventos_ccbb_perplexity:
-                duplicatas_perplexity = 0
-                for perplexity_event in eventos_ccbb_perplexity:
-                    # Verificar duplicata por título (case-insensitive)
-                    if not any(e.get("titulo", "").lower() == perplexity_event.get("titulo", "").lower()
-                               for e in eventos_ccbb):
-                        eventos_ccbb.append(perplexity_event)
-                        logger.debug(f"   ✓ Perplexity: {perplexity_event.get('titulo')}")
-                    else:
-                        duplicatas_perplexity += 1
-                        logger.debug(f"   ⏭️  Duplicata do Perplexity ignorada (scraper tem prioridade): {perplexity_event.get('titulo')}")
-
-                if duplicatas_perplexity > 0:
-                    logger.info(f"⏭️  {duplicatas_perplexity} duplicatas do Perplexity ignoradas (scraper tem prioridade)")
-
-            logger.info(f"✓ Total de eventos CCBB após merge: {len(eventos_ccbb)} eventos")
-
-            eventos_oi_futuro = safe_parse_venue(result_oi_futuro, "Oi Futuro")
-            logger.debug(f"Oi Futuro parsed - {len(eventos_oi_futuro)} eventos")
-
-            eventos_ims = safe_parse_venue(result_ims, "IMS - Instituto Moreira Salles")
-            logger.debug(f"IMS parsed - {len(eventos_ims)} eventos")
-
-            eventos_parque_lage = safe_parse_venue(result_parque_lage, "Parque Lage")
-            logger.debug(f"Parque Lage parsed - {len(eventos_parque_lage)} eventos")
-
-            eventos_ccjf = safe_parse_venue(result_ccjf, "CCJF - Centro Cultural Justiça Federal")
-            logger.debug(f"CCJF parsed - {len(eventos_ccjf)} eventos")
-
-            eventos_mam_cinema = safe_parse_venue(result_mam_cinema, "MAM Cinema")
-            logger.debug(f"MAM Cinema parsed - {len(eventos_mam_cinema)} eventos")
-
-            eventos_theatro_net = safe_parse_venue(result_theatro_net, "Theatro Net Rio")
-            logger.debug(f"Theatro Net Rio parsed - {len(eventos_theatro_net)} eventos")
-
-            eventos_ccbb_teatro_cinema = safe_parse_venue(result_ccbb_teatro_cinema, "CCBB Teatro e Cinema")
-            logger.debug(f"CCBB Teatro e Cinema parsed - {len(eventos_ccbb_teatro_cinema)} eventos")
-
-            eventos_istituto_italiano = safe_parse_venue(result_istituto_italiano, "Istituto Italiano di Cultura")
-            logger.debug(f"Istituto Italiano parsed - {len(eventos_istituto_italiano)} eventos")
-
-            eventos_maze_jazz = safe_parse_venue(result_maze_jazz, "Maze Jazz Club")
-            logger.debug(f"Maze Jazz Club parsed - {len(eventos_maze_jazz)} eventos")
-
-            eventos_teatro_leblon = safe_parse_venue(result_teatro_leblon, "Teatro do Leblon")
-            logger.debug(f"Teatro do Leblon parsed - {len(eventos_teatro_leblon)} eventos")
-
-            eventos_clube_jazz_rival = safe_parse_venue(result_clube_jazz_rival, "Clube do Jazz / Teatro Rival")
-            logger.debug(f"Clube do Jazz/Rival parsed - {len(eventos_clube_jazz_rival)} eventos")
-
-            eventos_estacao_net = safe_parse_venue(result_estacao_net, "Estação Net (Ipanema e Botafogo)")
-            logger.debug(f"Estação Net parsed - {len(eventos_estacao_net)} eventos")
-
-            # Criar estrutura de eventos de venues
-            eventos_locais_merged = {
-                "Casa do Choro": eventos_casa_choro,
-                "Sala Cecília Meireles": eventos_sala_cecilia,
-                "Teatro Municipal do Rio de Janeiro": eventos_teatro_municipal,
-                "Artemis - Torrefação Artesanal e Cafeteria": eventos_artemis,
-                "CCBB Rio - Centro Cultural Banco do Brasil": eventos_ccbb,
-                "Oi Futuro": eventos_oi_futuro,
-                "IMS - Instituto Moreira Salles": eventos_ims,
-                "Parque Lage": eventos_parque_lage,
-                "CCJF - Centro Cultural Justiça Federal": eventos_ccjf,
-                "MAM Cinema": eventos_mam_cinema,
-                "Theatro Net Rio": eventos_theatro_net,
-                "CCBB Teatro e Cinema": eventos_ccbb_teatro_cinema,
-                "Istituto Italiano di Cultura": eventos_istituto_italiano,
-                "Maze Jazz Club": eventos_maze_jazz,
-                "Teatro do Leblon": eventos_teatro_leblon,
-                "Clube do Jazz / Teatro Rival": eventos_clube_jazz_rival,
-                "Estação Net (Ipanema e Botafogo)": eventos_estacao_net,
-            }
+            eventos_locais_merged = eventos_venues
 
             total_venues_before = sum(len(v) for v in eventos_locais_merged.values())
             logger.info(
-                f"✓ Merge concluído: {len(todos_eventos_gerais)} eventos gerais, "
+                f"✓ Merge dinâmico concluído: {len(todos_eventos_gerais)} eventos gerais, "
                 f"{total_venues_before} eventos de venues"
             )
 
@@ -1727,7 +1492,7 @@ IMPORTANTE:
         exclude_keywords = list(GLOBAL_EXCLUDE_KEYWORDS)
 
         # Adicionar exclusões específicas de outdoor (shows mainstream) se aplicável
-        outdoor_exclude = EVENT_CATEGORIES.get("outdoor_parques", {}).get("exclude", [])
+        outdoor_exclude = EVENT_CATEGORIES.get("outdoor", {}).get("exclude", [])
         if outdoor_exclude:
             exclude_keywords.extend(outdoor_exclude)
 

@@ -201,14 +201,14 @@ categorias:
       - Festivais culturais pequenos
 
     palavras_chave:
-      - "cinema ao ar livre Rio sábado {month_range_str}"
-      - "Varanda Sonora Parque Lage {month_range_str}"
-      - "concerto jardim sábado Rio {month_range_str}"
-      - "Feira Rio Antigo {month_range_str}"
-      - "Feira Praça XV sábado {month_range_str}"
-      - "feira Jardim Botânico fim de semana {month_range_str}"
-      - "eventos Parque Lage sábado {month_range_str}"
-      - "show acústico parque Rio {month_range_str}"
+      - "cinema ao ar livre Rio"
+      - "Varanda Sonora Parque Lage"
+      - "concerto jardim Rio"
+      - "Feira Rio Antigo"
+      - "Feira Praça XV fim de semana"
+      - "feira Jardim Botânico"
+      - "eventos Parque Lage"
+      - "show acústico parque Rio"
 
     venues_sugeridos:
       - Parque Lage (Varanda Sonora - sábados)

@@ -125,7 +125,7 @@ class RetryAgent(BaseAgent):
                 "cinema": "Cinema",
                 "feira_gastronomica": "Feira Gastronômica",
                 "feira_artesanato": "Feira de Artesanato",
-                "outdoor_parques": "Outdoor/Parques",
+                "outdoor": "Outdoor/Parques",
                 "cursos_cafe": "Cursos de Café",
             }
 

@@ -68,7 +68,7 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
         "days": ["saturday", "sunday"],
         "description": "Feiras de artesanato e arte",
     },
-    "outdoor_parques": {
+    "outdoor": {
         "keywords": [
             # Locais
             "ao ar livre", "outdoor", "parque", "praia", "jardim botânico", "aterro", "quinta da boa vista",
@@ -332,3 +332,65 @@ JUDGE_BATCH_SIZE: Final[int] = 10  # Otimizado: aumentado de 5 para 10 (menos ba
 JUDGE_TIMEOUT: Final[int] = 300  # timeout em segundos por batch (5 minutos)
 JUDGE_EFFORT: Final[str] = "high"  # esforço do modelo GPT-5
 JUDGE_MAX_LINK_CHARS: Final[int] = 2000  # máximo de chars do HTML do link para análise
+
+# ═══════════════════════════════════════════════════════════
+# CONFIGURAÇÃO DE TESTE / PRODUÇÃO
+# ═══════════════════════════════════════════════════════════
+# Controla quais categorias e venues são habilitados (permite testes focados e end-to-end baratos)
+
+# Categorias habilitadas (controla busca, validação e thresholds)
+# IDs disponíveis: jazz, musica_classica, teatro, comedia, cinema, feira_gastronomica, feira_artesanato, outdoor, cursos_cafe
+ENABLED_CATEGORIES: Final[list[str]] = [
+    "outdoor",  # TESTE: apenas outdoor
+    # Descomente para produção:
+    # "jazz", "musica_classica", "teatro", "comedia",
+    # "cinema", "feira_gastronomica", "feira_artesanato", "cursos_cafe",
+]
+
+# Mínimos de eventos por categoria (apenas para categorias habilitadas)
+CATEGORY_MIN_EVENTS: Final[dict[str, int]] = {
+    # "outdoor_parques": 0,  # Sem mínimo para teste
+    # Descomente para produção:
+    # "jazz": 4,
+    # "musica_classica": 2,
+}
+
+# Venues habilitados (controla busca e validação)
+# IDs disponíveis: casa_choro, sala_cecilia, teatro_municipal, artemis, ccbb, oi_futuro, ims,
+#                  parque_lage, ccjf, mam_cinema, theatro_net, ccbb_teatro_cinema,
+#                  istituto_italiano, maze_jazz, teatro_leblon, clube_jazz_rival, estacao_net
+ENABLED_VENUES: Final[list[str]] = [
+    # TESTE: nenhum venue habilitado (scrapers Blue Note/Cecília/CCBB/Municipal rodam sempre)
+    # Descomente para produção:
+    # "casa_choro", "sala_cecilia", "teatro_municipal", "artemis", "ccbb",
+    # "oi_futuro", "ims", "parque_lage", "ccjf", "mam_cinema",
+    # "theatro_net", "ccbb_teatro_cinema", "istituto_italiano",
+    # "maze_jazz", "teatro_leblon", "clube_jazz_rival", "estacao_net",
+]
+
+# Thresholds globais (genéricos - não dependem de categorias específicas)
+MIN_WEEKEND_EVENTS: Final[int] = 2  # Mínimo de eventos de fim de semana (sábado/domingo)
+MIN_TOTAL_EVENTS: Final[int] = 2    # Mínimo de eventos no total
+
+def get_enabled_required_venues() -> dict[str, list[str]]:
+    """Retorna apenas venues obrigatórios que estão habilitados em ENABLED_VENUES."""
+    if not ENABLED_VENUES:
+        return {}
+
+    active_venues = {}
+    for venue_key, venue_names in REQUIRED_VENUES.items():
+        if venue_key in ENABLED_VENUES:
+            active_venues[venue_key] = venue_names
+
+    return active_venues
+
+
+def get_enabled_category_minimums() -> dict[str, int]:
+    """Retorna mínimos de eventos apenas para categorias habilitadas."""
+    minimums = {}
+    for category_id in ENABLED_CATEGORIES:
+        min_events = CATEGORY_MIN_EVENTS.get(category_id, 0)
+        if min_events > 0:
+            minimums[category_id] = min_events
+
+    return minimums
