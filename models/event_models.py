@@ -11,7 +11,7 @@ class EventoBase(BaseModel):
 
     titulo: str = Field(..., min_length=1, description="Nome completo do evento")
     data: str = Field(..., pattern=r"^\d{2}/\d{2}/\d{4}$", description="Data DD/MM/YYYY (início)")
-    horario: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Horário HH:MM")
+    horario: str = Field(..., pattern=r"^[\d:ogh\s às\-]+$", description="Horário (HH:MM, HHhMM, 16h às 22h, etc.)")
     local: str = Field(..., min_length=1, description="Venue + endereço completo")
     preco: str = Field(default="Consultar", description="Preço ou 'Consultar'")
     link_ingresso: Optional[str] = Field(None, description="URL de compra (opcional)")
@@ -86,6 +86,8 @@ class EventoCategoria(EventoBase):
         "Feira Gastronômica",
         "Feira de Artesanato",
         "Outdoor/Parques",
+        "Outdoor-FimDeSemana",
+        "Outdoor",
         "Cursos de Café"
     ] = Field(
         ..., description="Categoria do evento"
