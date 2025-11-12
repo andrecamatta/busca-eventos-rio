@@ -168,7 +168,7 @@ class SearchAgent(BaseAgent):
         result = await asyncio.to_thread(sync_search)
 
         # Log resposta do Perplexity para diagnóstico (primeiros 500 chars)
-        if result and result.strip():
+        if result and isinstance(result, str) and result.strip():
             preview = result[:500].replace('\n', ' ')
             logger.debug(f"   📄 Resposta Perplexity [{search_name}]: {preview}...")
 
@@ -1012,7 +1012,7 @@ OBJETIVO:
             def safe_parse_categoria(result_str: str, search_name: str) -> list[dict]:
                 """Parse categoria usando Pydantic validation."""
                 try:
-                    if not result_str or result_str.strip() == "":
+                    if not result_str or not isinstance(result_str, str) or result_str.strip() == "":
                         logger.warning(f"⚠️  Busca {search_name} retornou vazio")
                         return []
                     # Limpar markdown antes de parsear
@@ -1047,7 +1047,7 @@ OBJETIVO:
                 try:
                     import unicodedata
 
-                    if not result_str or result_str.strip() == "":
+                    if not result_str or not isinstance(result_str, str) or result_str.strip() == "":
                         logger.warning(f"⚠️  Busca {venue_name} retornou vazio")
                         return []
                     # Limpar markdown antes de parsear
