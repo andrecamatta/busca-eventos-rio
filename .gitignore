@@ -45,3 +45,26 @@ tmp/
 # Playwright
 .playwright/
 playwright-report/
+
+# Test files (except essential test scripts)
+test_*.py
+!test_*.py  # Commented out - ignore all test files by default
+
+# Debug and temporary files
+*_debug.txt
+*_debug.json
+*_logs.json
+*_prod_logs.json
+*_production_logs.*
+judge_output.txt
+prompt_debug.txt
+response_debug.txt
+test_results.txt
+test_output_*.json
+temp_*.json
+nul
+
+# Temporary scripts and analysis
+analyze_*.py
+run_test.py
+analise_*.md
