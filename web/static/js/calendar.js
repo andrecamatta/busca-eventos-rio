@@ -12,7 +12,7 @@ function isMobileDevice() {
 }
 
 // Versão do deployment (atualizar quando fizer deploy)
-const DEPLOYMENT_VERSION = '2025-11-10-cross-month-fix';
+const DEPLOYMENT_VERSION = '2025-11-12-outdoor-fix-deploy';
 
 // Verificar estado de execução ao carregar página
 function checkExecutionState() {
