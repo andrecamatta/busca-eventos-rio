@@ -1013,16 +1013,16 @@ OBJETIVO:
                 """Parse categoria usando Pydantic validation."""
                 try:
                     # 🔍 DEBUG: Mostrar detalhes da string recebida
-                    logger.debug(f"🔍 DEBUG [{search_name}] String recebida:")
-                    logger.debug(f"   • Tipo: {type(result_str)}")
-                    logger.debug(f"   • Length: {len(result_str) if result_str else 'None'}")
+                    logger.info(f"🔍 DEBUG [{search_name}] String recebida:")
+                    logger.info(f"   • Tipo: {type(result_str)}")
+                    logger.info(f"   • Length: {len(result_str) if result_str else 'None'}")
                     if result_str:
-                        logger.debug(f"   • Primeiros 50 chars (repr): {repr(result_str[:50])}")
-                        logger.debug(f"   • Últimos 50 chars (repr): {repr(result_str[-50:])}")
-                        logger.debug(f"   • Apenas whitespace? {result_str.isspace()}")
-                        logger.debug(f"   • Length após strip(): {len(result_str.strip())}")
+                        logger.info(f"   • Primeiros 50 chars (repr): {repr(result_str[:50])}")
+                        logger.info(f"   • Últimos 50 chars (repr): {repr(result_str[-50:])}")
+                        logger.info(f"   • Apenas whitespace? {result_str.isspace()}")
+                        logger.info(f"   • Length após strip(): {len(result_str.strip())}")
                     else:
-                        logger.debug(f"   • String é None ou vazia")
+                        logger.info(f"   • String é None ou vazia")
 
                     if not result_str or not isinstance(result_str, str) or result_str.strip() == "":
                         logger.warning(f"⚠️  Busca {search_name} retornou vazio")
