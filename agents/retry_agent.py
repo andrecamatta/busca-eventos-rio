@@ -7,6 +7,8 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from config import (
+    ENABLED_CATEGORIES,
+    ENABLED_VENUES,
     EVENT_CATEGORIES,
     MIN_EVENTS_THRESHOLD,
     REQUIRED_VENUES,
@@ -182,19 +184,25 @@ class RetryAgent(BaseAgent):
         # Analisar gaps por categoria (para backwards compatibility do prompt)
         rejected_events = verified_data.get("rejected_events", [])
 
-        categories = {
-            "jazz": 0,
-            "musica_classica": 0,
-            "comedia": 0,
-            "outdoor": 0,
-            "teatro": 0,
-            "cinema": 0,
-            "feira_gastronomica": 0,
-            "feira_artesanato": 0,
-            "casa_choro": 0,
-            "sala_cecilia": 0,
-            "teatro_municipal": 0,
-        }
+        # Inicializar apenas categorias e venues habilitados
+        categories = {}
+
+        # Adicionar categorias habilitadas
+        for cat in ENABLED_CATEGORIES:
+            categories[cat] = 0
+
+        # Adicionar venues habilitados (se houver)
+        for venue in ENABLED_VENUES:
+            categories[venue] = 0
+
+        # Sempre adicionar venues essenciais (caso não estejam em ENABLED_VENUES)
+        # para manter compatibilidade com lógica de contagem
+        if "casa_choro" not in categories:
+            categories["casa_choro"] = 0
+        if "sala_cecilia" not in categories:
+            categories["sala_cecilia"] = 0
+        if "teatro_municipal" not in categories:
+            categories["teatro_municipal"] = 0
 
         # Contar eventos aprovados por categoria (atualizado para categorias granulares)
         for event in verified_events:
@@ -333,7 +341,7 @@ class RetryAgent(BaseAgent):
 - MÍNIMO: 1-2 eventos (OBRIGATÓRIO)
 """)
 
-        if "jazz" in gaps or categories.get("jazz", 0) < 2:
+        if "jazz" in ENABLED_CATEGORIES and ("jazz" in gaps or categories.get("jazz", 0) < 2):
             gap_descriptions.append(f"""
 🎺 BUSCA COMPLEMENTAR: JAZZ NO RIO DE JANEIRO
 - Buscar ESPECIFICAMENTE: Blue Note Rio, Maze Jazz Club, Clube do Jazz, Jazz nos Fundos, Beco das Garrafas
@@ -343,7 +351,7 @@ class RetryAgent(BaseAgent):
 - MÍNIMO: 3-5 eventos de jazz
 """)
 
-        if "comedia" in gaps or categories.get("comedia", 0) < 2:
+        if "comedia" in ENABLED_CATEGORIES and ("comedia" in gaps or categories.get("comedia", 0) < 2):
             gap_descriptions.append(f"""
 😄 BUSCA COMPLEMENTAR: COMÉDIA E STAND-UP (ADULTO)
 - Buscar: peças de comédia, stand-up comedy, humor adulto, improv
@@ -367,7 +375,7 @@ class RetryAgent(BaseAgent):
 - Palavras-chave: "festival Rio sábado {month_str}", "evento ao ar livre sábado", "show outdoor Rio fim de semana"
 - MÍNIMO: Pelo menos 1 evento para CADA sábado descoberto ({len(saturdays_uncovered)} eventos necessários)
 """)
-        elif "outdoor" in gaps or categories.get("outdoor", 0) < 2:
+        elif "outdoor" in ENABLED_CATEGORIES and ("outdoor" in gaps or categories.get("outdoor", 0) < 2):
             gap_descriptions.append(f"""
 🌳 BUSCA COMPLEMENTAR: EVENTOS AO AR LIVRE EM FIM DE SEMANA
 - Dias: APENAS sábados e domingos entre {start_date_str} e {end_date_str}
@@ -377,7 +385,7 @@ class RetryAgent(BaseAgent):
 - MÍNIMO: 2-3 eventos outdoor
 """)
 
-        if "casa_choro" in gaps or categories.get("casa_choro", 0) < 2:
+        if "casa_choro" in ENABLED_VENUES and ("casa_choro" in gaps or categories.get("casa_choro", 0) < 2):
             gap_descriptions.append("""
 🎶 BUSCA ULTRA-ESPECÍFICA: CASA DO CHORO
 - Endereço: Rua da Carioca, 38 - Centro, Rio de Janeiro
@@ -386,7 +394,7 @@ class RetryAgent(BaseAgent):
 - MÍNIMO: 2-4 eventos
 """)
 
-        if "sala_cecilia" in gaps or categories.get("sala_cecilia", 0) == 0 or "sala_cecilia" in missing_required_venues:
+        if "sala_cecilia" in ENABLED_VENUES and ("sala_cecilia" in gaps or categories.get("sala_cecilia", 0) == 0 or "sala_cecilia" in missing_required_venues):
             priority = "ULTRA-PRIORITÁRIA (OBRIGATÓRIO)" if "sala_cecilia" in missing_required_venues else "ULTRA-ESPECÍFICA"
             gap_descriptions.append(f"""
 🎻 BUSCA {priority}: SALA CECÍLIA MEIRELLES
@@ -397,7 +405,7 @@ class RetryAgent(BaseAgent):
 - MÍNIMO: 1-2 eventos {'(OBRIGATÓRIO)' if 'sala_cecilia' in missing_required_venues else ''}
 """)
 
-        if "teatro_municipal" in gaps or categories.get("teatro_municipal", 0) == 0 or "teatro_municipal" in missing_required_venues:
+        if "teatro_municipal" in ENABLED_VENUES and ("teatro_municipal" in gaps or categories.get("teatro_municipal", 0) == 0 or "teatro_municipal" in missing_required_venues):
             priority = "ULTRA-PRIORITÁRIA (OBRIGATÓRIO)" if "teatro_municipal" in missing_required_venues else "ULTRA-ESPECÍFICA"
             gap_descriptions.append(f"""
 🎭 BUSCA {priority}: TEATRO MUNICIPAL DO RIO DE JANEIRO
