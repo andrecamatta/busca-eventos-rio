@@ -258,7 +258,9 @@ MIN_HOURS_ADVANCE: Final[int] = 3  # Eventos hoje só aparecem se faltam +3h
 VALIDATION_STRICTNESS: Final[str] = "permissive"
 
 # Configurações de enriquecimento de descrições
-ENRICHMENT_ENABLED: Final[bool] = True
+ENRICHMENT_ENABLED: Final[bool] = False  # OTIMIZAÇÃO: Desabilitado para economizar -20 chamadas API
+TITLE_ENHANCEMENT_ENABLED: Final[bool] = False  # OTIMIZAÇÃO: Desabilitado para economizar -20 chamadas Gemini
+EVENT_CLASSIFIER_ENABLED: Final[bool] = False  # OTIMIZAÇÃO: Desabilitado, SearchAgent já categoriza (-3 chamadas Gemini)
 ENRICHMENT_MIN_DESC_LENGTH: Final[int] = 40  # palavras - abaixo disso, tentar enriquecer
 ENRICHMENT_MAX_SEARCHES: Final[int] = 30  # Otimizado: reduzido de 50 para 30 (evitar buscas desnecessárias)
 ENRICHMENT_BATCH_SIZE: Final[int] = 10  # Otimizado: aumentado de 3 para 10 (processar mais eventos em paralelo)

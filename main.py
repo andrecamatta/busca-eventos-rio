@@ -22,7 +22,14 @@ from agents.retry_agent import RetryAgent
 from agents.search_agent import SearchAgent
 from agents.title_enhancement_agent import enhance_event_titles
 from agents.verify_agent import VerifyAgent
-from config import ENRICHMENT_ENABLED, MIN_EVENTS_THRESHOLD, OPENROUTER_API_KEY, SEARCH_CONFIG
+from config import (
+    ENRICHMENT_ENABLED,
+    EVENT_CLASSIFIER_ENABLED,
+    MIN_EVENTS_THRESHOLD,
+    OPENROUTER_API_KEY,
+    SEARCH_CONFIG,
+    TITLE_ENHANCEMENT_ENABLED,
+)
 from utils.continuous_event_handler import consolidate_continuous_events
 from utils.deduplicator import deduplicate_events
 from utils.event_classifier import classify_events
@@ -117,12 +124,14 @@ class EventSearchOrchestrator:
                 logger.info("\n[FASE 3/5] ⏭️  Enriquecimento desabilitado ou sem eventos, pulando...")
 
             # Fase 3.1: Title Enhancement (enriquecer títulos genéricos)
-            if len(verified_events.get("verified_events", [])) > 0:
+            if TITLE_ENHANCEMENT_ENABLED and len(verified_events.get("verified_events", [])) > 0:
                 logger.info("\n[FASE 3.1/5] ✨ Enriquecendo títulos genéricos...")
                 verified_events["verified_events"] = await enhance_event_titles(
                     verified_events.get("verified_events", [])
                 )
                 logger.info(f"✓ Títulos processados")
+            else:
+                logger.info("\n[FASE 3.1/5] ⏭️  Title Enhancement desabilitado, pulando...")
 
             # Fase 3.5: Retry Agent (se necessário)
             logger.info(f"\n[FASE 3.5/5] 🔄 Verificando threshold mínimo ({MIN_EVENTS_THRESHOLD} eventos)...")
@@ -182,11 +191,14 @@ class EventSearchOrchestrator:
             logger.info(f"✓ Total após deduplicação: {final_count} eventos únicos")
 
             # Classificação automática de categorias (usando Gemini Flash)
-            logger.info("\n[FASE 3.8/5] 🏷️  Classificando eventos em categorias...")
-            verified_events["verified_events"] = await classify_events(
-                verified_events.get("verified_events", [])
-            )
-            logger.info(f"✓ Eventos classificados em categorias")
+            if EVENT_CLASSIFIER_ENABLED:
+                logger.info("\n[FASE 3.8/5] 🏷️  Classificando eventos em categorias...")
+                verified_events["verified_events"] = await classify_events(
+                    verified_events.get("verified_events", [])
+                )
+                logger.info(f"✓ Eventos classificados em categorias")
+            else:
+                logger.info("\n[FASE 3.8/5] ⏭️  Classificação de categorias desabilitada (SearchAgent já categoriza), pulando...")
 
             # Consolidação de eventos recorrentes (mesmo evento em múltiplas datas)
             logger.info("\n[FASE 3.9/5] 🔁 Consolidando eventos recorrentes...")

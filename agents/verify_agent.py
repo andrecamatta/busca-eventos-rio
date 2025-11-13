@@ -591,40 +591,15 @@ RETORNE APENAS:
         # Validar links em paralelo (validação básica)
         events_with_link_validation = await self._validate_links(events_data)
 
-        # Processar com LLM para verificação inteligente (primeira camada)
+        # Processar com LLM para verificação inteligente (decisão final)
         verified_data = self._verify_with_llm(events_with_link_validation)
 
-        # NOVA CAMADA: Validação individual rigorosa com ValidationAgent
-        logger.info(f"{self.log_prefix} Iniciando validação individual rigorosa...")
-        from agents.validation_agent import ValidationAgent
-
-        validation_agent = ValidationAgent()
-        individual_validation = await validation_agent.validate_events_batch(
-            verified_data.get("verified_events", [])
-        )
-
-        # Combinar resultados
-        final_verified = individual_validation["validated_events"]
-        final_rejected = (
-            verified_data.get("rejected_events", [])
-            + individual_validation["rejected_events"]
-        )
-        final_warnings = (
-            verified_data.get("warnings", [])
-            + individual_validation["validation_warnings"]
-        )
-
         logger.info(
-            f"Verificação concluída. Eventos finais aprovados: {len(final_verified)} "
-            f"(rejeitados na validação individual: {len(individual_validation['rejected_events'])})"
+            f"Verificação concluída. Eventos aprovados: {len(verified_data.get('verified_events', []))}, "
+            f"rejeitados: {len(verified_data.get('rejected_events', []))}"
         )
 
-        return {
-            "verified_events": final_verified,
-            "rejected_events": final_rejected,
-            "warnings": final_warnings,
-            "duplicates_removed": verified_data.get("duplicates_removed", []),
-        }
+        return verified_data
 
     async def _intelligent_link_search(self, event: dict, attempt: int = 1) -> dict[str, Any]:
         """Usa Perplexity para buscar o link correto de um evento e valida o conteúdo.
@@ -839,120 +814,31 @@ RETORNE APENAS:
         link = event.get("link") or event.get("link_ingresso") or event.get("ticket_link")
 
         if not link:
-            logger.info(f"→ Evento sem link, iniciando busca inteligente: {event.get('titulo')}")
+            # OTIMIZAÇÃO: Não buscar link, aceitar evento sem link
+            logger.info(f"→ Evento sem link: {event.get('titulo')}")
             stats["total_links"] += 1
-            stats["intelligent_searches"] += 1
-
-            link_result = await self._intelligent_link_search_with_consensus(event)
-
-            if link_result and link_result.get("link"):
-                new_link = link_result["link"]
-                event["link_ingresso"] = new_link
-                event["link_type"] = self._classify_link_type(new_link, event)
-                event["link_updated_by_ai"] = True
-                event["link_added_by_ai"] = True  # Novo campo para indicar que foi adicionado (não apenas corrigido)
-                event["link_quality_score"] = link_result.get("quality_score")
-                event["link_quality_validation"] = link_result.get("validation")
-
-                # Armazenar informações de consenso (se disponível)
-                if link_result.get("consensus_info"):
-                    event["link_consensus_info"] = link_result["consensus_info"]
-
-                # Armazenar dados estruturados extraídos do link
-                if link_result.get("structured_data"):
-                    event["link_structured_data"] = link_result["structured_data"]
-
-                # Link já foi validado no _intelligent_link_search
-                event["link_valid"] = True
-                event["link_status_code"] = 200
-                stats["links_fixed"] += 1
-                logger.info(f"✓ Link adicionado com sucesso: {new_link}")
-            else:
-                event["link_valid"] = None
-                event["link_error"] = "Nenhum link encontrado via busca inteligente"
-                event["requires_manual_link_check"] = True
-                logger.warning(f"⚠ Nenhum link encontrado para: {event.get('titulo')}")
-
+            event["link_valid"] = None
+            event["link_status_code"] = None
             return stats
 
-        # Detectar placeholder "INCOMPLETO" e ir direto para busca inteligente
+        # Detectar placeholder "INCOMPLETO"
         if link in ["INCOMPLETO", "incompleto", "/INCOMPLETO", "NONE", "none"]:
-            logger.info(f"→ Link placeholder detectado ({link}), iniciando busca inteligente: {event.get('titulo')}")
+            # OTIMIZAÇÃO: Não buscar link, aceitar placeholder
+            logger.info(f"→ Link placeholder detectado ({link}): {event.get('titulo')}")
             stats["total_links"] += 1
-            stats["intelligent_searches"] += 1
-
-            link_result = await self._intelligent_link_search_with_consensus(event)
-
-            if link_result and link_result.get("link"):
-                new_link = link_result["link"]
-                event["link_original"] = link
-                event["link_ingresso"] = new_link
-                event["link_type"] = self._classify_link_type(new_link, event)
-                event["link_updated_by_ai"] = True
-                event["link_quality_score"] = link_result.get("quality_score")
-                event["link_quality_validation"] = link_result.get("validation")
-
-                # Armazenar informações de consenso (se disponível)
-                if link_result.get("consensus_info"):
-                    event["link_consensus_info"] = link_result["consensus_info"]
-
-                # Armazenar dados estruturados extraídos do link
-                if link_result.get("structured_data"):
-                    event["link_structured_data"] = link_result["structured_data"]
-
-                # Link já foi validado no _intelligent_link_search
-                event["link_valid"] = True
-                event["link_status_code"] = 200
-                stats["links_fixed"] += 1
-                logger.info(f"✓ Link corrigido com sucesso: {new_link}")
-            else:
-                event["link_valid"] = False
-                event["link_error"] = "Placeholder sem link válido encontrado"
-                event["requires_manual_link_check"] = True
-                logger.warning(f"⚠ Nenhum link encontrado para: {event.get('titulo')}")
-
+            event["link_valid"] = None
+            event["link_status_code"] = None
             return stats
 
-        # Detectar link genérico (página de busca/categoria) e ir para busca inteligente
+        # Detectar link genérico (página de busca/categoria)
         if self._is_generic_link(link):
-            logger.info(f"🚫 Link genérico detectado, iniciando busca inteligente: {link[:80]}...")
+            # OTIMIZAÇÃO: Aceitar link genérico sem buscar alternativa
+            logger.info(f"→ Link genérico detectado: {link[:80]}...")
             stats["total_links"] += 1
             stats["generic_links_detected"] += 1
-            stats["intelligent_searches"] += 1
-
-            link_result = await self._intelligent_link_search_with_consensus(event)
-
-            if link_result and link_result.get("link"):
-                new_link = link_result["link"]
-                event["link_original"] = link
-                event["link_ingresso"] = new_link
-                event["link_type"] = self._classify_link_type(new_link, event)
-                event["link_updated_by_ai"] = True
-                event["link_was_generic"] = True
-                event["link_quality_score"] = link_result.get("quality_score")
-                event["link_quality_validation"] = link_result.get("validation")
-
-                # Armazenar informações de consenso (se disponível)
-                if link_result.get("consensus_info"):
-                    event["link_consensus_info"] = link_result["consensus_info"]
-
-                # Armazenar dados estruturados extraídos do link
-                if link_result.get("structured_data"):
-                    event["link_structured_data"] = link_result["structured_data"]
-
-                # Link já foi validado no _intelligent_link_search
-                event["link_valid"] = True
-                event["link_status_code"] = 200
-                stats["links_fixed"] += 1
-                logger.info(f"✓ Link genérico substituído por link específico: {new_link}")
-            else:
-                # Nenhum link específico encontrado, manter genérico mas marcar
-                event["link_valid"] = False
-                event["link_is_generic"] = True
-                event["link_error"] = "Link genérico - página de busca/categoria"
-                event["requires_manual_link_check"] = True
-                logger.warning(f"⚠ Nenhum link específico encontrado para: {event.get('titulo')}")
-
+            event["link_valid"] = True  # Aceitar link genérico
+            event["link_is_generic"] = True
+            event["link_status_code"] = 200
             return stats
 
         stats["total_links"] += 1
@@ -1005,102 +891,28 @@ RETORNE APENAS:
                 logger.info(f"✓ Link válido (HTTP 200 + conteúdo OK): {link}")
                 return stats
             else:
-                # Conteúdo inválido - link está acessível mas aponta para evento errado
+                # Conteúdo inválido - OTIMIZAÇÃO: aceitar mesmo assim
                 reason = content_validation["reason"]
-                logger.warning(f"⚠️ Link HTTP 200 mas conteúdo inválido ({reason}): {link} - Tentando busca inteligente...")
-
-                # Marcar como erro de conteúdo e tentar busca inteligente
-                event["link_original"] = link
-                event["link_content_error"] = reason
+                logger.warning(f"⚠️ Link HTTP 200 mas conteúdo possivelmente inválido ({reason}): {link}")
+                event["link_valid"] = True  # Aceitar com aviso
+                event["link_status_code"] = link_status["status_code"]
+                event["link_content_warning"] = reason
                 event["link_validation_details"] = content_validation["details"]
-
-                stats["total_links"] += 1
-                stats["link_errors"] = stats.get("link_errors", 0) + 1
-                stats["intelligent_searches"] += 1
-
-                # Tentar encontrar link correto
-                link_result = await self._intelligent_link_search_with_consensus(event)
-
-                if link_result and link_result.get("link"):
-                    new_link = link_result["link"]
-                    event["link_ingresso"] = new_link
-                    event["link_type"] = self._classify_link_type(new_link, event)
-                    event["link_updated_by_ai"] = True
-                    event["link_recovered_from_content_error"] = True
-                    event["link_quality_score"] = link_result.get("quality_score")
-                    event["link_quality_validation"] = link_result.get("validation")
-
-                    # Armazenar informações de consenso (se disponível)
-                    if link_result.get("consensus_info"):
-                        event["link_consensus_info"] = link_result["consensus_info"]
-
-                    # Armazenar dados estruturados extraídos do link
-                    if link_result.get("structured_data"):
-                        event["link_structured_data"] = link_result["structured_data"]
-
-                    # Link já foi validado no _intelligent_link_search
-                    event["link_valid"] = True
-                    event["link_status_code"] = 200
-                    stats["links_fixed"] += 1
-                    stats["links_recovered"] = stats.get("links_recovered", 0) + 1
-                    logger.info(f"✓ Link recuperado após erro de conteúdo: {new_link}")
-                else:
-                    # Nenhum link alternativo encontrado - manter link original mas marcar como suspeito
-                    event["link_valid"] = False
-                    event["link_status_code"] = link_status["status_code"]
-                    event["link_error"] = f"Conteúdo inválido: {reason}"
-                    event["requires_manual_link_check"] = True
-                    stats["links_failed_permanently"] = stats.get("links_failed_permanently", 0) + 1
-                    logger.error(f"❌ Link com conteúdo inválido ({reason}): {link} - Nenhum link alternativo encontrado")
-
+                stats["validated_first_try"] += 1
                 return stats
 
-        # Link com erro (404, 403, timeout) - tentar busca inteligente
+        # Link com erro (404, 403, timeout) - OTIMIZAÇÃO: aceitar com aviso
         status_code = link_status.get("status_code")
         reason = link_status.get("reason", "Unknown error")
 
-        logger.warning(f"⚠️ Link com erro ({reason}): {link} - Tentando busca inteligente...")
+        logger.warning(f"⚠️ Link com erro ({reason}): {link}")
         stats["total_links"] += 1
         stats["link_errors"] = stats.get("link_errors", 0) + 1
-        stats["intelligent_searches"] += 1
 
-        # Tentar encontrar link alternativo
-        link_result = await self._intelligent_link_search_with_consensus(event)
-
-        if link_result and link_result.get("link"):
-            new_link = link_result["link"]
-            event["link_original"] = link
-            event["link_ingresso"] = new_link
-            event["link_type"] = self._classify_link_type(new_link, event)
-            event["link_updated_by_ai"] = True
-            event["link_recovered_from_error"] = True
-            event["link_original_error"] = f"{status_code} - {reason}" if status_code else reason
-            event["link_quality_score"] = link_result.get("quality_score")
-            event["link_quality_validation"] = link_result.get("validation")
-
-            # Armazenar informações de consenso (se disponível)
-            if link_result.get("consensus_info"):
-                event["link_consensus_info"] = link_result["consensus_info"]
-
-            # Armazenar dados estruturados extraídos do link
-            if link_result.get("structured_data"):
-                event["link_structured_data"] = link_result["structured_data"]
-
-            # Link já foi validado no _intelligent_link_search
-            event["link_valid"] = True
-            event["link_status_code"] = 200
-            stats["links_fixed"] += 1
-            stats["links_recovered"] = stats.get("links_recovered", 0) + 1
-            logger.info(f"✓ Link recuperado com sucesso: {new_link} (original tinha erro: {reason})")
-        else:
-            # Nenhum link alternativo encontrado
-            event["link_valid"] = False
-            event["link_status_code"] = status_code
-            event["link_error"] = f"{status_code} - {reason}" if status_code else reason
-            event["requires_manual_link_check"] = True
-            stats["links_failed_permanently"] = stats.get("links_failed_permanently", 0) + 1
-            logger.error(f"❌ Link permanentemente inválido ({reason}): {link} - Nenhum link alternativo encontrado")
-
+        # Aceitar evento mesmo com link quebrado
+        event["link_valid"] = False
+        event["link_status_code"] = status_code
+        event["link_error"] = f"{status_code} - {reason}" if status_code else reason
         return stats
 
     async def _validate_links(self, events: dict | list) -> dict | list:
@@ -1177,9 +989,70 @@ RETORNE APENAS:
 
         return events
 
+    def _load_validation_config(self) -> dict[str, Any]:
+        """Carrega configurações de validação do YAML."""
+        import yaml
+        from pathlib import Path
+
+        yaml_path = Path(__file__).parent.parent / "prompts" / "search_prompts.yaml"
+
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                return config.get('validation', {})
+        except Exception as e:
+            logger.error(f"Erro ao carregar validation config do YAML: {e}")
+            return {}
+
+    def _format_updated_info(self, validation_config: dict) -> str:
+        """Formata informações atualizadas de eventos recorrentes."""
+        info_list = []
+
+        feiras = validation_config.get('informacoes_eventos_atualizadas', {}).get('feiras_recorrentes', [])
+
+        for feira in feiras:
+            nome = feira.get('nome', '')
+            frequencia = feira.get('frequencia', '')
+            local = feira.get('local', '')
+            obs = feira.get('observacao', '')
+
+            info_list.append(f"- {nome}: {frequencia}")
+            if local:
+                info_list.append(f"  Local: {local}")
+            if obs:
+                info_list.append(f"  ⚠️ {obs}")
+
+        return "\n".join(info_list) if info_list else ""
+
+    def _format_category_rules(self, validation_config: dict) -> str:
+        """Formata regras de validação por categoria."""
+        rules_list = []
+
+        rules = validation_config.get('validation_rules', {})
+
+        for category, rule_dict in rules.items():
+            require_link = rule_dict.get('require_link', True)
+            allow_weekdays = rule_dict.get('allow_weekdays', True)
+            allow_generic = rule_dict.get('allow_generic_links', False)
+            desc = rule_dict.get('description', '')
+
+            rules_list.append(f"- {category.upper()}:")
+            rules_list.append(f"  * Requer link: {'Sim' if require_link else 'Não (pode não ter link)'}")
+            rules_list.append(f"  * Dias de semana: {'Permitido' if allow_weekdays else 'Apenas sáb/dom'}")
+            rules_list.append(f"  * Links genéricos: {'Aceitos' if allow_generic else 'Não aceitos'}")
+            if desc:
+                rules_list.append(f"  * Nota: {desc}")
+
+        return "\n".join(rules_list) if rules_list else ""
+
     def _verify_with_llm(self, events: dict | list) -> dict[str, Any]:
         """Usa LLM para verificação inteligente de eventos."""
         logger.info("Verificando eventos com LLM...")
+
+        # Carregar configurações de validação do YAML
+        validation_config = self._load_validation_config()
+        updated_info_text = self._format_updated_info(validation_config)
+        category_rules_text = self._format_category_rules(validation_config)
 
         # Calcular datas e dias da semana para passar ao LLM
         start_date = SEARCH_CONFIG['start_date']
@@ -1210,6 +1083,12 @@ PERÍODO VÁLIDO: {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/
 SÁBADOS E DOMINGOS NO PERÍODO (para validação de eventos ao ar livre):
 {weekends_text}
 
+⚠️ INFORMAÇÕES ATUALIZADAS SOBRE EVENTOS RECORRENTES (2025):
+{updated_info_text}
+
+📋 REGRAS DE VALIDAÇÃO POR CATEGORIA:
+{category_rules_text}
+
 CRITÉRIOS DE APROVAÇÃO:
 
 1. DATA VÁLIDA:
@@ -1233,14 +1112,16 @@ CRITÉRIOS DE APROVAÇÃO:
 
    - Se menciona "todas as idades" SEM clareza de ser adulto → REJEITAR (preferir segurança)
 
-3. EVENTOS AO AR LIVRE:
+3. EVENTOS AO AR LIVRE (OUTDOOR):
    - APROVAR: apenas se data for sábado OU domingo (use lista acima)
    - REJEITAR: se for segunda, terça, quarta, quinta ou sexta-feira
+   - ⚠️ EVENTOS SEM LINK: Eventos gratuitos ao ar livre frequentemente NÃO TÊM link → ACEITAR se outras infos completas
 
 4. LINKS:
-   - Links genéricos (ex: sympla.com.br, ticketmaster.com.br) → NÃO rejeitar automaticamente
+   - Links genéricos (ex: sympla.com.br, ticketmaster.com.br) → Consultar regras por categoria acima
    - Se link é de plataforma confiável (Sympla, Eventbrite, Ticketmaster) e outras infos estão completas → APROVAR com aviso
    - Apenas rejeitar se link for suspeito ou evento não tiver NENHUMA info de compra
+   - Para eventos OUTDOOR sem link → ACEITAR (veja regras por categoria acima)
 
 5. INFORMAÇÕES MÍNIMAS:
    - Obrigatório: título, data, local
