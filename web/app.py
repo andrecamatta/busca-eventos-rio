@@ -80,28 +80,28 @@ def ensure_output_directory():
         logger.warning(f"Não foi possível criar diretório de output: {e}")
 
 
-def load_latest_events() -> list[dict]:
-    """Carrega os eventos mais recentes do output/latest."""
-    try:
-        # Garantir que diretório existe
-        if not LATEST_OUTPUT.exists():
-            logger.info(f"📂 Diretório {LATEST_OUTPUT} não existe. Criando...")
-            ensure_output_directory()
-            logger.info("ℹ️  Nenhum evento carregado ainda. Execute a busca ou use /api/refresh")
-            return []
+def _load_from_directory(directory: Path) -> list[dict]:
+    """
+    Carrega eventos de um diretório específico.
 
-        # Tentar vários arquivos possíveis (em ordem de prioridade)
-        possible_files = [
-            LATEST_OUTPUT / "judged_events.json",              # PRIORIDADE 1: Eventos com notas de qualidade (GPT-5)
-            LATEST_OUTPUT / "formatted_output.json",           # PRIORIDADE 2: Eventos formatados para WhatsApp
-            LATEST_OUTPUT / "verified_events.json",            # PRIORIDADE 3: Eventos verificados
-            LATEST_OUTPUT / "enriched_events_initial.json",    # PRIORIDADE 4: Fallback (eventos enriquecidos)
-        ]
+    Args:
+        directory: Path do diretório contendo arquivos JSON de eventos
 
-        eventos = []
-        for file_path in possible_files:
-            if file_path.exists():
-                logger.info(f"📁 Carregando eventos de: {file_path.name}")
+    Returns:
+        Lista de eventos carregados ou lista vazia se nenhum arquivo encontrado
+    """
+    # Tentar vários arquivos possíveis (em ordem de prioridade)
+    possible_files = [
+        directory / "judged_events.json",              # PRIORIDADE 1: Eventos com notas de qualidade (GPT-5)
+        directory / "formatted_output.json",           # PRIORIDADE 2: Eventos formatados para WhatsApp
+        directory / "verified_events.json",            # PRIORIDADE 3: Eventos verificados
+        directory / "enriched_events_initial.json",    # PRIORIDADE 4: Fallback (eventos enriquecidos)
+    ]
+
+    for file_path in possible_files:
+        if file_path.exists():
+            logger.info(f"📁 Carregando eventos de: {directory.name}/{file_path.name}")
+            try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
@@ -116,16 +116,52 @@ def load_latest_events() -> list[dict]:
                         data.get("enriched_events") or
                         []
                     )
+                else:
+                    continue
 
-                logger.info(f"✓ Carregados {len(eventos)} eventos de {file_path.name}")
+                logger.info(f"✓ Carregados {len(eventos)} eventos")
                 return eventos
+            except Exception as e:
+                logger.warning(f"⚠️  Erro ao ler {file_path.name}: {e}")
+                continue
 
-        logger.info(f"ℹ️  Nenhum arquivo de eventos encontrado em {LATEST_OUTPUT}")
-        logger.info(f"💡 Execute 'python main.py' ou use /api/refresh para buscar eventos")
+    return []
+
+
+def load_latest_events() -> list[dict]:
+    """Carrega os eventos mais recentes do output/latest (com fallback para diretório timestamped)."""
+    try:
+        # TENTATIVA 1: Carregar de 'output/latest'
+        if LATEST_OUTPUT.exists():
+            eventos = _load_from_directory(LATEST_OUTPUT)
+            if eventos:
+                return eventos
+            logger.info(f"ℹ️  Diretório {LATEST_OUTPUT} existe mas não contém eventos válidos")
+
+        # FALLBACK: Buscar diretório timestamped mais recente
+        logger.warning(f"📂 Diretório {LATEST_OUTPUT} não existe ou está vazio. Buscando diretório mais recente...")
+
+        # Listar todos os diretórios timestamped (formato: YYYY-MM-DD_HH-MM-SS)
+        output_dirs = sorted(
+            [d for d in OUTPUT_DIR.glob("2*") if d.is_dir() and d.name != "latest"],
+            reverse=True  # Mais recente primeiro
+        )
+
+        if output_dirs:
+            latest_dir = output_dirs[0]
+            logger.info(f"📂 Usando diretório mais recente: {latest_dir.name}")
+            eventos = _load_from_directory(latest_dir)
+            if eventos:
+                return eventos
+            logger.warning(f"⚠️  Diretório {latest_dir.name} não contém eventos válidos")
+
+        # Se chegou aqui, não encontrou nada
+        logger.info("ℹ️  Nenhum evento encontrado em nenhum diretório")
+        logger.info("💡 Execute 'python main.py' ou use /api/refresh para buscar eventos")
         return []
 
     except Exception as e:
-        logger.error(f"❌ Erro ao carregar eventos: {e}")
+        logger.error(f"❌ Erro ao carregar eventos: {e}", exc_info=True)
         return []
 
 
@@ -490,6 +526,47 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "app": "eventos-culturais-rio"
+    })
+
+
+@app.get("/api/health/events")
+async def health_check_events():
+    """
+    Health check específico para verificar disponibilidade de eventos.
+
+    Monitora:
+    - Quantidade de eventos carregados
+    - Status do diretório output/latest
+    - Timestamp da última atualização
+
+    Útil para alertas e monitoramento em produção.
+    """
+    eventos = load_latest_events()
+
+    # Verificar se latest existe e qual arquivo está sendo usado
+    latest_exists = LATEST_OUTPUT.exists()
+    latest_files = []
+    if latest_exists:
+        latest_files = [f.name for f in LATEST_OUTPUT.glob("*.json")]
+
+    # Buscar diretório timestamped mais recente para comparação
+    output_dirs = sorted(
+        [d for d in OUTPUT_DIR.glob("2*") if d.is_dir() and d.name != "latest"],
+        reverse=True
+    )
+    most_recent_dir = output_dirs[0].name if output_dirs else None
+
+    return JSONResponse(content={
+        "status": "healthy" if len(eventos) > 0 else "degraded",
+        "events_count": len(eventos),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "output_latest": {
+            "exists": latest_exists,
+            "path": str(LATEST_OUTPUT),
+            "files": latest_files if latest_exists else [],
+        },
+        "most_recent_directory": most_recent_dir,
+        "message": "Eventos carregados com sucesso" if len(eventos) > 0 else "Nenhum evento disponível",
     })
 
 

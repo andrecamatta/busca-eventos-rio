@@ -37,44 +37,48 @@ class EventFileManager:
             self.output_dir = self.base_output_dir
 
     def _update_latest_symlink(self):
-        """Cria ou atualiza symlink 'latest' para a pasta da execução atual."""
-        latest_link = self.base_output_dir / "latest"
+        """Copia arquivos JSON essenciais para 'latest' (mais confiável que symlink)."""
+        latest_dir = self.base_output_dir / "latest"
 
-        # Remover symlink/diretório antigo se existir (com retry para Windows)
-        if latest_link.exists() or latest_link.is_symlink():
-            for attempt in range(3):
+        # Criar diretório 'latest' se não existir (como diretório real, não symlink)
+        latest_dir.mkdir(exist_ok=True)
+
+        # Lista de arquivos JSON essenciais para copiar
+        essential_files = [
+            "verified_events.json",
+            "enriched_events_initial.json",
+            "formatted_output.json",
+            "judged_events.json",
+            "raw_events.json",
+            "structured_events.json",
+        ]
+
+        # Copiar cada arquivo JSON que existir
+        copied_count = 0
+        for filename in essential_files:
+            src = self.output_dir / filename
+            if src.exists():
+                dst = latest_dir / filename
                 try:
-                    if latest_link.is_dir() and not latest_link.is_symlink():
-                        # É um diretório real, não um symlink - remover com shutil
-                        shutil.rmtree(latest_link, ignore_errors=True)
-                    else:
-                        # É um symlink - remover com unlink
-                        latest_link.unlink()
-                    break
-                except PermissionError:
-                    if attempt < 2:
-                        time.sleep(0.5)  # Aguardar e tentar novamente
-                    else:
-                        logger.warning(f"⚠️  Não foi possível remover '{latest_link}' (em uso). Pulando atualização do link 'latest'.")
-                        return
+                    shutil.copy2(src, dst)
+                    copied_count += 1
+                    logger.debug(f"✓ Copiado: {filename} -> latest/")
+                except Exception as e:
+                    logger.warning(f"⚠️  Erro ao copiar {filename}: {e}")
 
-        # Criar novo symlink relativo (fallback para diretório se symlink falhar no Windows)
-        relative_target = self.output_dir.name
-        try:
-            latest_link.symlink_to(relative_target)
-            logger.info(f"✓ Symlink 'latest' atualizado: {latest_link} -> {relative_target}")
-        except (OSError, NotImplementedError):
-            # Windows sem privilégios de admin - criar diretório junction como fallback
-            try:
-                import subprocess
-                subprocess.run(
-                    ["cmd", "/c", "mklink", "/J", str(latest_link), str(self.output_dir)],
-                    check=True,
-                    capture_output=True
-                )
-                logger.info(f"✓ Diretório 'latest' criado (Windows): {latest_link}")
-            except Exception as e:
-                logger.warning(f"⚠️  Não foi possível criar link 'latest': {e}")
+        if copied_count > 0:
+            logger.info(f"✓ Arquivos atualizados em 'latest/': {copied_count} arquivo(s)")
+        else:
+            logger.warning(f"⚠️  Nenhum arquivo foi copiado para 'latest/'")
+
+    def update_latest(self):
+        """
+        Atualiza o diretório 'latest' com os arquivos da execução atual.
+
+        Deve ser chamado após salvar todos os arquivos JSON importantes.
+        Simplesmentereutiliza a lógica de _update_latest_symlink().
+        """
+        self._update_latest_symlink()
 
     def save_json(self, data: dict | str, filename: str) -> Path:
         """

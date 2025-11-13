@@ -239,6 +239,9 @@ class EventSearchOrchestrator:
             # Salvar mensagem final
             self.file_manager.save_text(whatsapp_message, "eventos_whatsapp.txt")
 
+            # Atualizar diretório 'latest' com todos os arquivos salvos
+            self.file_manager.update_latest()
+
             logger.info("\n" + "=" * 80)
             logger.info("✓ BUSCA CONCLUÍDA COM SUCESSO!")
             logger.info("=" * 80)
