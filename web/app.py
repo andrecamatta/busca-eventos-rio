@@ -487,21 +487,12 @@ async def startup_event():
     logger.info(f"🔑 API Key configurada: {bool(api_key)}")
 
     if api_key:
-        # Agendar busca diária às 6h da manhã
-        logger.info("⏰ Configurando scheduler...")
-        scheduler.add_job(
-            run_event_search,
-            trigger="cron",
-            hour=6,
-            minute=0,
-            id="daily_event_search",
-            replace_existing=True
-        )
+        # Scheduler disponível apenas para refresh manual
         scheduler.start()
-        logger.info("✓ Scheduler iniciado - busca automática às 6h")
+        logger.info("✓ Scheduler iniciado - disponível para refresh manual")
     else:
-        logger.warning("⚠️  OPENROUTER_API_KEY não configurada - scheduler desabilitado")
-        logger.info("💡 Configure a variável para habilitar atualização automática")
+        logger.warning("⚠️  OPENROUTER_API_KEY não configurada - refresh manual desabilitado")
+        logger.info("💡 Configure a variável para habilitar atualização manual")
 
     logger.info("=" * 60)
     logger.info("✅ APLICAÇÃO PRONTA PARA RECEBER REQUISIÇÕES")
