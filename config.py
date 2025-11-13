@@ -102,11 +102,10 @@ EVENT_CATEGORIES: Final[dict[str, dict]] = {
 
 # Lista GLOBAL de exclusões (aplicada a TODOS os eventos, independente de categoria)
 GLOBAL_EXCLUDE_KEYWORDS: Final[list[str]] = [
-    # Conteúdo infantil/familiar
+    # Conteúdo infantil/familiar (termos EXPLÍCITOS apenas)
     "infantil", "criança", "crianças", "kids", "criancas",
     "infanto-juvenil", "infanto juvenil",
-    "família", "familia", "family",
-    "para toda família", "para toda a família",
+    "para toda família", "para toda a família",  # Manter apenas expressão completa
     "sessão infantil", "sessao infantil",
     "indicado para crianças", "indicado para criancas",
     "filme infantil", "filmes infantis", "cinema infantil",
@@ -114,14 +113,18 @@ GLOBAL_EXCLUDE_KEYWORDS: Final[list[str]] = [
     "oficina infantil", "oficina-infantil",
     "atividade infantil", "atividades infantis",
     "para crianças", "para criancas",
-    "pequenos artistas", "crianças e famílias",
+    "pequenos artistas",
+    # REMOVIDO: "família", "familia", "family" - muito genérico, remove eventos legítimos
+    # REMOVIDO: "crianças e famílias" - muito genérico
+
     # Conteúdo LGBTQIAPN+
     "lgbt", "lgbtq", "lgbtqia", "lgbtqiapn",
     "pride", "parada gay", "parada lgbtq",
     "diversidade sexual", "queer", "drag queen", "drag king",
     # Eventos conversacionais/educativos não-desejados
     "roda de conversa", "mediação cultural", "mediacao cultural",
-    "bate-papo", "palestra", "debate",
+    "bate-papo", "debate",
+    # REMOVIDO: "palestra" - muito genérico, vários eventos têm palestras complementares
 ]
 
 # Venues obrigatórios (deve ter pelo menos 1 evento de cada)
