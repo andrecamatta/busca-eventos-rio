@@ -15,15 +15,22 @@ load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
 OPENROUTER_API_KEY: Final[str] = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL: Final[str] = "https://openrouter.ai/api/v1"
 
+# Firecrawl API Configuration
+FIRECRAWL_API_KEY: Final[str] = os.getenv("FIRECRAWL_API_KEY", "")
+
 # Modelos OpenRouter por função (otimização de custo vs performance)
 MODELS: Final[dict[str, str]] = {
-    "search": "perplexity/sonar",               # Busca web em tempo real (otimizado, 80% economia vs Pro)
-    "search_simple": "perplexity/sonar",        # Busca web simples (mesmo modelo)
+    "search": "perplexity/sonar",               # Sonar: Web search rápido e econômico (Perplexity indexing)
+    "search_complementary": "google/gemini-2.5-flash:online",  # Gemini Flash com web search (Exa.ai indexing)
+    "search_simple": "perplexity/sonar",        # Sonar: Web search simples
     "light": "google/gemini-2.5-flash",         # QueryOptimizer, FormatAgent (10-20x mais rápido, ~90% menor custo)
     "important": "google/gemini-2.5-flash",     # Verify, Validation, Enrichment, Retry (teste de qualidade)
     "judge": "openai/gpt-5",                    # Julgamento de qualidade de eventos (high effort)
     "link_consensus": "openai/gpt-5-mini:online",  # Tiebreaker para consenso de links (GPT-5 Mini com web search)
 }
+
+# Modelo para extração de eventos DiarioDoRio
+GEMINI_FLASH_MODEL: Final[str] = "google/gemini-2.5-flash"
 
 # Configurações de busca
 SEARCH_CONFIG: Final[dict] = {
@@ -33,72 +40,8 @@ SEARCH_CONFIG: Final[dict] = {
     "end_date": datetime.now() + timedelta(days=21),
 }
 
-# Categorias de eventos (categorização granular por tipo de evento)
-EVENT_CATEGORIES: Final[dict[str, dict]] = {
-    "jazz": {
-        "keywords": ["jazz", "show jazz", "música jazz", "jazz ao vivo", "jam session jazz"],
-        "description": "Shows de jazz",
-        "min_events": 4,  # Mínimo de 4 eventos de jazz por execução
-    },
-    "musica_classica": {
-        "keywords": ["música clássica", "musica classica", "concerto", "orquestra", "sinfônica", "sinfonia", "música erudita", "coral", "recital"],
-        "description": "Música clássica e erudita",
-        "min_events": 2,
-    },
-    "teatro": {
-        "keywords": ["teatro", "peça teatral", "espetáculo teatral", "montagem teatral"],
-        "exclude": ["comédia", "stand-up", "humor"],
-        "description": "Teatro (exceto comédia)",
-    },
-    "comedia": {
-        "keywords": ["stand-up", "humor", "comédia", "peça cômica", "show de humor"],
-        "description": "Comédia e stand-up",
-    },
-    "cinema": {
-        "keywords": ["cinema", "filme", "mostra de cinema", "sessão de cinema", "exibição de filme", "cineclube"],
-        "description": "Cinema e mostras de filmes",
-    },
-    "feira_gastronomica": {
-        "keywords": ["feira gastronômica", "feira de comida", "food festival", "festival gastronômico", "mercado gastronômico"],
-        "days": ["saturday", "sunday"],
-        "description": "Feiras gastronômicas e food festivals",
-    },
-    "feira_artesanato": {
-        "keywords": ["feira de artesanato", "feira de arte", "feira cultural", "artesanato", "feira de design"],
-        "days": ["saturday", "sunday"],
-        "description": "Feiras de artesanato e arte",
-    },
-    "outdoor": {
-        "keywords": [
-            # Locais
-            "ao ar livre", "outdoor", "parque", "praia", "jardim botânico", "aterro", "quinta da boa vista",
-            "praça", "largo", "orla", "calçadão",
-            # Tipos de eventos
-            "feira", "feira cultural", "feira de rua", "feirinha",
-            "festival", "festival de rua", "festival comunitário",
-            "junta local", "corona sunset",
-            # Bairros/regiões
-            "Ipanema", "Copacabana", "Glória", "Laranjeiras", "Lapa",
-            # Temporais
-            "fim de semana", "sábado", "domingo",
-        ],
-        "exclude": [
-            # Gêneros musicais específicos (excluir do outdoor)
-            "samba", "pagode", "roda de samba", "axé", "forró",
-            # Shows mainstream
-            "ivete sangalo", "thiaguinho", "alexandre pires", "luan santana",
-            "gusttavo lima", "wesley safadão", "simone mendes",
-            "turnê", "show nacional", "mega show", "tour brasil",
-        ],
-        "days": ["saturday", "sunday"],
-        "description": "Eventos ao ar livre em fim de semana (culturais/nichados)",
-    },
-    "cursos_cafe": {
-        "keywords": ["curso café", "workshop café", "barista", "degustação café", "coffee tasting"],
-        "venues": ["Artemis Torrefação"],
-        "description": "Cursos e eventos de café especializado",
-    },
-}
+# NOTA: EVENT_CATEGORIES foi migrado para prompts/search_prompts.yaml
+# Use utils.category_registry.CategoryRegistry para acessar categorias dinamicamente
 
 # Lista GLOBAL de exclusões (aplicada a TODOS os eventos, independente de categoria)
 GLOBAL_EXCLUDE_KEYWORDS: Final[list[str]] = [
@@ -304,6 +247,23 @@ ACCEPT_GENERIC_EVENTS: Final[list[str]] = [
     "sarau",
 ]  # tipos de eventos que aceitam "músicos da casa"
 
+# Configurações de validação de conteúdo de links
+LINK_VALIDATION: Final[dict[str, float]] = {
+    "title_match_threshold": 0.7,  # % mínima de palavras do título no HTML
+    "venue_match_threshold": 0.4,   # % mínima de palavras do local no HTML
+    "min_page_length": 50,          # caracteres mínimos (detectar soft 404s)
+    "min_description_words": 20,    # palavras mínimas na descrição
+}
+
+# Status de validação de links (constantes para evitar typos)
+class LinkStatus:
+    """Status possíveis de validação de links."""
+    ACCESSIBLE = "accessible"
+    NOT_FOUND = "not_found"
+    TIMEOUT = "timeout"
+    FORBIDDEN = "forbidden"
+    ERROR = "error"
+
 # Configurações de consenso de links (Fase 2 - Anti-alucinação)
 LINK_CONSENSUS_ENABLED: Final[bool] = True  # Habilitar consenso multi-modelo
 LINK_CONSENSUS_SEARCHES: Final[int] = 2  # Número de buscas independentes no Perplexity (otimizado: 2 em vez de 3)
@@ -344,12 +304,15 @@ JUDGE_MAX_LINK_CHARS: Final[int] = 2000  # máximo de chars do HTML do link para
 # Controla quais categorias e venues são habilitados (permite testes focados e end-to-end baratos)
 
 # Categorias habilitadas (controla busca, validação e thresholds)
-# IDs disponíveis: jazz, musica_classica, teatro, comedia, cinema, feira_gastronomica, feira_artesanato, outdoor, cursos_cafe
+# IDs disponíveis (novos): shows, teatro, gastronomia, atividades_ar_livre, cinema,
+#                          exposicoes, literatura, festas, jazz, comedia, musica_classica,
+#                          artesanato, cursos
 ENABLED_CATEGORIES: Final[list[str]] = [
-    "outdoor",  # TESTE: apenas outdoor
-    # Descomente para produção:
-    # "jazz", "musica_classica", "teatro", "comedia",
-    # "cinema", "feira_gastronomica", "feira_artesanato", "cursos_cafe",
+    "gastronomia",  # Eventos gastronômicos e feiras de comida
+    "atividades_ar_livre",  # Cinema ao ar livre, shows em parques, feiras culturais
+    # Outras categorias disponíveis:
+    # "jazz", "musica_classica", "teatro", "comedia", "cinema",
+    # "shows", "exposicoes", "literatura", "festas", "artesanato", "cursos",
 ]
 
 # Mínimos de eventos por categoria (apenas para categorias habilitadas)

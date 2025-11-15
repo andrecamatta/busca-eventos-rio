@@ -8,34 +8,19 @@ from typing import Any
 
 from utils.agent_factory import AgentFactory
 from utils.json_helpers import safe_json_parse
+from utils.category_registry import CategoryRegistry
 
 logger = logging.getLogger(__name__)
 
-# Categorias válidas (extraídas de config.EVENT_CATEGORIES)
-VALID_CATEGORIES = [
-    "Jazz",
-    "Música Clássica",
-    "Teatro",
-    "Comédia",
-    "Cinema",
-    "Feira Gastronômica",
-    "Feira de Artesanato",
-    "Outdoor/Parques",
-    "Cursos de Café"
-]
+# Categorias válidas são carregadas dinamicamente do CategoryRegistry
+def _get_valid_categories() -> list[str]:
+    """Get valid categories from CategoryRegistry"""
+    return CategoryRegistry.get_all_display_names()
 
-CLASSIFICATION_PROMPT = """Você é um classificador de eventos culturais. Classifique cada evento abaixo em UMA das 9 categorias válidas:
+# Template do prompt (será formatado com categorias dinâmicas)
+CLASSIFICATION_PROMPT_TEMPLATE = """Você é um classificador de eventos culturais. Classifique cada evento abaixo em UMA das {num_categories} categorias válidas:
 
-CATEGORIAS VÁLIDAS:
-1. Jazz - Shows de jazz, bossa nova, jam sessions de jazz, música instrumental
-2. Música Clássica - Concertos, orquestras, música erudita, ópera, coral, recitais, piano solo
-3. Teatro - Peças dramáticas, performances teatrais (EXCETO comédia)
-4. Comédia - Stand-up, peças de comédia, shows de humor
-5. Cinema - Sessões de cinema, mostras de filmes, festivais de cinema
-6. Feira Gastronômica - Feiras de comida, food festivals (fim de semana)
-7. Feira de Artesanato - Feiras de arte, artesanato, design (fim de semana)
-8. Outdoor/Parques - Eventos ao ar livre em parques (fim de semana, culturais)
-9. Cursos de Café - Workshops, cursos e degustações de café
+{categories_list}
 
 REGRAS GERAIS:
 - Use EXATAMENTE o nome da categoria acima (ex: "Jazz", não "jazz" ou "Shows de Jazz")
@@ -76,6 +61,41 @@ RETORNE UM JSON com esta estrutura EXATA:
 
 IMPORTANTE: IDs devem corresponder à ordem dos eventos na lista de entrada.
 """
+
+
+def _build_classification_prompt(eventos_json: str) -> str:
+    """Constrói o prompt de classificação com categorias dinâmicas do CategoryRegistry.
+
+    Args:
+        eventos_json: JSON dos eventos a classificar
+
+    Returns:
+        Prompt formatado com todas as categorias
+    """
+    categories = _get_valid_categories()
+
+    # Construir lista numerada de categorias
+    categories_list = "CATEGORIAS VÁLIDAS:\n"
+    for i, cat_name in enumerate(categories, 1):
+        # Buscar descrição da categoria do YAML
+        cat_data = None
+        for cat_id in CategoryRegistry.get_all_category_ids():
+            if CategoryRegistry.get_category_display_name(cat_id) == cat_name:
+                cat_data = CategoryRegistry.get_category_data(cat_id)
+                break
+
+        desc = cat_data.get('descricao', '') if cat_data else ''
+        categories_list += f"{i}. {cat_name}"
+        if desc:
+            categories_list += f" - {desc}"
+        categories_list += "\n"
+
+    # Formatar o prompt template
+    return CLASSIFICATION_PROMPT_TEMPLATE.format(
+        num_categories=len(categories),
+        categories_list=categories_list,
+        eventos_json=eventos_json
+    )
 
 
 async def classify_events(events: list[dict[str, Any]], batch_size: int = 25) -> list[dict[str, Any]]:
@@ -154,8 +174,8 @@ async def _classify_batch(
         })
 
     # Montar prompt
-    prompt = CLASSIFICATION_PROMPT.format(
-        eventos_json=json.dumps(eventos_minimos, ensure_ascii=False, indent=2)
+    prompt = _build_classification_prompt(
+        json.dumps(eventos_minimos, ensure_ascii=False, indent=2)
     )
 
     try:
@@ -174,7 +194,8 @@ async def _classify_batch(
                 new_category = classification.get("categoria", "Geral")
 
                 # Validar categoria
-                if new_category not in VALID_CATEGORIES and new_category != "Geral":
+                valid_cats = _get_valid_categories()
+                if new_category not in valid_cats and new_category != "Geral":
                     logger.warning(
                         f"⚠️  Categoria inválida '{new_category}' para evento "
                         f"'{event.get('titulo', '')}', usando 'Geral'"

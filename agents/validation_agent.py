@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from agents.base_agent import BaseAgent
 from config import (
     HTTP_TIMEOUT,
+    LinkStatus,
     MIN_HOURS_ADVANCE,
     SEARCH_CONFIG,
     VALIDATION_STRICTNESS,
@@ -27,7 +28,12 @@ logger = logging.getLogger(__name__)
 class ValidationAgent(BaseAgent):
     """Agente especializado em validação individual inteligente com LLM."""
 
-    def __init__(self):
+    def __init__(self, http_client=None):
+        """Inicializa ValidationAgent.
+
+        Args:
+            http_client: HttpClientWrapper opcional para dependency injection (útil para testes)
+        """
         super().__init__(
             agent_name="ValidationAgent",
             log_emoji="⚖️",
@@ -40,13 +46,43 @@ class ValidationAgent(BaseAgent):
                 "Considerar contexto e plausibilidade geral",
             ],
             markdown=True,
+            http_client=http_client,
         )
 
-    def _initialize_dependencies(self, **kwargs):
-        """Inicializa HTTP client, date validator e link validator."""
-        self.http_client = HttpClientWrapper()
+    def _initialize_dependencies(self, http_client=None, **kwargs):
+        """Inicializa HTTP client, date validator e link validator.
+
+        Args:
+            http_client: HttpClientWrapper opcional para dependency injection (útil para testes)
+            **kwargs: Argumentos adicionais
+        """
+        self.http_client = http_client or HttpClientWrapper()
         self.date_validator = DateValidator()
         self.link_validator = LinkValidator()
+
+    def _load_validation_config(self) -> dict[str, Any]:
+        """Carrega configurações de validação do YAML."""
+        from utils.config_loader import ConfigLoader
+        return ConfigLoader.load_validation_config()
+
+    def _format_updated_info(self, validation_config: dict) -> str:
+        """Formata informações atualizadas de eventos recorrentes."""
+        from utils.config_loader import ConfigLoader
+        return ConfigLoader.format_updated_info(validation_config)
+
+    def _get_category_rules(self, validation_config: dict, categoria: str) -> dict[str, Any]:
+        """Obtém regras de validação para uma categoria específica."""
+        rules = validation_config.get('validation_rules', {})
+
+        # Normalizar nome da categoria (remover /Parques, espaços, etc)
+        categoria_key = categoria.lower().split('/')[0].strip().replace(' ', '_')
+
+        return rules.get(categoria_key, {
+            'require_link': True,
+            'allow_weekdays': True,
+            'allow_generic_links': False,
+            'description': ''
+        })
 
     def _needs_individual_validation(self, event: dict) -> bool:
         """Determina se um evento precisa de validação individual via LLM.
@@ -243,7 +279,8 @@ class ValidationAgent(BaseAgent):
             }
 
         # 2. Buscar informações do link (se tiver)
-        link = event.get("link_ingresso") or event.get("link", "")
+        from utils.event_normalizer import EventNormalizer
+        link = EventNormalizer.get_link(event) or ""
         if link:
             link_info = await self._fetch_link_info(link, event)  # Passar evento para validação de qualidade
             evidences["link"] = link_info
@@ -349,30 +386,30 @@ class ValidationAgent(BaseAgent):
 
             if status_code == 404:
                 return {
-                    "status": "not_found",
+                    "status": LinkStatus.NOT_FOUND,
                     "status_code": 404,
                     "reason": "Link retorna 404 (não encontrado)",
                 }
             elif status_code == 403:
                 return {
-                    "status": "forbidden",
+                    "status": LinkStatus.FORBIDDEN,
                     "status_code": 403,
                     "reason": "Link bloqueado (403 Forbidden)",
                 }
             elif result["error"] == "Timeout":
                 return {
-                    "status": "timeout",
+                    "status": LinkStatus.TIMEOUT,
                     "reason": "Timeout ao acessar link",
                 }
             elif status_code:
                 return {
-                    "status": "error",
+                    "status": LinkStatus.ERROR,
                     "status_code": status_code,
                     "reason": f"Link retorna status {status_code}",
                 }
             else:
                 return {
-                    "status": "error",
+                    "status": LinkStatus.ERROR,
                     "reason": f"Erro ao acessar link: {result['error']}",
                 }
 
@@ -413,7 +450,7 @@ class ValidationAgent(BaseAgent):
                 logger.warning(f"{self.log_prefix} Erro ao validar qualidade do link: {e}")
 
         return {
-            "status": "accessible",
+            "status": LinkStatus.ACCESSIBLE,
             "status_code": 200,
             "content_preview": page_text,
             "extracted_date": extracted_date,
@@ -571,11 +608,28 @@ class ValidationAgent(BaseAgent):
     async def _analyze_with_llm(self, event: dict, evidences: dict) -> dict[str, Any]:
         """Usa LLM (Gemini Flash) para análise final inteligente do evento."""
 
+        # Carregar configurações de validação do YAML
+        validation_config = self._load_validation_config()
+        updated_info_text = self._format_updated_info(validation_config)
+
+        # Obter regras específicas da categoria do evento
+        categoria = event.get('categoria', '')
+        category_rules = self._get_category_rules(validation_config, categoria)
+
         # Preparar lista de venues preferidos com endereços
         venues_preferidos = "\n".join([
             f"{venue.replace('_', ' ').title()}: {addrs[0]}"
             for venue, addrs in VENUE_ADDRESSES.items()
         ])
+
+        # Formatar regras da categoria
+        category_rules_text = f"""
+REGRAS PARA CATEGORIA '{categoria}':
+- Requer link: {'Sim' if category_rules.get('require_link', True) else 'Não (eventos sem link são aceitáveis)'}
+- Dias permitidos: {'Qualquer dia' if category_rules.get('allow_weekdays', True) else 'Apenas sábados e domingos'}
+- Links genéricos: {'Aceitáveis' if category_rules.get('allow_generic_links', False) else 'Não aceitáveis'}
+- Nota: {category_rules.get('description', 'N/A')}
+"""
 
         prompt = f"""Você é um validador inteligente de eventos culturais no Rio de Janeiro.
 
@@ -599,6 +653,11 @@ Link: {evidences['link'].get('status', 'N/A')} - {evidences['link'].get('reason'
 VENUES PREFERIDOS (endereços corretos conhecidos):
 {venues_preferidos}
 
+⚠️ INFORMAÇÕES ATUALIZADAS SOBRE EVENTOS RECORRENTES (2025):
+{updated_info_text}
+
+{category_rules_text}
+
 INSTRUÇÕES - LEIA ATENTAMENTE:
 1. **VALIDAÇÃO DE DATA (PRIORIDADE MÁXIMA)**:
    - Se o link está acessível E você identifica data DIFERENTE da informada no evento, REJEITE o evento
@@ -608,9 +667,12 @@ INSTRUÇÕES - LEIA ATENTAMENTE:
 
 2. Se o evento menciona um venue da lista acima, compare o endereço fornecido com o endereço correto
 
-3. Links 404/403 de plataformas confiáveis (Sympla, Eventbrite) podem ser tolerados APENAS se:
-   - Não houver outra forma de validação
-   - O evento for de venue conhecido e confiável
+3. **VALIDAÇÃO DE LINKS** (considere regras da categoria acima):
+   - Se categoria NÃO requer link: eventos sem link são ACEITÁVEIS (ex: outdoor gratuito)
+   - Links 404/403 de plataformas confiáveis (Sympla, Eventbrite) podem ser tolerados APENAS se:
+     * Não houver outra forma de validação
+     * O evento for de venue conhecido e confiável
+   - Links genéricos: consultar regras da categoria acima
 
 4. Eventos em venues não listados são aceitáveis se parecerem legítimos
 
@@ -618,6 +680,7 @@ INSTRUÇÕES - LEIA ATENTAMENTE:
 - Data divergente entre evento e link oficial (NUNCA aprove "apesar da divergência")
 - Endereço completamente diferente de venue conhecido
 - Informações contraditórias no conteúdo do link
+- ⚠️ EXCETO: Para eventos outdoor sem link (consultar regras de categoria acima)
 
 Retorne JSON:
 {{
@@ -632,18 +695,17 @@ Retorne JSON:
         try:
             response = self.agent.run(prompt)
 
-            # Usar safe_json_parse para extração consistente
-            from utils.json_helpers import safe_json_parse
-            decision = safe_json_parse(
+            # Usar LLMResponseParser para validação consistente
+            from utils.llm_response_parser import LLMResponseParser
+            decision = LLMResponseParser.parse_validation_response(
                 response.content,
-                default={"approved": False, "reason": "Erro ao processar resposta", "quality_score": 0}
+                default_approved=False,
+                default_confidence=50
             )
 
-            # Garantir campos obrigatórios
-            if "approved" not in decision:
-                decision["approved"] = False
-            if "confidence" not in decision:
-                decision["confidence"] = 50
+            # Campo quality_score é opcional, mas vamos garantir
+            if "quality_score" not in decision:
+                decision["quality_score"] = 0
             if "reason" not in decision:
                 decision["reason"] = "Decisão do LLM"
             if "warnings" not in decision:

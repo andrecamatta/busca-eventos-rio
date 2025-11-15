@@ -33,19 +33,800 @@ _template_base:
     - "horario: formato HH:MM"
     - "local: Nome do venue + endereço completo"
     - "preco: valor ou 'Consultar'"
-    - "link_ingresso: URL de compra/info (ou null se não encontrado)"
+    - "link_ingresso: URL de compra de ingresso (ou null se não houver venda)"
+    - "link_referencia: URL com informações do evento quando não há venda (ou null)"
     - "descricao: resumo do evento (opcional)"
+
+  instrucoes_links: |
+    📎 INSTRUÇÕES PARA LINKS:
+
+    1. **link_ingresso** (PRIORIDADE):
+       - URL de plataforma de venda (Sympla, Eventbrite, Fever, etc)
+       - URL de bilheteria oficial do venue
+       - Deve ser página específica do evento (com ID/slug/parâmetro único)
+       - Retornar null se não houver venda de ingressos
+
+    2. **link_referencia** (FALLBACK - quando link_ingresso é null):
+
+       🚨 REGRA CRÍTICA: NUNCA INVENTE URLs!
+       - APENAS copie URLs que aparecem LITERALMENTE nos resultados de busca
+       - NUNCA construa URLs baseadas em padrões observados
+       - NUNCA invente domínios que parecem lógicos
+
+       ❌ EXEMPLOS DE URLs INVENTADAS (NÃO FAZER - DÃO 404!):
+         ✗ timeout.com/rio-de-janeiro/feira-rio-antigo
+         ✗ parquelage.rio/programacao (domínio não existe!)
+         ✗ juntalocal.com/eventos
+
+       ✅ EXEMPLO CORRETO (URL REAL encontrada em busca):
+         ✓ rotacult.com.br/2025/02/village-movieart-villagemall-traz-sessoes-de-cinema-ao-ar-livre/
+
+       Fontes aceitáveis (APENAS se URL for encontrada em resultados):
+         a) Portal cultural: TimeOut, Veja Rio, O Globo, Rota Cult
+         b) Sites oficiais: eavparquelage.rj.gov.br, jbrj.gov.br
+         c) Redes sociais: Instagram, Facebook (posts específicos)
+         d) Agenda oficial: agenda.rio.rj.gov.br, visit.rio
+
+       - Link deve mencionar o evento ESPECÍFICO, não apenas o venue
+       - Se não VIU o link nos resultados: retornar null
+       - É MELHOR retornar null do que inventar um link!
 
 # ═══════════════════════════════════════════════════════════
 # CATEGORIAS DE EVENTOS
 # ═══════════════════════════════════════════════════════════
 
 categorias:
+  # ─────────────────────────────────────────────────────────
+  # BROAD CATEGORIES (8)
+  # ─────────────────────────────────────────────────────────
+
+  shows:
+    nome: Shows
+    tipo_busca: categoria
+    descricao: Shows e concertos de música popular (rock, pop, MPB, samba, indie, etc)
+    parallel_queries: 3  # Alta variabilidade em venues e estilos
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Shows de rock, pop, indie
+      - Concertos de MPB e música brasileira
+      - Shows de samba e pagode
+      - Apresentações de música eletrônica
+      - Shows em bares, casas de show e teatros
+
+    palavras_chave:
+      - "shows Rio Janeiro {month_range_str}"
+      - "show música Rio entre {start_date_str} e {end_date_str}"
+      - "concerto Rio {month_range_str}"
+      - "apresentação musical Rio {month_str}"
+      - "rock Rio {month_year_str}"
+      - "MPB Rio {month_year_str}"
+      - "samba Rio {month_range_str}"
+
+    cache_keywords:
+      - show
+      - concerto
+      - apresentação musical
+      - rock
+      - pop
+      - MPB
+      - samba
+      - pagode
+      - indie
+      - música ao vivo
+      - casa de show
+      - música popular
+
+    venues_sugeridos:
+      - Circo Voador
+      - Fundição Progresso
+      - Audio Rebel
+      - Beco das Garrafas
+      - Bares com música ao vivo
+      - Casas de show em geral
+
+    instrucoes_especiais: |
+      ⚠️ RETORNAR JSON: {{"eventos": [{{eventos}}]}}
+      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
+
+      BUSCAR: Shows de música popular no Rio (rock, pop, MPB, samba, indie)
+
+      FONTES PRIORITÁRIAS (nesta ordem):
+      1. Sympla: "shows Rio {month_range_str}" entre {start_date_str} e {end_date_str}
+      2. Eventbrite: shows musicais Rio
+      3. TimeOut Rio - seção Shows
+      4. Fever: concertos e shows
+      5. Google: "show música Rio {month_range_str}"
+
+      TIPOS DE SHOWS:
+      - Rock, pop, indie (nacional e internacional)
+      - MPB e música brasileira
+      - Samba e pagode (exceto rodas informais)
+      - Música eletrônica com artistas
+      - Shows em bares, casas de show, teatros
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Tipo: Show de música popular (não clássica, não jazz nichado)
+      ✓ Link: URL específica do evento (Sympla preferível)
+      ✓ Artista: Nome específico do artista/banda
+
+      EXCLUIR:
+      ❌ Shows já cobertos por categorias nichadas (jazz, música_classica, comedia)
+      ❌ Eventos infantis ou para toda família
+      ❌ Mega shows em estádios (>10.000 pessoas)
+
+  teatro:
+    nome: Teatro
+    tipo_busca: categoria
+    descricao: Peças teatrais e espetáculos dramáticos (exceto comédia stand-up)
+    parallel_queries: 3  # Muitos teatros e espetáculos
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Peças teatrais dramáticas
+      - Espetáculos teatrais
+      - Montagens teatrais
+      - Teatro experimental
+      - Monólogos e performances
+
+    palavras_chave:
+      - "teatro Rio Janeiro {month_range_str}"
+      - "peça teatral Rio {month_str}"
+      - "espetáculo teatral Rio entre {start_date_str} e {end_date_str}"
+      - "montagem teatral Rio {month_year_str}"
+      - "teatro dramático Rio {month_str}"
+
+    cache_keywords:
+      - teatro
+      - peça teatral
+      - espetáculo teatral
+      - montagem teatral
+      - drama
+      - teatro experimental
+      - monólogo
+      - performance teatral
+      - ator
+      - atriz
+
+    venues_sugeridos:
+      - Teatro Riachuelo
+      - Teatro do Leblon
+      - Theatro Net Rio
+      - Teatro Gláucio Gill
+      - Teatro Poeira
+      - Espaços culturais diversos
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar peças e espetáculos teatrais entre {start_date_str} e {end_date_str}
+
+      ⚠️ FILTROS CRÍTICOS:
+      - ❌ NÃO incluir stand-up comedy ou shows de humor
+      - ❌ NÃO incluir eventos infantis ou "para toda família"
+      - ❌ NÃO incluir musicais (categoria separada se necessário)
+      - ✅ APENAS teatro dramático, experimental, monólogos adultos
+
+      FONTES PRIORITÁRIAS:
+      1. Sympla: "teatro Rio {month_range_str}"
+      2. Eventbrite: peças teatrais
+      3. TimeOut Rio - seção Teatro
+      4. Ingresso.com: teatro
+      5. Sites dos teatros
+
+      VALIDAÇÃO:
+      - Confirmar que NÃO é comédia stand-up
+      - Confirmar que NÃO é infantil
+      - Priorizar espetáculos com nomes de peças específicas
+
+  gastronomia:
+    nome: Gastronomia
+    tipo_busca: categoria
+    descricao: Eventos gastronômicos, feiras de comida, festivais culinários e experiências gastronômicas
+    parallel_queries: 2  # 2 queries Sonar (Perplexity indexing)
+    complementary_queries: 1  # 1 query Gemini Flash :online (Exa.ai indexing)
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Festivais gastronômicos temáticos (porco, frutos do mar, brasa, street food)
+      - Feiras gastronômicas de rua em praças públicas
+      - Eventos gastronômicos em shoppings (rooftop, estacionamento, área externa)
+      - Festivais all-inclusive com múltiplas estações gastronômicas
+      - Eventos gastronômicos com música ao vivo
+      - Mercados gastronômicos temporários
+      - Food festivals ao ar livre
+      - Jantares especiais e experiências culinárias
+      - Degustações e harmonizações
+
+    palavras_chave:
+      # EVENTOS ESPECÍFICOS (maior probabilidade de captura)
+      - "Torresmofest Rio {month_year_str}"
+      - "Comida di Rua Tijuca {month_year_str}"
+      - "No Fogo com Bronze Leblon {month_year_str}"
+      - "Feira Ziriguidum Ipanema {month_year_str}"
+      - "Carioquíssima Rio {month_year_str}"
+
+    cache_keywords:
+      - gastronomia
+      - gastronômica
+      - gastronomico
+      - culinária
+      - feira gastronômica
+      - feira_gastronomica  # Backward compatibility
+      - festival gastronômico
+      - food festival
+      - street food
+      - comida de rua
+      - torresmofest
+      - churrasco
+      - frutos do mar
+      - rooftop
+      - all inclusive
+      - open bar food
+      - jantar especial
+      - experiência gastronômica
+      - degustação
+
+      # PADRÕES DE BUSCA ESPECÍFICOS (baseados em eventos reais)
+      - "feira gastronômica Shopping Nova América Rio {month_str}"
+      - "festival gastronômico Shopping Leblon rooftop {month_str}"
+      - "feira gastronômica Praça Saens Pena Tijuca {month_str}"
+      - "feira gastronômica Praça General Osório Ipanema {month_str}"
+      - "festival Parque Carmen Miranda Flamengo {month_str}"
+
+      # PADRÕES DE MARKETING (eventos recorrentes)
+      - "festival gastronômico volta Rio {month_str}"
+      - "feira gastronômica edição {month_year_str}"
+      - "feira gastronômica retorna Rio {month_str}"
+
+      # TEMÁTICAS CULINÁRIAS
+      - "festival porco torresmo Rio {month_str}"
+      - "festival churrasco brasa Rio {month_str}"
+      - "feira street food comida de rua Rio {month_str}"
+      - "festival frutos do mar Rio {month_str}"
+
+      # LOCAIS GENÉRICOS (descobrir novos eventos)
+      - "feira gastronômica shopping Rio fim de semana {month_str}"
+      - "festival gastronômico rooftop Rio {month_str}"
+      - "feira gastronômica praça pública Rio sábado domingo"
+      - "evento gastronômico parque Rio {month_str}"
+
+      # ALL-INCLUSIVE / FORMATOS ESPECIAIS
+      - "festival gastronômico all inclusive Rio {month_str}"
+      - "evento gastronômico open bar food Rio {month_str}"
+
+      # GENÉRICAS (flexibilidade)
+      - "feira gastronômica Rio {month_str}"
+      - "food festival Rio {month_year_str}"
+      - "evento gastronômico Rio {month_str}"
+
+    venues_sugeridos:
+      # EXEMPLOS COMUNS (não limitantes - eventos podem acontecer em QUALQUER local adequado)
+      - Shoppings específicos: Nova América (estacionamento), Leblon (rooftop), Tijuca, Jardim Guadalupe
+      - Praças públicas: Saens Pena (Tijuca), General Osório (Ipanema), Mauá, XV de Novembro
+      - Parques urbanos: Carmen Miranda (Flamengo), Lage (Jardim Botânico), Quinta da Boa Vista
+      - Feiras existentes: Hippie de Ipanema, Glória, Largo da Ordem
+      - Galpões e espaços de eventos em diversos bairros
+      - Orlas e áreas abertas (Rodrigo de Freitas, orla marítima, Aterro do Flamengo)
+      - Restaurantes e espaços gastronômicos
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Eventos gastronômicos diversos (feiras, festivais, jantares especiais, experiências)
+
+      ⚠️ FORMATO DE RESPOSTA - CRÍTICO:
+      - RETORNAR APENAS JSON PURO: {{"eventos": []}}
+      - NÃO adicionar texto/markdown antes ou depois
+
+      TIPOS DE EVENTOS PARA BUSCAR:
+      ✅ Festivais gastronômicos temáticos (porco, frutos do mar, brasa, street food)
+      ✅ Feiras gastronômicas de rua em praças públicas
+      ✅ Eventos gastronômicos em shoppings (rooftop, estacionamento, área externa)
+      ✅ Festivais all-inclusive com múltiplas estações gastronômicas
+      ✅ Eventos gastronômicos com música ao vivo/DJ/samba
+      ✅ Mercados gastronômicos temporários com múltiplos expositores
+      ✅ Jantares especiais temáticos em restaurantes
+      ✅ Experiências gastronômicas e degustações
+
+      PADRÕES DE BUSCA IMPORTANTES:
+      1. Eventos recorrentes com palavras como "volta", "edição", "retorna", "nova edição"
+      2. Múltiplos expositores/food trucks (20+, 30+ estações) OU eventos em restaurantes específicos
+      3. Elementos complementares: música ao vivo, shows, DJ, samba
+      4. Duração: 7-9 horas por dia, múltiplos dias (sáb/dom ou 5 dias seguidos) OU jantares únicos
+      5. Locais variados: praças, shoppings (rooftop/estacionamento), parques, restaurantes
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: Qualquer dia da semana entre {start_date_str} e {end_date_str}
+      ✓ Foco gastronômico claro
+      ✓ Local específico no Rio de Janeiro
+      ✓ Preço: Entrada gratuita, all-inclusive pago, ou valor por prato/experiência
+
+      EXCLUIR:
+      ❌ Eventos corporativos/privados
+      ❌ Eventos focados apenas em crianças
+
+      FONTES PRIORITÁRIAS (buscar PRIMEIRO, mas também explorar outras fontes):
+      📍 Sites com alta cobertura de eventos gastronômicos:
+      - diariodorio.com (ótima cobertura de feiras e festivais)
+      - sopacultural.com (eventos culturais e gastronômicos)
+      - timeout.com/rio-de-janeiro (agenda completa)
+      - bafafa.com.br (feiras alternativas)
+      - sympla.com.br, eventbrite.com.br (eventos pagos all-inclusive)
+
+      ⚠️ IMPORTANTE: Também buscar em OUTRAS fontes relevantes (redes sociais, sites oficiais de shoppings/parques, agendas culturais, etc)
+
+      EXEMPLOS DE PADRÕES BEM-SUCEDIDOS (como eventos aparecem online):
+      - "Torresmofest Shopping Nova América novembro 2025"
+      - "Comida di Rua Praça Saens Pena Tijuca"
+      - "No Fogo com Bronze rooftop Shopping Leblon"
+      - "Feira Ziriguidum Praça General Osório Ipanema"
+      - "Carioquíssima Parque Carmen Miranda Flamengo"
+
+  atividades_ar_livre:
+    nome: Atividades ao Ar Livre
+    tipo_busca: categoria
+    descricao: Cinema ao ar livre, concertos em parques e feiras culturais aos fins de semana
+    parallel_queries: 3  # Crítico - ganho 150%+, múltiplas feiras/parques
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Cinema ao ar livre (qualquer parque/praia/praça)
+      - Shows e concertos em espaços abertos
+      - Feiras de produtores e artesanato (qualquer localização)
+      - Feiras gastronômicas outdoor
+      - Feiras de economia criativa
+      - Festivais musicais ao ar livre
+      - Festivais gastronômicos (cerveja, food trucks)
+      - Eventos culturais em praças públicas
+      - Apresentações teatrais ao ar livre
+
+    palavras_chave:
+      # Cinema e Shows
+      - "cinema ao ar livre Rio {month_range_str}"
+      - "show acústico ao ar livre Rio {month_range_str}"
+      - "concerto ao ar livre Rio"
+      - "Varanda Sonora Parque Lage"
+
+    cache_keywords:
+      - outdoor
+      - ar livre
+      - ao ar livre
+      - parque
+      - praça
+      - cinema ao ar livre
+      - show ao ar livre
+      - concerto ao ar livre
+      - feira
+      - feira de rua
+      - artesanato
+      - produtores
+      - Junta Local
+      - Feira da Glória
+      - Rio Antigo
+      - Praça XV
+      - Varanda Sonora
+      - Parque Lage
+      - festival ao ar livre
+      - feira gastronômica outdoor
+      - economia criativa
+
+      # Feiras - NOMES (sem local fixo)
+      - "Junta Local Rio {month_range_str}"
+      - "Feira da Glória Rio"
+      - "Feira Rio Antigo {month_range_str}"
+      - "Feira O Fuxico Rio"
+      - "Feira Praça XV"
+
+      # Feiras - TIPOS GENÉRICOS
+      - "feira produtores Rio sábado"
+      - "feira de rua Rio domingo"
+      - "feira artesanato ao ar livre Rio"
+      - "feira gastronômica outdoor Rio"
+      - "feira economia criativa Rio"
+
+      # Feiras e Festivais Gastronômicos
+      - "festival gastronômico Rio {month_range_str}"
+      - "feira comida rua Rio {month_range_str}"
+      - "feira gastronômica shopping Rio"
+      - "feira gastronômica praça Rio {month_range_str}"
+      - "festival street food Rio"
+      - "evento gastronômico outdoor Rio"
+      - "Carioquíssima Rio {month_range_str}"
+
+      # Festivais - TIPOS GENÉRICOS
+      - "festival ao ar livre Rio {month_range_str}"
+      - "festival música praça Rio"
+      - "festival cerveja outdoor Rio"
+      - "festival rock ao ar livre Rio"
+      - "festival jazz outdoor Rio {month_range_str}"
+
+      # Busca Ampla
+      - "eventos ao ar livre Rio fim de semana {month_range_str}"
+      - "eventos praças públicas Rio"
+      - "programação gratuita outdoor Rio"
+
+    venues_sugeridos:
+      - Parque Lage (Varanda Sonora - sábados)
+      - Jardim Botânico (cinema, concertos)
+      - Quinta da Boa Vista
+      - Aterro do Flamengo
+      - Praça XV (Feira Praça XV)
+      - Largo da Carioca (Feira Rio Antigo - 1º sábado)
+
+    fontes_prioritarias:
+      - Rio Eventos (agenda.rio.rj.gov.br / visit.rio) - FONTE OFICIAL PREFEITURA
+      - Riotur (visit.rio/agenda)
+      - Bafafá Rio (bafafa.com.br)
+      - TimeOut Rio - seção Fim de Semana
+      - Instagram @parquelage, @jardimbotanicorj
+
+    instrucoes_especiais: |
+      🚨 FORMATO DE RESPOSTA - CRÍTICO:
+      - RETORNAR APENAS JSON PURO (sem texto antes ou depois)
+      - NÃO adicionar explicações, comentários ou markdown
+      - NÃO usar blocos ```json ou ```
+      - INICIAR resposta com {{ e TERMINAR com }}
+      - Se não encontrar eventos: {{"eventos": []}}
+
+      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
+
+      🎯 OBJETIVO: Buscar TODOS os eventos culturais ao ar livre em SÁBADOS/DOMINGOS no Rio
+      ⚠️ NÃO se limitar aos exemplos - buscar QUALQUER evento outdoor cultural no período
+
+      FONTES PRIORITÁRIAS (consultar TODAS):
+      1. **Rio Eventos** (agenda.rio.rj.gov.br / visit.rio) - FONTE OFICIAL PREFEITURA
+         - Buscar: "site:agenda.rio.rj.gov.br eventos {month_range_str}"
+         - Buscar: "site:visit.rio agenda fim de semana {month_range_str}"
+      2. **Bafafá Rio** (bafafa.com.br) - FONTE PRINCIPAL (agregador de eventos)
+         - Buscar: "site:bafafa.com.br eventos outdoor Rio {month_range_str}"
+      3. **TimeOut Rio** (timeout.com/rio-de-janeiro) - Seção "Coisas para fazer"
+         - Buscar: "site:timeout.com/rio-de-janeiro eventos fim de semana {month_range_str}"
+      4. **Riotur** (visit.rio) - Agenda oficial da cidade
+      5. **Sympla/Eventbrite** - Filtrar por "ao ar livre" ou "outdoor"
+      6. **Instagram** de venues: @parquelage, @jardimbotanicorj, @quintadaboavista
+
+      TIPOS DE EVENTOS (incluindo mas NÃO limitado a):
+      ✅ Cinema ao ar livre (qualquer parque/praia/praça)
+      ✅ Concertos e shows acústicos em espaços abertos
+      ✅ Feiras de produtores e artesanato (QUALQUER local - NÃO fixar endereço)
+      ✅ Feiras gastronômicas outdoor
+      ✅ Feiras de economia criativa
+      ✅ Festivais musicais ao ar livre (rock, MPB, etc)
+      ✅ Festivais gastronômicos (cerveja, food trucks)
+      ✅ Eventos culturais em praças públicas
+      ✅ Shows em praias (Arpoador, Copacabana, Ipanema)
+      ✅ Apresentações teatrais ao ar livre
+
+      BUSCAR POR NOMES (sem fixar locais - feira pode estar em lugares diferentes):
+      - Junta Local (evento itinerante - verificar calendário)
+      - Feira da Glória (TODOS os domingos)
+      - Feira Rio Antigo / Feira do Lavradio (TODOS os sábados - não apenas 1º sábado!)
+      - Feira Orgânica da Tijuca (todo sábado - Praça Xavier de Brito)
+      - Feira O Fuxico (Ipanema - verificar datas específicas)
+      - Gávea + Faz Girar
+      - Rock 80 Festival
+      - Fest Rio Beer
+      - Varanda Sonora (Parque Lage - evento esporádico, verificar programação EAV)
+      - Cinema em parques (Lage, Jardim Botânico, Aterro, MAM, outros)
+
+      ⚠️ CORREÇÕES IMPORTANTES (informações atualizadas 2025):
+      1. Feira Rio Antigo: Agora acontece TODOS os sábados (mudou!)
+         - Antes era apenas 1º sábado, hoje é semanal
+         - Local: Rua do Lavradio, Lapa
+      2. Feira da Glória: TODOS os domingos, 7h-16h
+         - Local: Largo da Glória / Av. Augusto Severo
+      3. Varanda Sonora: NÃO é evento regular todo sábado
+         - É esporádico - verificar programação EAV Parque Lage
+      4. Junta Local: Feira ITINERANTE (não tem local/dia fixo)
+         - Consultar calendário em juntalocal.com
+      5. Feira O Fuxico: Local CORRETO é Ipanema (não Tijuca)
+         - Praça Nossa Senhora da Paz, Ipanema
+
+      VALIDAÇÃO:
+      ✓ Data: SÁBADO ou DOMINGO entre {start_date_str} e {end_date_str}
+      ✓ Ao ar livre (outdoor/open air)
+      ✓ Cultural (não puramente comercial)
+      ✓ Local específico no Rio de Janeiro
+
+      EXCLUIR APENAS:
+      ❌ Eventos esportivos (corridas, futebol, ciclismo)
+      ❌ Mega shows comerciais pagos (>1000 pessoas, >R$100)
+
+  cinema:
+    nome: Cinema
+    tipo_busca: categoria
+    descricao: Mostras de cinema, cineclubes e sessões especiais
+    parallel_queries: 2  # Mostras diversas, cineclubes diferentes
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Mostras de cinema
+      - Cineclubes
+      - Sessões especiais
+      - Festivais de cinema
+
+    palavras_chave:
+      - "mostra cinema Rio {month_year_str}"
+      - "cineclube Rio {month_str}"
+      - "festival cinema Rio {month_str}"
+      - "sessão especial cinema Rio"
+
+    cache_keywords:
+      - cinema
+      - mostra
+      - mostra de cinema
+      - festival de cinema
+      - cineclube
+      - sessão especial
+      - filme
+      - documentário
+      - curta-metragem
+      - MAM
+      - CCBB
+      - Estação Net
+      - IMS
+
+    venues_sugeridos:
+      - MAM Cinema
+      - CCBB Cinema
+      - Estação Net (Botafogo/Ipanema)
+      - IMS
+      - Cinemas de arte
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Mostras/festivais de cinema entre {start_date_str} e {end_date_str}
+
+      ⚠️ CRÍTICO - DESAGREGAÇÃO DE FILMES:
+      Se um festival/mostra (ex: "Lumen Film Festival") tiver MÚLTIPLAS SESSÕES de FILMES DIFERENTES:
+      - CADA filme = 1 EVENTO SEPARADO (não consolidar em "Festival Genérico")
+      - Incluir nome do filme no título do evento
+
+      Exemplo CORRETO:
+      ✅ "Lumen Film Festival - Filme A" (data: 14/11)
+      ✅ "Lumen Film Festival - Filme B" (data: 15/11)
+      ✅ "Lumen Film Festival - Filme C" (data: 16/11)
+
+      Exemplo ERRADO (não fazer):
+      ❌ "Lumen Film Festival - Sessões no Estação Net Rio"
+
+      Se for MESMO FILME em múltiplas datas: use eh_recorrente: true
+
+      ⚠️ NÃO incluir:
+      - ❌ Filmes comerciais em cartaz normal
+      - ❌ Sessões infantis
+
+  exposicoes:
+    nome: Exposições
+    tipo_busca: categoria
+    descricao: Exposições de arte, galerias e mostras visuais
+    parallel_queries: 3  # Muitas galerias e espaços culturais
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Exposições de arte contemporânea
+      - Mostras de fotografia
+      - Exposições de pintura e escultura
+      - Instalações artísticas
+      - Exposições em galerias
+      - Mostras de arte visual
+
+    palavras_chave:
+      - "exposição arte Rio {month_range_str}"
+      - "mostra fotografia Rio {month_str}"
+      - "galeria arte Rio {month_year_str}"
+      - "exposição contemporânea Rio entre {start_date_str} e {end_date_str}"
+      - "instalação artística Rio {month_str}"
+      - "arte visual Rio {month_range_str}"
+
+    cache_keywords:
+      - exposição
+      - mostra
+      - galeria
+      - arte contemporânea
+      - fotografia
+      - pintura
+      - escultura
+      - instalação
+      - arte visual
+      - vernissage
+      - curadoria
+      - artista
+      - exposição coletiva
+
+    venues_sugeridos:
+      - CCBB
+      - MAM
+      - Museu de Arte do Rio (MAR)
+      - IMS
+      - Parque Lage
+      - Galerias de arte
+      - Espaços culturais diversos
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar exposições de arte e mostras visuais entre {start_date_str} e {end_date_str}
+
+      FONTES PRIORITÁRIAS:
+      1. Sites de museus e centros culturais (CCBB, MAM, MAR, IMS)
+      2. TimeOut Rio - seção Arte
+      3. Sympla/Eventbrite: exposições
+      4. Google: "exposição arte Rio {month_range_str}"
+      5. Redes sociais de galerias
+
+      TIPOS DE EXPOSIÇÕES:
+      - Arte contemporânea
+      - Fotografia
+      - Pintura e escultura
+      - Instalações artísticas
+      - Mostras coletivas e individuais
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: Período da exposição deve incluir {start_date_str} a {end_date_str}
+      ✓ Tipo: Exposição de arte visual (não teatro, não show)
+      ✓ Local: Museu, galeria ou espaço cultural específico
+      ✓ Link: URL com informações da exposição
+
+      EXCLUIR:
+      ❌ Eventos infantis
+      ❌ Feiras comerciais (não artísticas)
+
+  literatura:
+    nome: Literatura
+    tipo_busca: categoria
+    descricao: Lançamentos de livros, encontros literários e eventos de literatura
+    parallel_queries: 2  # Eventos distribuídos em livrarias e centros culturais
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Lançamentos de livros
+      - Encontros com autores
+      - Saraus literários
+      - Festivais literários
+      - Rodas de leitura
+      - Palestras sobre literatura
+      - Feiras de livros
+
+    palavras_chave:
+      - "lançamento livro Rio {month_range_str}"
+      - "encontro autor Rio {month_str}"
+      - "sarau literário Rio {month_year_str}"
+      - "festival literário Rio {month_str}"
+      - "literatura Rio entre {start_date_str} e {end_date_str}"
+      - "evento literário Rio {month_range_str}"
+
+    cache_keywords:
+      - literatura
+      - livro
+      - lançamento de livro
+      - autor
+      - escritor
+      - sarau
+      - festival literário
+      - feira de livros
+      - poesia
+      - leitura
+      - literatura brasileira
+      - roda de leitura
+      - encontro literário
+
+    venues_sugeridos:
+      - Livraria da Travessa
+      - Livraria Blooks
+      - CCBB
+      - IMS
+      - Centros culturais
+      - Bibliotecas
+      - Espaços culturais
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar eventos literários entre {start_date_str} e {end_date_str}
+
+      FONTES PRIORITÁRIAS:
+      1. Redes sociais de livrarias (Travessa, Blooks, etc)
+      2. Sites de centros culturais (CCBB, IMS)
+      3. Sympla/Eventbrite: eventos literários
+      4. TimeOut Rio - seção Livros
+      5. Google: "lançamento livro Rio {month_range_str}"
+
+      TIPOS DE EVENTOS:
+      - Lançamentos de livros com presença do autor
+      - Encontros e conversas com escritores
+      - Saraus e performances literárias
+      - Festivais literários (FLIP Rio, etc)
+      - Rodas de leitura e clubes de leitura abertos
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Foco literário (livro, autor, leitura)
+      ✓ Local: Livraria, centro cultural ou biblioteca específica
+      ✓ Evento aberto ao público
+
+      EXCLUIR:
+      ❌ Eventos infantis (literatura infantil)
+      ❌ Cursos longos de escrita criativa (focar em eventos pontuais)
+
+  festas:
+    nome: Festas
+    tipo_busca: categoria
+    descricao: Festivais, celebrações e festas culturais
+    parallel_queries: 3  # Alta variabilidade de festivais
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Festivais culturais
+      - Festas temáticas
+      - Blocos de rua (fora de carnaval)
+      - Celebrações culturais
+      - Festas juninas e tradicionais
+      - Festas de bairro
+      - Eventos comunitários festivos
+
+    palavras_chave:
+      - "festival Rio {month_range_str}"
+      - "festa cultural Rio {month_str}"
+      - "celebração Rio {month_year_str}"
+      - "bloco de rua Rio entre {start_date_str} e {end_date_str}"
+      - "festa temática Rio {month_str}"
+      - "evento festivo Rio {month_range_str}"
+
+    cache_keywords:
+      - festival
+      - festa
+      - celebração
+      - festividade
+      - bloco de rua
+      - festa junina
+      - festa cultural
+      - festa temática
+      - evento festivo
+      - comemoração
+      - festa de bairro
+      - festa popular
+
+    venues_sugeridos:
+      - Praças públicas
+      - Ruas de bairros
+      - Centros culturais
+      - Espaços de eventos
+      - Parques
+      - Orlas
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar festivais e festas culturais entre {start_date_str} e {end_date_str}
+
+      FONTES PRIORITÁRIAS:
+      1. Rio Eventos (agenda.rio.rj.gov.br)
+      2. TimeOut Rio - seção Festivais
+      3. Bafafá Rio
+      4. Sympla/Eventbrite: festas e festivais
+      5. Redes sociais de organizadores
+
+      TIPOS DE FESTAS:
+      - Festivais culturais multi-gênero
+      - Festas temáticas (anos 80, reggae, samba, etc)
+      - Blocos de rua pré/pós carnaval
+      - Festas juninas e arraiás
+      - Celebrações de bairro
+      - Festas populares e comunitárias
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Caráter festivo e cultural
+      ✓ Local específico no Rio
+      ✓ Evento aberto ao público (gratuito ou pago)
+
+      EXCLUIR:
+      ❌ Eventos infantis ou "para toda família"
+      ❌ Mega shows já cobertos em outras categorias
+      ❌ Eventos puramente comerciais sem aspecto cultural
+
+  # ─────────────────────────────────────────────────────────
+  # NICHE CATEGORIES (5)
+  # ─────────────────────────────────────────────────────────
+
   jazz:
     nome: Jazz
     tipo_busca: categoria
     descricao: Shows de jazz no Rio de Janeiro (jazz tradicional, bebop, fusion, bossa nova)
     parallel_queries: 3  # Alta variabilidade em venues, múltiplas fontes
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Shows de jazz ao vivo
@@ -60,6 +841,17 @@ categorias:
       - "Clube do Jazz Rio {month_range_str}"
       - "jazz ao vivo Rio {month_range_str}"
       - "casa de jazz Rio {month_range_str}"
+
+    cache_keywords:
+      - jazz
+      - bebop
+      - fusion
+      - bossa nova
+      - Maze Jazz
+      - Clube do Jazz
+      - Blue Note
+      - Beco das Garrafas
+      - música instrumental
 
     venues_sugeridos:
       - Maze Jazz Club
@@ -97,6 +889,7 @@ categorias:
     tipo_busca: categoria
     descricao: Stand-up e peças de comédia no Rio (exceto infantil)
     parallel_queries: 2  # Bom ROI, teatros distribuídos
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Stand-up comedy
@@ -110,6 +903,16 @@ categorias:
       - "show humor Rio {month_range_str}"
       - "stand up Rio entre {start_date_str} e {end_date_str}"
       - "teatro comédia Rio {month_range_str}"
+
+    cache_keywords:
+      - stand-up
+      - stand up
+      - comédia
+      - humor
+      - comediante
+      - show de humor
+      - espetáculo cômico
+      - teatro de comédia
 
     venues_sugeridos:
       - Theatro Net Rio
@@ -135,6 +938,7 @@ categorias:
     tipo_busca: categoria
     descricao: Concertos de música clássica em locais alternativos (exceto venues tradicionais)
     parallel_queries: 1  # Menos variável, scrapers cobrem bem
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Concertos em igrejas
@@ -148,6 +952,22 @@ categorias:
       - "música clássica Candelária {month_range_str}"
       - "recital museu Rio {month_range_str}"
       - "OSB concerto especial {month_range_str}"
+
+    cache_keywords:
+      - música clássica
+      - concerto
+      - orquestra
+      - sinfônica
+      - OSB
+      - recital
+      - música de câmara
+      - coral
+      - ópera
+      - piano
+      - violino
+      - Cidade das Artes
+      - igreja
+      - Candelária
       - "orquestra eventos Rio {month_range_str}"
       - "música câmara Rio entre {start_date_str} e {end_date_str}"
       - "concerto Igreja São Francisco {month_range_str}"
@@ -187,170 +1007,12 @@ categorias:
       - Priorizar eventos com nomes de músicos/grupos específicos
       - Evitar duplicatas com venues dedicados
 
-  outdoor:
-    nome: Outdoor/Parques
-    tipo_busca: categoria
-    descricao: Cinema ao ar livre, concertos em parques e feiras culturais aos fins de semana
-    parallel_queries: 3  # Crítico - ganho 150%+, múltiplas feiras/parques
-
-    tipos_evento:
-      - Cinema ao ar livre em parques
-      - Concertos e shows acústicos em jardins
-      - Feira Rio Antigo e Feira Praça XV
-      - Feiras gastronômicas e de artesanato outdoor
-      - Festivais culturais pequenos
-
-    palavras_chave:
-      - "cinema ao ar livre Rio"
-      - "Varanda Sonora Parque Lage"
-      - "concerto jardim Rio"
-      - "Feira Rio Antigo"
-      - "Feira Praça XV fim de semana"
-      - "feira Jardim Botânico"
-      - "eventos Parque Lage"
-      - "show acústico parque Rio"
-
-    venues_sugeridos:
-      - Parque Lage (Varanda Sonora - sábados)
-      - Jardim Botânico (cinema, concertos)
-      - Quinta da Boa Vista
-      - Aterro do Flamengo
-      - Praça XV (Feira Praça XV)
-      - Largo da Carioca (Feira Rio Antigo - 1º sábado)
-
-    fontes_prioritarias:
-      - Riotur (visit.rio/agenda)
-      - TimeOut Rio - seção Fim de Semana
-      - Bafafá Rio
-      - Instagram @parquelage, @jardimbotanicorj
-
-    instrucoes_especiais: |
-      🚨 FORMATO DE RESPOSTA - CRÍTICO:
-      - RETORNAR APENAS JSON PURO (sem texto antes ou depois)
-      - NÃO adicionar explicações, comentários ou markdown
-      - NÃO usar blocos ```json ou ```
-      - INICIAR resposta com {{ e TERMINAR com }}
-      - Se não encontrar eventos: {{"eventos": []}}
-
-      ⚠️ DATA OBRIGATÓRIA: Eventos devem estar entre {start_date_str} e {end_date_str}
-
-      🎯 OBJETIVO: Buscar TODOS os eventos culturais ao ar livre em SÁBADOS/DOMINGOS no Rio
-      ⚠️ NÃO se limitar aos exemplos - buscar QUALQUER evento outdoor cultural no período
-
-      FONTES PRIORITÁRIAS (consultar TODAS):
-      1. **Bafafá Rio** (bafafa.com.br) - FONTE PRINCIPAL (agregador de eventos)
-         - Buscar: "site:bafafa.com.br eventos outdoor Rio {month_range_str}"
-      2. **TimeOut Rio** (timeout.com/rio-de-janeiro) - Seção "Coisas para fazer"
-         - Buscar: "site:timeout.com/rio-de-janeiro eventos fim de semana {month_range_str}"
-      3. **Riotur** (visit.rio) - Agenda oficial da cidade
-      4. **Sympla/Eventbrite** - Filtrar por "ao ar livre" ou "outdoor"
-      5. **Instagram** de venues: @parquelage, @jardimbotanicorj, @quintadaboavista
-
-      TIPOS DE EVENTOS (incluindo mas NÃO limitado a):
-      ✅ Cinema ao ar livre (qualquer parque/praia)
-      ✅ Concertos e shows acústicos em jardins/parques
-      ✅ Feiras: culturais, gastronômicas, artesanato (Rio Antigo, Praça XV, Glória, Junta Local)
-      ✅ Festivais de rua e música
-      ✅ Shows em praias (Arpoador, Copacabana, Ipanema)
-      ✅ Eventos culturais em praças públicas
-      ✅ Yoga/meditação com música ao vivo
-      ✅ Apresentações teatrais ao ar livre
-
-      EXEMPLOS de eventos conhecidos (se acontecerem no período):
-      - Varanda Sonora (Parque Lage - sábados)
-      - Feira Rio Antigo (1º sábado do mês)
-      - Junta Local (vários locais)
-      - Cinema em parques (Lage, Jardim Botânico, Aterro)
-      - Sunset no Arpoador com música
-
-      VALIDAÇÃO:
-      ✓ Data: SÁBADO ou DOMINGO entre {start_date_str} e {end_date_str}
-      ✓ Ao ar livre (outdoor/open air)
-      ✓ Cultural (não puramente comercial)
-      ✓ Local específico no Rio de Janeiro
-
-      EXCLUIR APENAS:
-      ❌ Eventos esportivos (corridas, futebol, ciclismo)
-      ❌ Mega shows comerciais pagos (>1000 pessoas, >R$100)
-
-  cinema:
-    nome: Cinema
-    tipo_busca: categoria
-    descricao: Mostras de cinema, cineclubes e sessões especiais
-    parallel_queries: 2  # Mostras diversas, cineclubes diferentes
-
-    tipos_evento:
-      - Mostras de cinema
-      - Cineclubes
-      - Sessões especiais
-      - Festivais de cinema
-
-    palavras_chave:
-      - "mostra cinema Rio {month_year_str}"
-      - "cineclube Rio {month_str}"
-      - "festival cinema Rio {month_str}"
-      - "sessão especial cinema Rio"
-
-    venues_sugeridos:
-      - MAM Cinema
-      - CCBB Cinema
-      - Estação Net (Botafogo/Ipanema)
-      - IMS
-      - Cinemas de arte
-
-    instrucoes_especiais: |
-      🎯 OBJETIVO: Mostras/festivais de cinema entre {start_date_str} e {end_date_str}
-
-      ⚠️ CRÍTICO - DESAGREGAÇÃO DE FILMES:
-      Se um festival/mostra (ex: "Lumen Film Festival") tiver MÚLTIPLAS SESSÕES de FILMES DIFERENTES:
-      - CADA filme = 1 EVENTO SEPARADO (não consolidar em "Festival Genérico")
-      - Incluir nome do filme no título do evento
-
-      Exemplo CORRETO:
-      ✅ "Lumen Film Festival - Filme A" (data: 14/11)
-      ✅ "Lumen Film Festival - Filme B" (data: 15/11)
-      ✅ "Lumen Film Festival - Filme C" (data: 16/11)
-
-      Exemplo ERRADO (não fazer):
-      ❌ "Lumen Film Festival - Sessões no Estação Net Rio"
-
-      Se for MESMO FILME em múltiplas datas: use eh_recorrente: true
-
-      ⚠️ NÃO incluir:
-      - ❌ Filmes comerciais em cartaz normal
-      - ❌ Sessões infantis
-
-  feira_gastronomica:
-    nome: Feira Gastronômica
-    tipo_busca: categoria
-    descricao: Feiras gastronômicas e food festivals em fim de semana
-    parallel_queries: 2  # Múltiplas feiras paralelas
-
-    tipos_evento:
-      - Feiras gastronômicas
-      - Food festivals
-      - Mercados gastronômicos
-      - Eventos de gastronomia
-
-    palavras_chave:
-      - "feira gastronômica Rio {month_str}"
-      - "food festival Rio {month_year_str}"
-      - "mercado gastronômico Rio sábado"
-      - "feira comida Rio fim de semana"
-
-    venues_sugeridos:
-      - Parques e praças
-      - Espaços culturais
-      - Galpões e mercados
-
-    instrucoes_especiais: |
-      🎯 OBJETIVO: Feiras gastronômicas SÁBADO/DOMINGO
-
-  feira_artesanato:
-    nome: Feira de Artesanato
+  artesanato:
+    nome: Artesanato
     tipo_busca: categoria
     descricao: Feiras de artesanato, arte e design em fim de semana
     parallel_queries: 2  # Múltiplas feiras paralelas
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Feiras de artesanato
@@ -364,6 +1026,19 @@ categorias:
       - "feira cultural Rio {month_year_str}"
       - "feira design Rio fim de semana"
 
+    cache_keywords:
+      - artesanato
+      - feira de artesanato
+      - feira_artesanato  # Backward compatibility
+      - feira de arte
+      - feira cultural
+      - feira de design
+      - arte
+      - design
+      - artesão
+      - crafts
+      - feirinha
+
     venues_sugeridos:
       - Parques e praças
       - Centros culturais
@@ -371,6 +1046,85 @@ categorias:
 
     instrucoes_especiais: |
       🎯 OBJETIVO: Feiras de artesanato/arte SÁBADO/DOMINGO
+
+  cursos:
+    nome: Cursos e Workshops
+    tipo_busca: categoria
+    descricao: Cursos, workshops e oficinas (café, gastronomia, artes, etc)
+    parallel_queries: 2  # Diversos venues e temas
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
+
+    tipos_evento:
+      - Cursos de barista e café
+      - Workshops de gastronomia
+      - Oficinas de artes
+      - Workshops de fotografia
+      - Cursos de degustação
+      - Oficinas culturais
+
+    palavras_chave:
+      - "curso Rio {month_range_str}"
+      - "workshop Rio {month_str}"
+      - "oficina Rio entre {start_date_str} e {end_date_str}"
+      - "curso café Rio {month_year_str}"
+      - "workshop gastronomia Rio {month_str}"
+      - "curso arte Rio {month_range_str}"
+
+    cache_keywords:
+      - curso
+      - cursos_cafe  # Backward compatibility
+      - workshop
+      - oficina
+      - barista
+      - café
+      - degustação
+      - gastronomia
+      - fotografia
+      - arte
+      - culinária
+      - Artemis Torrefação
+      - curso especializado
+
+    venues_sugeridos:
+      - Artemis Torrefação (cursos de café)
+      - Centros culturais
+      - Escolas de gastronomia
+      - Espaços de artes
+      - Livrarias
+
+    instrucoes_especiais: |
+      🎯 OBJETIVO: Buscar cursos e workshops entre {start_date_str} e {end_date_str}
+
+      FONTES PRIORITÁRIAS:
+      1. Sympla: "curso Rio {month_range_str}" ou "workshop Rio {month_range_str}"
+      2. Eventbrite: cursos e workshops
+      3. Instagram de venues especializados (@artemistorrefacao, etc)
+      4. Sites de centros culturais
+      5. Google: "curso workshop Rio {month_range_str}"
+
+      TIPOS DE CURSOS/WORKSHOPS:
+      - Café (barista, degustação, métodos de preparo)
+      - Gastronomia e culinária
+      - Artes (pintura, desenho, escultura)
+      - Fotografia
+      - Outras áreas culturais e criativas
+
+      VALIDAÇÃO OBRIGATÓRIA:
+      ✓ Data: DEVE estar entre {start_date_str} e {end_date_str}
+      ✓ Formato curso/workshop (não palestra ou show)
+      ✓ Local: Venue específico no Rio
+      ✓ Link: URL de inscrição (Sympla preferível)
+      ✓ Tema específico claramente definido
+
+      EXCLUIR:
+      ❌ Cursos infantis
+      ❌ Cursos corporativos fechados
+      ❌ Cursos longos (focar em workshops pontuais de 1-3 dias)
+
+      EXEMPLO DE VENUE PRIORITÁRIO:
+      - Artemis Torrefação (Rua Conde de Bonfim, 751, Tijuca) - cursos de café
+        * Buscar: "site:sympla.com.br artemis torrefacao"
+        * Instagram: @artemistorrefacao
 
 # ═══════════════════════════════════════════════════════════
 # VENUES ESPECÍFICOS
@@ -383,6 +1137,7 @@ venues:
     descricao: Programação da Casa do Choro (choro, samba, música brasileira)
     endereco: "Rua da Carioca, 38, Centro, Rio de Janeiro"
     parallel_queries: 2  # Boa cobertura com 2 queries
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Shows de choro
@@ -416,6 +1171,7 @@ venues:
     descricao: Programação da Sala Cecília Meireles (música clássica, erudita, coral)
     endereco: "Largo da Lapa, 47, Lapa, Rio de Janeiro"
     parallel_queries: 1  # Scraper oficial cobre bem
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Concertos de música clássica
@@ -446,6 +1202,7 @@ venues:
     descricao: Programação do Teatro Municipal (ópera, balé, concertos, teatro clássico)
     endereco: "Praça Floriano, s/n, Centro, Rio de Janeiro"
     parallel_queries: 1  # Scraper oficial + programação concentrada
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Óperas
@@ -493,6 +1250,7 @@ venues:
     descricao: Eventos e cursos de café na Artemis Torrefação
     endereco: "Rua Conde de Bonfim, 751, Tijuca, Rio de Janeiro"
     parallel_queries: 2  # Cursos pontuais, bom com 2 queries
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Cursos de barista
@@ -541,6 +1299,7 @@ venues:
     descricao: Programação do CCBB (exposições, teatro, cinema, shows)
     endereco: "Rua Primeiro de Março, 66, Centro, Rio de Janeiro"
     parallel_queries: 2  # Múltiplas salas/tipos (Teatro, Cinema, Exposições)
+    min_events: 2  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Exposições de arte
@@ -576,6 +1335,7 @@ venues:
     descricao: Eventos culturais e tecnológicos no Oi Futuro (Ipanema e Flamengo)
     endereco: "Rua Dois de Dezembro, 63, Ipanema/Flamengo, Rio de Janeiro"
     parallel_queries: 2  # Ganho modesto mas positivo
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Exposições de arte e tecnologia
@@ -611,6 +1371,7 @@ venues:
     descricao: Eventos culturais no IMS Rio (fotografia, música, cinema, literatura)
     endereco: "Rua Marquês de São Vicente, 476, Gávea, Rio de Janeiro"
     parallel_queries: 2  # Ganho modesto mas positivo
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Exposições de fotografia
@@ -645,6 +1406,7 @@ venues:
     descricao: Eventos culturais e artísticos no Parque Lage (EAV - Escola de Artes Visuais)
     endereco: "Rua Jardim Botânico, 414, Jardim Botânico, Rio de Janeiro"
     parallel_queries: 2  # Ganho modesto mas positivo
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Exposições de arte contemporânea
@@ -682,6 +1444,7 @@ venues:
     descricao: Eventos culturais no CCJF (Centro - exposições, música, teatro)
     endereco: "Av. Rio Branco, 241, Centro, Rio de Janeiro"
     parallel_queries: 2  # Ganho modesto mas positivo
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Exposições de arte
@@ -716,6 +1479,7 @@ venues:
     descricao: Cinema curado do Museu de Arte Moderna - sessões e retrospectivas
     endereco: "Av. Infante Dom Henrique, 85, Parque do Flamengo, Rio de Janeiro"
     parallel_queries: 2  # Ganho modesto mas positivo
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Sessões de cinema de arte
@@ -744,6 +1508,7 @@ venues:
     descricao: Teatro comercial - musicais, comédias, dramas
     endereco: "Rua Siqueira Campos, 143, Copacabana, Rio de Janeiro"
     parallel_queries: 2  # Ganho modesto mas positivo
+    min_events: 1  # Mínimo de eventos esperados (usado pelo RetryAgent)
 
     tipos_evento:
       - Musicais
@@ -994,3 +1759,142 @@ venues:
 
       FOCO: Cinema de arte, mostras, festivais
       ⚠️ Identificar qual unidade (Ipanema ou Botafogo)
+
+# ═══════════════════════════════════════════════════════════
+# PROMPTS E REGRAS DE VALIDAÇÃO
+# ═══════════════════════════════════════════════════════════
+
+validation:
+  # Informações atualizadas sobre eventos recorrentes (2025)
+  informacoes_eventos_atualizadas:
+    feiras_recorrentes:
+      - nome: "Feira Rio Antigo / Feira do Lavradio"
+        frequencia: "TODOS os sábados"
+        local: "Rua do Lavradio, Lapa, Centro"
+        observacao: "Mudou em 2025! Antes era apenas 1º sábado do mês, hoje é semanal"
+
+      - nome: "Feira da Glória"
+        frequencia: "TODOS os domingos, 7h-16h"
+        local: "Largo da Glória / Av. Augusto Severo"
+        observacao: "Feira semanal, não apenas mensal"
+
+      - nome: "Varanda Sonora"
+        frequencia: "Evento esporádico (NÃO é todo sábado)"
+        local: "Parque Lage"
+        observacao: "Verificar programação EAV - não é evento regular semanal"
+
+      - nome: "Junta Local"
+        frequencia: "Itinerante - sem dia/local fixo"
+        observacao: "Feira itinerante, verificar calendário em juntalocal.com"
+
+      - nome: "Feira O Fuxico"
+        frequencia: "Verificar datas específicas"
+        local: "Praça Nossa Senhora da Paz, Ipanema (NÃO Tijuca)"
+        observacao: "Local correto é Ipanema, não Tijuca"
+
+  # Regras de validação por categoria
+  validation_rules:
+    shows:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Shows geralmente têm link de venda em plataformas"
+
+    teatro:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Teatro geralmente tem link de venda em plataformas"
+
+    gastronomia:
+      require_link: false
+      allow_weekdays: true
+      allow_generic_links: true
+      description: "Eventos gastronômicos podem ser gratuitos sem link específico"
+
+    atividades_ar_livre:
+      require_link: false  # Eventos gratuitos ao ar livre frequentemente não têm link
+      allow_weekdays: false  # Apenas sábados e domingos
+      allow_generic_links: true  # Links genéricos são aceitáveis
+      description: "Eventos ao ar livre gratuitos frequentemente não possuem link de ingresso"
+
+    cinema:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Mostras de cinema geralmente têm link de reserva"
+
+    exposicoes:
+      require_link: false
+      allow_weekdays: true
+      allow_generic_links: true
+      description: "Exposições frequentemente são gratuitas e sem link de ingresso"
+
+    literatura:
+      require_link: false
+      allow_weekdays: true
+      allow_generic_links: true
+      description: "Eventos literários frequentemente são gratuitos"
+
+    festas:
+      require_link: false
+      allow_weekdays: true
+      allow_generic_links: true
+      description: "Festas e festivais podem ser gratuitos ou ter venda em múltiplas plataformas"
+
+    jazz:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Shows de jazz geralmente têm link de venda"
+
+    comedia:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Stand-up e comédia geralmente têm link de venda"
+
+    musica_classica:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Concertos geralmente têm link de compra ou reserva"
+
+    artesanato:
+      require_link: false
+      allow_weekdays: false
+      allow_generic_links: true
+      description: "Feiras de artesanato são geralmente gratuitas e aos fins de semana"
+
+    cursos:
+      require_link: true
+      allow_weekdays: true
+      allow_generic_links: false
+      description: "Cursos e workshops geralmente têm link de inscrição"
+
+  # Prompt template para verificação LLM
+  verify_prompt_template: |
+    INFORMAÇÕES ATUALIZADAS (2025):
+    {updated_info_text}
+
+    REGRAS DE VALIDAÇÃO POR CATEGORIA:
+    {category_rules_text}
+
+    EVENTOS SEM LINK:
+    - Eventos gratuitos ao ar livre frequentemente NÃO TÊM link de ingresso
+    - Se evento é de local confiável mas sem link → ACEITAR se outras informações completas
+    - Links genéricos de plataformas confiáveis (Sympla, Eventbrite) podem ser aceitáveis dependendo da categoria
+
+  # Prompt template para validação individual
+  validation_prompt_template: |
+    INFORMAÇÕES ATUALIZADAS SOBRE EVENTOS RECORRENTES (2025):
+    {updated_info_text}
+
+    VALIDAÇÃO POR CATEGORIA:
+    {category_rules_text}
+
+    CRITÉRIOS ESPECIAIS:
+    - Eventos outdoor sem link são ACEITÁVEIS se informações completas
+    - Feira Rio Antigo ocorre TODOS os sábados (não validar "1º sábado")
+    - Feira da Glória ocorre TODOS os domingos
+    - Varanda Sonora é esporádico (não esperar evento todo sábado)

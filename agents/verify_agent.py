@@ -35,11 +35,26 @@ URL_PATTERNS = {
     'eleventickets.com': r'!/apresentacao/[a-f0-9]{40}$',  # Hash SHA1 de 40 chars hex (fragment sem #)
 }
 
+# SOLUÇÃO 2: Domínios de venues com scrapers dedicados - links genéricos NÃO permitidos
+SCRAPER_VENUE_DOMAINS = [
+    'bluenoterio.com.br',
+    'salaceciliameireles.rj.gov.br',
+    'theatromunicipal.rj.gov.br',
+    'teatromunicipal.rj.gov.br',
+    'ccbb.com.br',
+    'osb.org.br',
+]
+
 
 class VerifyAgent(BaseAgent):
     """Agente responsável por verificar e validar informações de eventos."""
 
-    def __init__(self):
+    def __init__(self, http_client=None):
+        """Inicializa VerifyAgent.
+
+        Args:
+            http_client: HttpClientWrapper opcional para dependency injection (útil para testes)
+        """
         super().__init__(
             agent_name="VerifyAgent",
             log_emoji="✔️",
@@ -57,11 +72,17 @@ class VerifyAgent(BaseAgent):
                 "Marcar eventos com baixa confiabilidade para revisão",
             ],
             markdown=True,
+            http_client=http_client,
         )
 
-    def _initialize_dependencies(self, **kwargs):
-        """Inicializa HTTP client e link validator."""
-        self.http_client = HttpClientWrapper()
+    def _initialize_dependencies(self, http_client=None, **kwargs):
+        """Inicializa HTTP client e link validator.
+
+        Args:
+            http_client: HttpClientWrapper opcional para dependency injection (útil para testes)
+            **kwargs: Argumentos adicionais
+        """
+        self.http_client = http_client or HttpClientWrapper()
         self.link_validator = LinkValidator()
 
     def _is_generic_link(self, url: str) -> bool:
@@ -508,7 +529,8 @@ RETORNE APENAS:
             page_text = result["text"].lower()
 
             # QUICK WIN #1: Validar conteúdo mínimo (detectar soft 404s)
-            if not page_text or len(page_text.strip()) < 50:
+            from config import LINK_VALIDATION
+            if not page_text or len(page_text.strip()) < LINK_VALIDATION["min_page_length"]:
                 return {
                     "valid": False,
                     "reason": "Página vazia ou conteúdo muito curto (possível 404 disfarçado)",
@@ -516,8 +538,9 @@ RETORNE APENAS:
                 }
 
             # Informações do evento para validar
-            titulo = (event.get("titulo") or event.get("nome", "")).lower()
-            local = (event.get("local", "")).lower()
+            from utils.event_normalizer import EventNormalizer
+            titulo = EventNormalizer.get_title(event).lower()
+            local = EventNormalizer.get_venue(event).lower()
 
             # Validações de conteúdo
             issues = []
@@ -530,7 +553,7 @@ RETORNE APENAS:
                 titulo_matches = sum(1 for word in titulo_words if word in page_text)
                 titulo_match_ratio = titulo_matches / len(titulo_words)
 
-                if titulo_match_ratio >= 0.7:  # Aumentado de 0.5 para 0.7 (reduzir falsos positivos)
+                if titulo_match_ratio >= LINK_VALIDATION["title_match_threshold"]:
                     matches.append(f"Título encontrado ({titulo_match_ratio:.0%})")
                 else:
                     issues.append(f"Título não encontrado ({titulo_match_ratio:.0%} match)")
@@ -542,7 +565,7 @@ RETORNE APENAS:
                 local_matches = sum(1 for word in local_words if word in page_text)
                 local_match_ratio = local_matches / len(local_words) if local_words else 0
 
-                if local_match_ratio >= 0.4:  # Reduzido de 0.5 para 0.4 (menos falsos negativos)
+                if local_match_ratio >= LINK_VALIDATION["venue_match_threshold"]:
                     matches.append(f"Local encontrado ({local_match_ratio:.0%})")
                 else:
                     issues.append(f"Local não encontrado ({local_match_ratio:.0%} match)")
@@ -576,6 +599,103 @@ RETORNE APENAS:
                 "valid": True,  # Em caso de erro, não bloquear (pode ser problema temporário)
                 "reason": f"Erro na validação: {str(e)}",
                 "details": {}
+            }
+
+    async def _validate_link_referencia(self, link: str, event: dict) -> dict:
+        """Valida link_referencia especificamente (sem exigir botões de compra).
+
+        Args:
+            link: URL do link_referencia a validar
+            event: Evento com informações esperadas
+
+        Returns:
+            dict com: valid (bool), reason (str), details (dict)
+        """
+        try:
+            # STEP 1: Verificar DNS resolution (prevenir URLs alucinadas)
+            import socket
+            from urllib.parse import urlparse
+
+            parsed = urlparse(link)
+            hostname = parsed.netloc or parsed.path.split('/')[0]
+
+            try:
+                socket.gethostbyname(hostname)
+            except socket.gaierror:
+                logger.warning(f"DNS resolution failed for: {hostname}")
+                return {
+                    "valid": False,
+                    "reason": f"Domain does not exist: {hostname}",
+                    "details": {"error_type": "dns_failure", "domain": hostname}
+                }
+
+            # STEP 2: Verificar HTTP status (200 OK)
+            result = await self.http_client.fetch_and_parse(
+                link,
+                extract_text=True,
+                text_max_length=5000,
+                clean_html=True
+            )
+
+            if not result["success"]:
+                status_code = result["status_code"]
+                error_msg = f"HTTP {status_code}" if status_code else result["error"]
+                logger.warning(f"link_referencia HTTP error: {error_msg} - {link}")
+                return {
+                    "valid": False,
+                    "reason": error_msg,
+                    "details": {"error_type": "http_error", "status_code": status_code}
+                }
+
+            # STEP 3: Verificar conteúdo mínimo (detectar soft 404s)
+            page_text = result["text"].lower()
+            if not page_text or len(page_text.strip()) < 50:
+                logger.warning(f"link_referencia has empty/minimal content: {link}")
+                return {
+                    "valid": False,
+                    "reason": "Empty or minimal content (likely soft 404)",
+                    "details": {"error_type": "empty_content", "page_length": len(page_text.strip())}
+                }
+
+            # STEP 4: Verificar se menciona o evento específico
+            from utils.event_normalizer import EventNormalizer
+            titulo = EventNormalizer.get_title(event).lower()
+            titulo_words = [w for w in titulo.split() if len(w) > 3]  # palavras > 3 chars
+
+            titulo_match_ratio = 0
+            if titulo_words:
+                titulo_matches = sum(1 for word in titulo_words if word in page_text)
+                titulo_match_ratio = titulo_matches / len(titulo_words)
+
+            # Para link_referencia, aceitar threshold mais baixo (50% vs 70% para link_ingresso)
+            # Razão: Links informativos podem ter estrutura diferente
+            if titulo_match_ratio >= 0.5:
+                logger.info(f"✓ link_referencia válido ({titulo_match_ratio:.0%} title match): {link}")
+                return {
+                    "valid": True,
+                    "reason": f"Valid reference link ({titulo_match_ratio:.0%} title match)",
+                    "details": {
+                        "titulo_match": titulo_match_ratio,
+                        "is_event_specific": titulo_match_ratio >= 0.7
+                    }
+                }
+            else:
+                # Link genérico detectado
+                logger.warning(f"link_referencia é genérico ({titulo_match_ratio:.0%} title match): {link}")
+                return {
+                    "valid": False,
+                    "reason": f"Generic link (only {titulo_match_ratio:.0%} title match)",
+                    "details": {"error_type": "generic_content", "titulo_match": titulo_match_ratio}
+                }
+
+        except Exception as e:
+            logger.error(f"Erro ao validar link_referencia: {e}")
+            # Para link_referencia, REJEITAR em caso de erro (diferente de link_ingresso)
+            # Razão: É melhor ter null do que link quebrado
+            return {
+                "valid": False,
+                "reason": f"Validation error: {str(e)}",
+                "details": {"error_type": "exception", "error": str(e)}
             }
 
     async def verify_events(self, events_json: str) -> dict[str, Any]:
@@ -811,7 +931,29 @@ RETORNE APENAS:
             "generic_links_detected": 0,
         }
 
-        link = event.get("link") or event.get("link_ingresso") or event.get("ticket_link")
+        # NOVA VALIDAÇÃO SEPARADA: Validar link_referencia independentemente
+        # Isso acontece ANTES da validação do link principal para garantir que sempre roda
+        link_ref = event.get("link_referencia")
+        if link_ref and link_ref not in ["INCOMPLETO", "incompleto", "/INCOMPLETO", "NONE", "none"]:
+            logger.info(f"→ Validando link_referencia: {link_ref[:60]}...")
+            ref_validation = await self._validate_link_referencia(link_ref, event)
+
+            if not ref_validation["valid"]:
+                # link_referencia inválido - definir como null
+                reason = ref_validation["reason"]
+                logger.warning(f"✗ link_referencia inválido ({reason}), definindo como null")
+                event["link_referencia"] = None
+                event["link_referencia_rejected"] = reason
+                event["link_referencia_details"] = ref_validation["details"]
+            else:
+                # link_referencia válido
+                logger.info(f"✓ link_referencia validado com sucesso")
+                event["link_referencia_validated"] = True
+                event["link_referencia_details"] = ref_validation["details"]
+
+        # Priorizar link_ingresso, fallback para link_referencia
+        from utils.event_normalizer import EventNormalizer
+        link = EventNormalizer.get_link(event)
 
         if not link:
             # OTIMIZAÇÃO: Não buscar link, aceitar evento sem link
@@ -832,11 +974,29 @@ RETORNE APENAS:
 
         # Detectar link genérico (página de busca/categoria)
         if self._is_generic_link(link):
-            # OTIMIZAÇÃO: Aceitar link genérico sem buscar alternativa
             logger.info(f"→ Link genérico detectado: {link[:80]}...")
             stats["total_links"] += 1
             stats["generic_links_detected"] += 1
-            event["link_valid"] = True  # Aceitar link genérico
+
+            # SOLUÇÃO 2: Bloquear links genéricos de venues com scrapers dedicados
+            parsed_url = urlparse(link)
+            domain = parsed_url.netloc.lower()
+
+            # Verificar se é de um venue com scraper dedicado
+            is_scraper_venue = any(scraper_domain in domain for scraper_domain in SCRAPER_VENUE_DOMAINS)
+
+            if is_scraper_venue:
+                # Rejeitar link genérico de venue com scraper
+                logger.warning(f"✗ REJEITADO: Link genérico de venue com scraper dedicado ({domain})")
+                event["link_valid"] = False
+                event["link_is_generic"] = True
+                event["link_status_code"] = None
+                event["rejection_reason"] = f"Link genérico não permitido para venue com scraper dedicado ({domain})"
+                stats["generic_links_rejected_scraper_venue"] = stats.get("generic_links_rejected_scraper_venue", 0) + 1
+                return stats
+
+            # Aceitar link genérico para outros venues
+            event["link_valid"] = True
             event["link_is_generic"] = True
             event["link_status_code"] = 200
             return stats
@@ -991,38 +1151,13 @@ RETORNE APENAS:
 
     def _load_validation_config(self) -> dict[str, Any]:
         """Carrega configurações de validação do YAML."""
-        import yaml
-        from pathlib import Path
-
-        yaml_path = Path(__file__).parent.parent / "prompts" / "search_prompts.yaml"
-
-        try:
-            with open(yaml_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-                return config.get('validation', {})
-        except Exception as e:
-            logger.error(f"Erro ao carregar validation config do YAML: {e}")
-            return {}
+        from utils.config_loader import ConfigLoader
+        return ConfigLoader.load_validation_config()
 
     def _format_updated_info(self, validation_config: dict) -> str:
         """Formata informações atualizadas de eventos recorrentes."""
-        info_list = []
-
-        feiras = validation_config.get('informacoes_eventos_atualizadas', {}).get('feiras_recorrentes', [])
-
-        for feira in feiras:
-            nome = feira.get('nome', '')
-            frequencia = feira.get('frequencia', '')
-            local = feira.get('local', '')
-            obs = feira.get('observacao', '')
-
-            info_list.append(f"- {nome}: {frequencia}")
-            if local:
-                info_list.append(f"  Local: {local}")
-            if obs:
-                info_list.append(f"  ⚠️ {obs}")
-
-        return "\n".join(info_list) if info_list else ""
+        from utils.config_loader import ConfigLoader
+        return ConfigLoader.format_updated_info(validation_config)
 
     def _format_category_rules(self, validation_config: dict) -> str:
         """Formata regras de validação por categoria."""
@@ -1070,15 +1205,17 @@ RETORNE APENAS:
 
         weekends_text = "\n".join(weekends)
 
+        from utils.prompt_builder import PromptBuilder
+
         prompt = f"""
 Você é um agente de verificação rigoroso. Analise os eventos abaixo e classifique cada um como:
 - APROVADO: evento válido e confiável
 - REJEITADO: evento que não atende critérios ou informações inconsistentes
 
 EVENTOS PARA VERIFICAR:
-{json.dumps(events, indent=2, ensure_ascii=False)}
+{PromptBuilder.build_event_context(events)}
 
-PERÍODO VÁLIDO: {start_date.strftime('%d/%m/%Y')} a {end_date.strftime('%d/%m/%Y')}
+{PromptBuilder.build_date_range_context(start_date, end_date)}
 
 SÁBADOS E DOMINGOS NO PERÍODO (para validação de eventos ao ar livre):
 {weekends_text}
@@ -1157,11 +1294,16 @@ IMPORTANTE:
 
         try:
             response = self.agent.run(prompt)
-            # Usar safe_json_parse para extração consistente
-            from utils.json_helpers import safe_json_parse
-            verified_data = safe_json_parse(
+            # Usar LLMResponseParser para extração consistente
+            from utils.llm_response_parser import LLMResponseParser
+            verified_data = LLMResponseParser.parse_json_response(
                 response.content,
-                default={"verified_events": [], "validation_summary": {"total": 0, "approved": 0, "rejected": 0}}
+                default={"verified_events": [], "validation_summary": {"total": 0, "approved": 0, "rejected": 0}},
+                field_defaults={
+                    "verified_events": [],
+                    "rejected_events": [],
+                    "warnings": [],
+                }
             )
             return verified_data
 

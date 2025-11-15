@@ -65,13 +65,14 @@ class FormatAgent(BaseAgent):
         )
 
         # Gerar timestamp atual
+        from utils.prompt_builder import PromptBuilder
         current_timestamp = datetime.now().strftime('%d/%m/%Y às %H:%M')
 
         prompt = f"""
 Você é um especialista em criar mensagens atraentes para WhatsApp.
 
 EVENTOS VERIFICADOS:
-{json.dumps(events_list, indent=2, ensure_ascii=False)}
+{PromptBuilder.build_event_context(events_list)}
 
 TAREFA:
 Crie uma mensagem formatada para WhatsApp seguindo este modelo:
@@ -84,7 +85,8 @@ Atualizado em: {current_timestamp}
 [Emoji da categoria] **[Título do Evento]**
 ⏰ [Horário] | 💰 [Valor]
 📍 [Local]
-🎫 [Link para ingressos]
+🎫 [Link de ingresso] (se tiver link_ingresso)
+📱 [Link de referência] (se não tiver link_ingresso mas tiver link_referencia)
 📝 [Resumo de até {MAX_DESCRIPTION_LENGTH} palavras]
 
 [Repetir para cada evento]
@@ -101,13 +103,17 @@ REGRAS:
    - 🎭 para teatro
    - 🌳 🏞️ para eventos ao ar livre
    - 🏛️ para locais culturais especiais
-3. Se não tiver horário, omitir a linha
-4. Se não tiver valor, colocar "Consultar"
-5. Resumo deve ser atrativo e informativo
-6. Incluir quebras de linha para facilitar leitura
-7. Data em formato brasileiro (DD/MM/YYYY - Dia da semana)
-8. Agrupar eventos do mesmo dia quando possível
-9. **EVENTOS RECORRENTES**: Se o evento tiver campo "eh_recorrente": true:
+3. **LINKS - IMPORTANTE**:
+   - Se tiver link_ingresso: usar "🎫 Ingressos: [link]"
+   - Se NÃO tiver link_ingresso MAS tiver link_referencia: usar "📱 Mais info: [link]"
+   - Se não tiver nenhum link: omitir linha de link
+4. Se não tiver horário, omitir a linha
+5. Se não tiver valor, colocar "Consultar"
+6. Resumo deve ser atrativo e informativo
+7. Incluir quebras de linha para facilitar leitura
+8. Data em formato brasileiro (DD/MM/YYYY - Dia da semana)
+9. Agrupar eventos do mesmo dia quando possível
+10. **EVENTOS RECORRENTES**: Se o evento tiver campo "eh_recorrente": true:
    - Usar formato: "📅 Múltiplas datas: [primeira], [segunda] (+X datas)"
    - Listar até 3 datas explícitas, depois "+X datas" se houver mais
    - Ao final do evento, incluir seção com todas as datas:
@@ -184,7 +190,8 @@ Não inclua explicações adicionais.
             "jazz": "🎺",
             "comedia": "😂",
             "teatro": "🎭",
-            "outdoor": "🌳",
+            "atividades_ar_livre": "🌳",
+            "outdoor": "🌳",  # Backward compatibility
             "venue_especial": "🏛️",
         }
         return emojis.get(category_lower, "🎉")
