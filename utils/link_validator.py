@@ -29,7 +29,7 @@ class LinkValidator:
             r'/eventos/?$',        # /eventos ou /eventos/ no final
             r'/shows/?$',          # /shows ou /shows/ no final (Blue Note, etc)
             r'/agenda/?$',         # /agenda ou /agenda/ no final
-            r'/programacao/?$',    # /programacao ou /programacao/ no final
+            r'/programacao/',      # /programacao/ em qualquer lugar do path
             r'/calendar/?$',       # /calendar ou /calendar/ no final
             r'/schedule/?$',       # /schedule ou /schedule/ no final
             r'/busca\?',          # /busca?query=
@@ -98,9 +98,9 @@ class LinkValidator:
         if len(path_parts) == 1:
             return True
 
-        # URL com domínio + apenas 1 segmento genérico também é genérica
-        # Ex: bluenoterio.com.br/shows (2 partes, mas shows é genérico)
-        if len(path_parts) == 2:
+        # URL com domínio + 1-2 segmentos genéricos também é genérica
+        # Ex: bluenoterio.com.br/shows (2 partes) ou ccbb.com.br/rio-de-janeiro/programacao (3 partes)
+        if len(path_parts) <= 3:
             generic_segments = ['shows', 'eventos', 'events', 'agenda', 'programacao', 'calendar', 'schedule']
             last_segment = path_parts[-1].lower().rstrip('/')
             if last_segment in generic_segments:

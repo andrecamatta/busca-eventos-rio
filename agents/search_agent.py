@@ -267,13 +267,12 @@ class SearchAgent(BaseAgent):
 
         for i, result_str in enumerate(results, 1):
             try:
-                # Limpar JSON de markdown/texto extra
-                clean_json = self._clean_json_from_markdown(result_str)
-                if not clean_json:
-                    logger.warning(f"      Query #{i}: JSON vazio após limpeza")
-                    continue
-
-                data = json.loads(clean_json)
+                # Usar LLMResponseParser para parsing consistente
+                from utils.llm_response_parser import LLMResponseParser
+                data = LLMResponseParser.parse_json_response(
+                    result_str,
+                    default={'eventos': []}
+                )
                 events = data.get('eventos', [])
 
                 if events:
@@ -295,6 +294,121 @@ class SearchAgent(BaseAgent):
             f"   ✓ Busca paralela concluída: {search_name} - "
             f"{len(all_events)} eventos brutos → {len(unique_events)} únicos "
             f"({successful_queries}/{n_parallel} queries OK)"
+        )
+
+        return unique_events
+
+    async def _run_dual_model_search(
+        self,
+        prompt: str,
+        search_name: str,
+        n_sonar: int,
+        n_complementary: int,
+        config: dict
+    ) -> list[dict]:
+        """
+        Executa buscas com 2 modelos diferentes para diversificar fontes.
+
+        Estratégia: Combinar Sonar (Perplexity indexing) com Gemini Flash :online (Exa.ai indexing)
+        para aumentar cobertura através de diferentes fontes de dados.
+
+        Args:
+            prompt: Prompt de busca
+            search_name: Nome da busca (para logs)
+            n_sonar: Número de consultas Sonar paralelas
+            n_complementary: Número de consultas complementares (Gemini Flash :online)
+            config: Configuração YAML
+
+        Returns:
+            Lista de eventos únicos (deduplificados) de ambos os modelos
+        """
+        import json
+        from utils.agent_factory import AgentFactory
+
+        logger.info(f"   🔍🔍 Iniciando busca dual-model: {search_name}")
+        logger.info(f"      Sonar (Perplexity): {n_sonar} queries")
+        logger.info(f"      Gemini Flash :online (Exa.ai): {n_complementary} queries")
+
+        # Salvar agente original
+        original_agent = self.search_agent
+
+        all_events = []
+        all_successful = 0
+
+        try:
+            # PARTE 1: Executar queries Sonar (modelo padrão)
+            if n_sonar > 0:
+                logger.info(f"      [1/2] Executando {n_sonar} queries Sonar...")
+                sonar_tasks = [
+                    self._run_micro_search(prompt, f"{search_name} Sonar#{i+1}")
+                    for i in range(n_sonar)
+                ]
+                sonar_results = await asyncio.gather(*sonar_tasks)
+
+                for i, result_str in enumerate(sonar_results, 1):
+                    try:
+                        from utils.llm_response_parser import LLMResponseParser
+                        data = LLMResponseParser.parse_json_response(
+                            result_str,
+                            default={'eventos': []}
+                        )
+                        events = data.get('eventos', [])
+                        if events:
+                            all_events.extend(events)
+                            all_successful += 1
+                            logger.info(f"         Sonar Query #{i}: {len(events)} eventos")
+                    except (json.JSONDecodeError, Exception) as e:
+                        logger.warning(f"         Sonar Query #{i}: Erro - {e}")
+
+            # PARTE 2: Executar queries complementares com Gemini Flash :online
+            if n_complementary > 0:
+                logger.info(f"      [2/2] Executando {n_complementary} queries Gemini Flash :online...")
+
+                # Criar agente complementar temporário
+                complementary_agent = AgentFactory.create_agent(
+                    name="Complementary Search Agent",
+                    model_type="search_complementary",
+                    description="Busca complementar com web search via Exa.ai",
+                    instructions=self.agent.instructions,
+                    markdown=True
+                )
+
+                # Trocar temporariamente para agente complementar
+                self.search_agent = complementary_agent
+
+                complementary_tasks = [
+                    self._run_micro_search(prompt, f"{search_name} Gemini#{i+1}")
+                    for i in range(n_complementary)
+                ]
+                complementary_results = await asyncio.gather(*complementary_tasks)
+
+                for i, result_str in enumerate(complementary_results, 1):
+                    try:
+                        from utils.llm_response_parser import LLMResponseParser
+                        data = LLMResponseParser.parse_json_response(
+                            result_str,
+                            default={'eventos': []}
+                        )
+                        events = data.get('eventos', [])
+                        if events:
+                            all_events.extend(events)
+                            all_successful += 1
+                            logger.info(f"         Gemini Query #{i}: {len(events)} eventos")
+                    except (json.JSONDecodeError, Exception) as e:
+                        logger.warning(f"         Gemini Query #{i}: Erro - {e}")
+
+        finally:
+            # Restaurar agente original
+            self.search_agent = original_agent
+
+        # Deduplicar eventos
+        unique_events = self._deduplicate_events_by_title(all_events)
+
+        total_queries = n_sonar + n_complementary
+        logger.info(
+            f"   ✓ Busca dual-model concluída: {search_name} - "
+            f"{len(all_events)} eventos brutos → {len(unique_events)} únicos "
+            f"({all_successful}/{total_queries} queries OK)"
         )
 
         return unique_events
@@ -407,7 +521,8 @@ INFORMAÇÕES OBRIGATÓRIAS PARA CADA EVENTO:
 - ⚠️ Horário de início (HH:MM) - CRÍTICO: SEMPRE inclua o horário preciso
 - Nome completo do local/venue + endereço
 - Preço (incluir meia-entrada se disponível)
-- Link para compra de ingressos (se disponível)
+- Link para compra de ingressos (se disponível) → campo "link_ingresso"
+- Link de referência informativo (quando não há venda) → campo "link_referencia"
 - Descrição detalhada: artistas, duração, público-alvo
 
 ATENÇÃO ESPECIAL AO HORÁRIO:
@@ -430,7 +545,8 @@ FORMATO DE RETORNO:
       "horario": "HH:MM",
       "local": "Nome completo + Endereço",
       "preco": "Valor completo",
-      "link_ingresso": "URL específica ou null",
+      "link_ingresso": "URL de compra ou null",
+      "link_referencia": "URL informativa ou null",
       "descricao": "Descrição detalhada"
     }}
   ]
@@ -512,6 +628,55 @@ IMPORTANTE:
    - Busque em plataformas secundárias (Ingresso.com, Bileto)
    - APENAS APÓS TENTAR TODAS AS FONTES: retorne null
    - NÃO retorne links genéricos "por garantia" (null é MELHOR que link inválido)
+
+📱 CAMPO link_referencia (QUANDO link_ingresso É NULL):
+
+QUANDO USAR:
+- APENAS quando link_ingresso for null (não há venda de ingressos)
+- Para eventos gratuitos ao ar livre (feiras, cinema em parques, concertos públicos)
+- Para eventos sem sistema de venda online
+
+🚨 REGRA CRÍTICA - NUNCA INVENTE URLs:
+VOCÊ DEVE copiar URLs EXATAMENTE como aparecem nos resultados de busca do Perplexity.
+NUNCA construa, gere ou invente URLs baseadas em padrões.
+Se você NÃO VIU o link nos resultados: retornar null
+
+❌ EXEMPLOS DE URLs INVENTADAS (NÃO FAZER - TODAS DÃO 404!):
+   ✗ timeout.com/rio-de-janeiro/feira-rio-antigo (parece lógico mas NÃO EXISTE!)
+   ✗ timeout.com/rio-de-janeiro/feira-da-gloria (404 error!)
+   ✗ parquelage.rio/programacao (domínio NÃO EXISTE!)
+   ✗ juntalocal.com/eventos (404 error!)
+   ✗ vejario.abril.com.br/feira-da-gloria-ao-ar-livre (404 error!)
+
+✅ EXEMPLO DE URL REAL (ENCONTRADA EM BUSCA - FUNCIONA!):
+   ✓ rotacult.com.br/2025/02/village-movieart-villagemall-traz-sessoes-de-cinema-ao-ar-livre/
+     (URL completa, específica, VISTA nos resultados de busca)
+
+FONTES ACEITÁVEIS (APENAS se encontrar URL real nos resultados):
+1. 🎯 PORTAIS CULTURAIS: TimeOut Rio, Veja Rio, O Globo Cultura, Rota Cult
+2. 🏛️ SITES OFICIAIS: eavparquelage.rj.gov.br (não parquelage.rio!), jbrj.gov.br
+3. 📱 REDES SOCIAIS: Instagram, Facebook (posts específicos do evento)
+
+REGRAS CRÍTICAS:
+- Link DEVE ser copiado LITERALMENTE dos resultados de busca
+- Link DEVE mencionar o evento ESPECÍFICO (não apenas o venue/local)
+- Link DEVE ter informações úteis (data, horário, ou descrição do evento)
+- ❌ NÃO construir URLs baseadas em padrões observados
+- ❌ NÃO inventar domínios que parecem lógicos
+- ❌ NÃO retornar homepage genérica do venue
+- ❌ NÃO retornar calendário geral/listagem de eventos
+- Se não VEJA um link específico nos resultados: retornar null
+
+CHECKLIST link_referencia:
+✅ Vi este link LITERALMENTE nos resultados de busca do Perplexity?
+✅ Link menciona o nome/título do evento?
+✅ Link contém informações úteis (data/horário/descrição)?
+✅ Link NÃO é apenas homepage/calendário geral?
+
+SE TODAS ✅ → retornar em link_referencia
+SE QUALQUER ❌ → retornar null
+
+É MELHOR retornar null do que inventar um link!
 """
         else:  # venue
             return_format = f"""
@@ -530,7 +695,8 @@ FORMATO DE RETORNO (use exatamente estes nomes de campos):
       "horario": "HH:MM",
       "local": "{categoria} - Endereço completo",
       "preco": "Valor completo",
-      "link_ingresso": "URL específica ou null",
+      "link_ingresso": "URL de compra ou null",
+      "link_referencia": "URL informativa ou null",
       "descricao": "Descrição detalhada"
     }}
   ]
@@ -539,7 +705,8 @@ FORMATO DE RETORNO (use exatamente estes nomes de campos):
 IMPORTANTE - NOMES DE CAMPOS:
 - Use "horario" (não "hora")
 - Use "preco" (não "preço")
-- Use "link_ingresso" (não "link")
+- Use "link_ingresso" (não "link") para link de compra de ingresso
+- Use "link_referencia" para link informativo quando não há venda
 - Use "descricao" (não "descrição")
 
 REGRAS CRÍTICAS PARA JSON:
@@ -702,29 +869,127 @@ OBJETIVO:
     def _get_search_task(self, prompt: str, search_name: str, config: dict):
         """
         Retorna tarefa de busca (paralela ou sequencial) baseado em configuração.
+        Suporta busca complementar com modelo diferente via 'complementary_queries'.
 
         Args:
             prompt: Prompt de busca
             search_name: Nome da busca (para logs)
-            config: Configuração do YAML com campo opcional 'parallel_queries'
+            config: Configuração do YAML com campos opcionais 'parallel_queries' e 'complementary_queries'
 
         Returns:
             Coroutine para asyncio.gather()
         """
         n_parallel = config.get("parallel_queries", 1)
+        n_complementary = config.get("complementary_queries", 0)
 
-        if n_parallel <= 1:
-            # Busca sequencial
+        if n_parallel <= 1 and n_complementary == 0:
+            # Busca sequencial simples
             return self._run_micro_search(prompt, search_name)
+        elif n_complementary > 0:
+            # Busca dual-model: Sonar + modelo complementar
+            logger.info(f"   ⚡ Configurando busca dual-model para {search_name} ({n_parallel} Sonar + {n_complementary} complementar)")
+            return self._run_dual_model_search(prompt, search_name, n_parallel, n_complementary, config)
         else:
-            # Busca paralela
+            # Busca paralela com modelo único
             logger.info(f"   ⚡ Configurando busca paralela para {search_name} ({n_parallel} queries)")
             return self._run_parallel_micro_search(prompt, search_name, n_parallel)
+
+    def search_diariodorio_cache(self, categoria: str = "") -> list[dict]:
+        """
+        Busca eventos no cache DiarioDoRio (STAGE 2 - usa eventos pré-extraídos).
+
+        Args:
+            categoria: Filtro opcional de categoria (gastronomia, outdoor, etc)
+
+        Returns:
+            Lista de eventos extraídos do cache
+        """
+        from crawlers.diariodorio_crawler import DiarioDoRioCrawler
+        from utils.date_helpers import DateParser
+
+        # Load cache
+        cache = DiarioDoRioCrawler.load_cache()
+        if not cache:
+            logger.warning(f"{self.log_prefix} ❌ Cache DiarioDoRio não encontrado, pulando busca")
+            return []
+
+        # Use PRE-EXTRACTED events from cache (extracted during crawling)
+        extracted_events = cache.get('extracted_events', [])
+        logger.info(f"{self.log_prefix} 📦 Cache DiarioDoRio: {len(extracted_events)} eventos pré-extraídos")
+
+        if not extracted_events:
+            logger.warning(f"{self.log_prefix} ⚠️ Cache não contém eventos pré-extraídos (rodar crawler novamente)")
+            return []
+
+        # Filter by category (fast JSON filtering, no LLM needed)
+        # NOTE: Não fazemos mapeamento aqui - o EventClassifier vai reclassificar depois
+        filtered_events = []
+        for event in extracted_events:
+            event_categoria = event.get("categoria", "").lower()
+
+            # Se categoria especificada, fazer match simples por substring
+            # (ex: "outdoor" matches "Outdoor", "feira" matches "Feira Gastronômica")
+            if categoria:
+                # Simplificar: remover underscores, palavras irrelevantes (ao, de, da) e comparar
+                categoria_clean = categoria.replace("_", " ").lower()
+                event_categoria_clean = event_categoria.replace(" ao ", " ").replace(" de ", " ").replace(" da ", " ")
+                categoria_clean = categoria_clean.replace(" ao ", " ").replace(" de ", " ").replace(" da ", " ")
+
+                # Dividir em palavras-chave e verificar se as principais estão presentes
+                cat_words = set(categoria_clean.split())
+                event_words = set(event_categoria_clean.split())
+
+                # Match se pelo menos 60% das palavras da categoria estão no evento
+                if len(cat_words) > 0:
+                    match_ratio = len(cat_words & event_words) / len(cat_words)
+                    if match_ratio < 0.6:
+                        continue
+
+            # Validate date (must be within search window)
+            data_str = event.get("data", "A confirmar")
+            try:
+                if data_str != "A confirmar":
+                    data_evento = DateParser.parse_date(data_str)
+                    # Compare only dates, ignore time component
+                    data_evento_date = data_evento.date()
+                    search_start_date = SEARCH_CONFIG['start_date'].date()
+                    search_end_date = SEARCH_CONFIG['end_date'].date()
+
+                    if not (search_start_date <= data_evento_date <= search_end_date):
+                        logger.debug(f"   Evento fora da janela de datas: {event.get('titulo', '')[:40]} ({data_str})")
+                        continue
+            except Exception as e:
+                logger.debug(f"   Data inválida '{data_str}': {e}")
+                continue
+
+            # Event passed all filters
+            filtered_events.append(event)
+
+        logger.info(f"{self.log_prefix} ✓ Filtrados {len(filtered_events)} eventos do cache DiarioDoRio" +
+                   (f" (categoria: {categoria})" if categoria else ""))
+        return filtered_events
 
     async def search_all_sources(self) -> dict[str, Any]:
         """Busca eventos usando Perplexity Sonar Pro com 6 micro-searches focadas."""
         logger.info(f"{self.log_prefix} Iniciando busca de eventos com Perplexity Sonar Pro...")
 
+        # ═══════════════════════════════════════════════════════════
+        # STAGE 1: DIARIO DO RIO CACHE REFRESH (se necessário)
+        # ═══════════════════════════════════════════════════════════
+        from crawlers.diariodorio_crawler import DiarioDoRioCrawler
+
+        if DiarioDoRioCrawler.should_refresh_cache():
+            logger.info(f"{self.log_prefix} 📦 Atualizando cache DiarioDoRio (>6h ou inexistente)...")
+            try:
+                crawler = DiarioDoRioCrawler()
+                crawler.crawl_and_cache(num_pages=8)
+                logger.info(f"{self.log_prefix} ✓ Cache DiarioDoRio atualizado")
+            except Exception as e:
+                logger.error(f"{self.log_prefix} ❌ Falha ao atualizar cache DiarioDoRio: {e}")
+        else:
+            logger.info(f"{self.log_prefix} ✓ Cache DiarioDoRio válido (< 6h)")
+
+        # ═══════════════════════════════════════════════════════════
         # ═══════════════════════════════════════════════════════════
         # PRIORIDADE 1: SCRAPERS CUSTOMIZADOS (Blue Note + Sala Cecília Meireles)
         # ═══════════════════════════════════════════════════════════
@@ -1078,12 +1343,12 @@ OBJETIVO:
                     if not result_str or not isinstance(result_str, str) or result_str.strip() == "":
                         logger.warning(f"⚠️  Busca {venue_name} retornou vazio")
                         return []
-                    # Limpar markdown antes de parsear
-                    clean_json = clean_json_from_markdown(result_str)
-                    if not clean_json:
-                        logger.warning(f"⚠️  Busca {venue_name} retornou JSON vazio após limpeza")
-                        return []
-                    data = json.loads(clean_json)
+                    # Usar LLMResponseParser para parsing consistente
+                    from utils.llm_response_parser import LLMResponseParser
+                    data = LLMResponseParser.parse_json_response(
+                        result_str,
+                        default={}
+                    )
 
                     # STEP 1: Tentar match exato primeiro
                     eventos = data.get(venue_name, [])
@@ -1166,6 +1431,19 @@ OBJETIVO:
                     logger.debug(f"   ✓ Venue '{result_name}': {len(eventos_parsed)} eventos")
 
             # ═══════════════════════════════════════════════════════════
+            # CACHE DIARIODORIO: Buscar eventos complementares do cache
+            # ═══════════════════════════════════════════════════════════
+            logger.info(f"{self.log_prefix} 📦 Buscando eventos complementares do cache DiarioDoRio...")
+
+            # Buscar para cada categoria ativa
+            cache_events_by_category = {}
+            for cat_id in categorias_ids:
+                cache_events = self.search_diariodorio_cache(categoria=cat_id)
+                if cache_events:
+                    cache_events_by_category[cat_id] = cache_events
+                    logger.info(f"   ✓ Cache: {len(cache_events)} eventos para categoria '{cat_id}'")
+
+            # ═══════════════════════════════════════════════════════════
             # SCRAPER PRIORITY: Adicionar eventos de scrapers com prioridade
             # ═══════════════════════════════════════════════════════════
             # Mapeamento de scrapers para categoria/venue
@@ -1239,6 +1517,29 @@ OBJETIVO:
                     eventos_venues[target_key] = merged_events
                     logger.info(f"✓ Scraper {scraper_key}: {len(scraped_events)} eventos adicionados, {duplicates_count} duplicatas Perplexity removidas")
 
+            # ═══════════════════════════════════════════════════════════
+            # CACHE DIARIODORIO: Merge eventos do cache com categorias existentes
+            # ═══════════════════════════════════════════════════════════
+            for cat_id, cache_events in cache_events_by_category.items():
+                if cat_id in eventos_categorias:
+                    # Merge com eventos existentes, removendo duplicatas
+                    existing_events = eventos_categorias[cat_id]
+                    duplicates_count = 0
+
+                    for cache_event in cache_events:
+                        # Check if event already exists (by title similarity)
+                        if not any(e.get("titulo", "").lower() == cache_event.get("titulo", "").lower()
+                                   for e in existing_events):
+                            existing_events.append(cache_event)
+                        else:
+                            duplicates_count += 1
+
+                    logger.info(f"   ✓ Cache categoria '{cat_id}': {len(cache_events)} eventos, {duplicates_count} duplicatas removidas")
+                else:
+                    # Categoria nova do cache
+                    eventos_categorias[cat_id] = cache_events
+                    logger.info(f"   ✓ Cache categoria '{cat_id}': {len(cache_events)} eventos (categoria nova)")
+
             # Log consolidado de sábados outdoor
             if eventos_outdoor_saturdays:
                 logger.info(f"✓ Total eventos outdoor (todos os sábados): {len(eventos_outdoor_saturdays)} eventos")
@@ -1259,6 +1560,33 @@ OBJETIVO:
             # MONTAR ESTRUTURA DE EVENTOS GERAIS (todas as categorias)
             # ═══════════════════════════════════════════════════════════
             todos_eventos_gerais = []
+
+            # Adicionar eventos dos scrapers customizados (Eventim)
+            if blue_note_scraped:
+                todos_eventos_gerais.extend(blue_note_scraped)
+                logger.debug(f"   Blue Note scraper: {len(blue_note_scraped)} eventos adicionados ao merge geral")
+            if cecilia_meireles_scraped:
+                todos_eventos_gerais.extend(cecilia_meireles_scraped)
+                logger.debug(f"   Cecília Meireles scraper: {len(cecilia_meireles_scraped)} eventos adicionados ao merge geral")
+            if ccbb_scraped:
+                todos_eventos_gerais.extend(ccbb_scraped)
+                logger.debug(f"   CCBB scraper: {len(ccbb_scraped)} eventos adicionados ao merge geral")
+            if teatro_municipal_scraped:
+                todos_eventos_gerais.extend(teatro_municipal_scraped)
+                logger.debug(f"   Teatro Municipal scraper: {len(teatro_municipal_scraped)} eventos adicionados ao merge geral")
+
+            # Adicionar eventos do cache DiarioDoRio (LLM extraídos)
+            logger.info(f"{self.log_prefix} 📦 Carregando eventos do cache DiarioDoRio...")
+            for cat_id in categorias_ids:
+                # Buscar eventos filtrados por categoria
+                eventos_cache = self.search_diariodorio_cache(categoria=cat_id)
+                if eventos_cache:
+                    todos_eventos_gerais.extend(eventos_cache)
+                    logger.info(f"   DiarioDoRio cache [{cat_id}]: {len(eventos_cache)} eventos adicionados")
+                else:
+                    logger.debug(f"   DiarioDoRio cache [{cat_id}]: Nenhum evento encontrado")
+
+            # Adicionar eventos das categorias (Perplexity/Gemini)
             for cat_id, eventos_cat in eventos_categorias.items():
                 todos_eventos_gerais.extend(eventos_cat)
                 logger.debug(f"   Categoria '{cat_id}': {len(eventos_cat)} eventos adicionados ao merge geral")
@@ -1427,9 +1755,9 @@ OBJETIVO:
         try:
             response = self.search_agent.run(prompt)
 
-            # Usar safe_json_parse para extração consistente
-            from utils.json_helpers import safe_json_parse
-            links_map = safe_json_parse(
+            # Usar LLMResponseParser para extração consistente
+            from utils.llm_response_parser import LLMResponseParser
+            links_map = LLMResponseParser.parse_json_response(
                 response.content,
                 default={}
             )
@@ -1514,13 +1842,15 @@ OBJETIVO:
         Returns:
             Lista de eventos filtrados (sem eventos que contêm keywords de exclusão)
         """
-        from config import EVENT_CATEGORIES, GLOBAL_EXCLUDE_KEYWORDS
+        from config import GLOBAL_EXCLUDE_KEYWORDS
+        from utils.category_registry import CategoryRegistry
 
         # Iniciar com exclusões GLOBAIS (infantil, LGBTQ+, etc) - aplicadas a TODOS os eventos
         exclude_keywords = list(GLOBAL_EXCLUDE_KEYWORDS)
 
-        # Adicionar exclusões específicas de outdoor (shows mainstream) se aplicável
-        outdoor_exclude = EVENT_CATEGORIES.get("outdoor", {}).get("exclude", [])
+        # Adicionar exclusões específicas de atividades ao ar livre (shows mainstream) se aplicável
+        outdoor_rules = CategoryRegistry.get_validation_rules("atividades_ar_livre")
+        outdoor_exclude = outdoor_rules.get("palavras_excluir", [])
         if outdoor_exclude:
             exclude_keywords.extend(outdoor_exclude)
 
@@ -1562,19 +1892,21 @@ OBJETIVO:
         data_geral = raw_events.get("perplexity_geral", "{}")
         data_especial = raw_events.get("perplexity_especial", "{}")
 
-        # Usar clean_json_response do json_helpers (centralizado)
-        from utils.json_helpers import clean_json_response
-        data_geral_clean = clean_json_response(data_geral)
-        data_especial_clean = clean_json_response(data_especial)
+        # Usar LLMResponseParser para parsing consistente
+        from utils.llm_response_parser import LLMResponseParser
+        data_geral_parsed = LLMResponseParser.parse_json_response(data_geral, default={})
+        data_especial_parsed = LLMResponseParser.parse_json_response(data_especial, default={})
 
-        # Combinar em um único JSON
-        combined = f'{{"eventos_gerais": {data_geral_clean}, "eventos_locais_especiais": {data_especial_clean}}}'
+        # Combinar em um único dict
+        combined_data = {
+            "eventos_gerais": data_geral_parsed,
+            "eventos_locais_especiais": data_especial_parsed
+        }
 
         logger.info("Dados combinados das 2 buscas")
 
-        # Parsear para aplicar busca complementar de links
+        # Processar dados combinados
         try:
-            combined_data = json.loads(combined)
 
             # Extrair todos os eventos para busca complementar
             all_events = []

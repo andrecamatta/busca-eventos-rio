@@ -5,48 +5,32 @@ from typing import Literal, Optional, List
 
 from pydantic import BaseModel, Field, field_validator
 
-from utils.prompt_loader import get_prompt_loader
+from utils.category_registry import CategoryRegistry
 
 
-# Gerar Literal de categorias dinamicamente baseado no YAML
+# Gerar Literal de categorias dinamicamente baseado no CategoryRegistry
 def _get_dynamic_category_literals() -> tuple[list[str], str]:
     """
-    Extrai nomes de categorias do YAML e gera lista para Literal.
+    Extrai nomes de categorias do CategoryRegistry e gera lista para Literal.
 
     Returns:
-        Tuple com (lista_categorias, nome_display_padrao)
+        Tuple com (lista_categorias, fonte_descricao)
     """
     try:
-        loader = get_prompt_loader()
-        categorias_ids = loader.get_all_categorias()
+        # Buscar todas as categorias display names do CategoryRegistry
+        categorias = CategoryRegistry.get_all_display_names()
 
-        # Extrair nome_display de cada categoria
-        categorias = []
-        for cat_id in categorias_ids:
-            try:
-                config = loader.get_categoria(cat_id, {})
-                if "nome" in config:
-                    categorias.append(config["nome"])
-                else:
-                    # Fallback para o ID se nome não existir
-                    categorias.append(cat_id.replace("_", " ").title())
-            except Exception:
-                # Se falhar ao carregar categoria, usar ID formatado
-                categorias.append(cat_id.replace("_", " ").title())
+        # Adicionar "Geral" como categoria catch-all se não estiver na lista
+        if "Geral" not in categorias:
+            categorias.append("Geral")
 
         # Deduplicar mantendo ordem
         categorias_unicas = list(dict.fromkeys(categorias))
 
-        # Adicionar categorias alternativas comuns (compatibilidade)
-        categorias_extras = ["Outdoor-FimDeSemana", "Outdoor", "Geral", "Jazz"]
-        for extra in categorias_extras:
-            if extra not in categorias_unicas:
-                categorias_unicas.append(extra)
-
-        return categorias_unicas, "categorias do YAML"
+        return categorias_unicas, f"CategoryRegistry ({len(categorias_unicas)} categorias)"
     except Exception as e:
         # Fallback para lista fixa em caso de erro
-        print(f"Aviso: Não foi carregar categorias do YAML: {e}")
+        print(f"Aviso: Não foi possível carregar categorias do CategoryRegistry: {e}")
         print("Usando categorias padrão como fallback...")
         return [
             "Jazz",
@@ -54,11 +38,16 @@ def _get_dynamic_category_literals() -> tuple[list[str], str]:
             "Teatro",
             "Comédia",
             "Cinema",
-            "Outdoor/Parques",
-            "Outdoor-FimDeSemana",
-            "Outdoor",
+            "Shows",
+            "Exposições",
+            "Literatura",
+            "Festas",
+            "Gastronomia",
+            "Artesanato",
+            "Atividades ao Ar Livre",
+            "Cursos e Workshops",
             "Geral"
-        ], "fallback (erro ao carregar YAML)"
+        ], "fallback (erro ao carregar CategoryRegistry)"
 
 
 # Gerar Literal dinâmico
@@ -73,12 +62,14 @@ class EventoBase(BaseModel):
     horario: str = Field(..., pattern=r"^[\d:ogh\s às\-]+$", description="Horário (HH:MM, HHhMM, 16h às 22h, etc.)")
     local: str = Field(..., min_length=1, description="Venue + endereço completo")
     preco: str = Field(default="Consultar", description="Preço ou 'Consultar'")
-    link_ingresso: Optional[str] = Field(None, description="URL de compra (opcional)")
+    link_ingresso: Optional[str] = Field(None, description="URL de compra de ingresso (opcional)")
+    link_referencia: Optional[str] = Field(None, description="URL com informações do evento quando não há venda (opcional)")
     link_type: Optional[Literal["purchase", "info", "venue"]] = Field(
         None,
         description="Tipo de link: 'purchase' (plataforma de venda), 'info' (site informativo), 'venue' (página do local)"
     )
     descricao: Optional[str] = Field(None, description="Descrição do evento (opcional)")
+    source: Optional[str] = Field(None, description="Fonte original do evento (diariodorio, scraper, perplexity, etc)")
 
     # Campos para eventos contínuos (exposições, mostras, temporadas)
     data_fim: Optional[str] = Field(None, pattern=r"^\d{2}/\d{2}/\d{4}$", description="Data final (para eventos contínuos)")
@@ -122,7 +113,7 @@ class EventoBase(BaseModel):
 
         return v
 
-    @field_validator("link_ingresso")
+    @field_validator("link_ingresso", "link_referencia")
     @classmethod
     def validate_url(cls, v: Optional[str]) -> Optional[str]:
         """Valida URL se fornecida."""
