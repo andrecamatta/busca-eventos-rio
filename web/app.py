@@ -232,13 +232,20 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
 
         # Validar link antes de incluir (não mostrar links 404 ou inválidos)
         # Prioridade: link_ingresso > link > link_referencia
-        link_ingresso = event.get("link_ingresso") or event.get("link") or event.get("link_referencia")
+        link_ingresso = event.get("link_ingresso") or event.get("link")
         link_valid = event.get("link_valid")
         link_status_code = event.get("link_status_code")
+        source = event.get("source", "")
 
         # Só incluir link se for válido (não é False e não é 404)
         if link_valid is False or link_status_code == 404:
-            link_ingresso = None
+            # Para eventos do DiarioDoRio, preservar link_referencia como fallback
+            # (artigos DiarioDoRio podem ter validação volátil mas são fontes confiáveis)
+            if source == "diariodorio" and event.get("link_referencia"):
+                link_ingresso = event.get("link_referencia")
+                logger.debug(f"Preservando link_referencia DiarioDoRio: {event.get('titulo', '')[:40]}")
+            else:
+                link_ingresso = None
 
         # Badge visual para eventos contínuos (exposições/temporadas)
         title = event.get("titulo", "Sem título")

@@ -18,6 +18,7 @@ const DEPLOYMENT_VERSION = '2025-11-12-fix-eventos-production';
 document.addEventListener('DOMContentLoaded', function() {
     initCalendar();
     loadFilters();
+    loadLegend();  // Carregar legenda dinâmica do backend
     setupEventListeners();
     updateStats();
 });
@@ -118,6 +119,49 @@ async function loadFilters() {
 
     } catch (error) {
         console.error('Erro ao carregar filtros:', error);
+    }
+}
+
+// Carregar legenda dinâmica de categorias
+async function loadLegend() {
+    try {
+        const response = await fetch('/api/legend');
+        const data = await response.json();
+
+        const legendContainer = document.getElementById('legend-container');
+        if (!legendContainer) {
+            console.warn('Container #legend-container não encontrado');
+            return;
+        }
+
+        // Limpar container
+        legendContainer.innerHTML = '';
+
+        // Verificar se há categorias
+        if (!data.categories || data.categories.length === 0) {
+            legendContainer.innerHTML = '<div class="text-muted small">Nenhuma categoria disponível</div>';
+            return;
+        }
+
+        // Adicionar cada categoria com sua cor
+        data.categories.forEach(cat => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.innerHTML = `
+                <span class="legend-color" style="background: ${cat.color};"></span>
+                <span>${cat.name}</span>
+            `;
+            legendContainer.appendChild(item);
+        });
+
+        console.log(`Legenda carregada com ${data.categories.length} categorias`);
+
+    } catch (error) {
+        console.error('Erro ao carregar legenda:', error);
+        const legendContainer = document.getElementById('legend-container');
+        if (legendContainer) {
+            legendContainer.innerHTML = '<div class="text-muted small">Erro ao carregar legenda</div>';
+        }
     }
 }
 

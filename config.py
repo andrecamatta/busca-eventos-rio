@@ -308,10 +308,11 @@ JUDGE_MAX_LINK_CHARS: Final[int] = 2000  # máximo de chars do HTML do link para
 #                          exposicoes, literatura, festas, jazz, comedia, musica_classica,
 #                          artesanato, cursos
 ENABLED_CATEGORIES: Final[list[str]] = [
+    "jazz",  # Shows de jazz (Blue Note, Maze Jazz Club, etc.)
     "gastronomia",  # Eventos gastronômicos e feiras de comida
     "atividades_ar_livre",  # Cinema ao ar livre, shows em parques, feiras culturais
     # Outras categorias disponíveis:
-    # "jazz", "musica_classica", "teatro", "comedia", "cinema",
+    # "musica_classica", "teatro", "comedia", "cinema",
     # "shows", "exposicoes", "literatura", "festas", "artesanato", "cursos",
 ]
 

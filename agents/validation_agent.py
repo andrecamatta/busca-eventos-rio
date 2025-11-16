@@ -49,6 +49,57 @@ class ValidationAgent(BaseAgent):
             http_client=http_client,
         )
 
+    def _validate_geographic_location(self, event: dict) -> tuple[bool, str]:
+        """Valida se evento está dentro do Rio de Janeiro (não em outras cidades).
+
+        Args:
+            event: Dicionário do evento com campo 'local'
+
+        Returns:
+            tuple: (is_valid, reason) - True se válido, False com motivo se inválido
+        """
+        local = event.get("local", "").lower()
+
+        # Municípios FORA do Rio que devem ser rejeitados
+        MUNICIPIOS_FORA_RIO = [
+            "saquarema", "cabo frio", "búzios", "buzios", "arraial do cabo",
+            "maricá", "marica", "itaboraí", "itaborai", "nova iguaçu", "nova iguacu",
+            "belford roxo", "são joão de meriti", "sao joao de meriti",
+            "mesquita", "nilópolis", "nilopolis", "queimados", "japeri",
+            "paracambi", "seropédica", "seropedica", "itaguaí", "itaguai",
+            "mangaratiba", "angra dos reis", "paraty", "petrópolis", "petropolis",
+            "teresópolis", "teresopolis", "nova friburgo", "magé", "mage"
+        ]
+
+        # Rejeitar se menciona município fora do Rio
+        for municipio in MUNICIPIOS_FORA_RIO:
+            if municipio in local:
+                return False, f"Evento fora do Rio de Janeiro (localizado em {municipio.title()})"
+
+        # Aceitar explicitamente Rio de Janeiro e Niterói (região metropolitana aceitável)
+        MUNICIPIOS_ACEITAVEIS = ["rio de janeiro", "niterói", "niteroi"]
+        if any(cidade in local for cidade in MUNICIPIOS_ACEITAVEIS):
+            return True, ""
+
+        # Bairros conhecidos do Rio (aceitar se menciona qualquer um)
+        BAIRROS_RIO = [
+            "copacabana", "ipanema", "leblon", "centro", "lapa", "botafogo",
+            "flamengo", "tijuca", "barra", "recreio", "jacarepaguá", "jacarepagua",
+            "santa teresa", "urca", "lagoa", "gávea", "gavea", "jardim botânico",
+            "jardim botanico", "humaitá", "humaita", "laranjeiras", "catete",
+            "glória", "gloria", "cinelândia", "cinelandia", "são cristóvão",
+            "sao cristovao", "maracanã", "maracana", "vila isabel", "grajaú",
+            "grajau", "méier", "meier", "ramos", "olaria", "penha", "bonsucesso",
+            "ilha do governador", "campo grande", "bangu", "realengo", "madureira"
+        ]
+
+        if any(bairro in local for bairro in BAIRROS_RIO):
+            return True, ""
+
+        # Se não tem município nem bairro, aceitar (modo permissivo para venues sem endereço completo)
+        # Ex: "Blue Note Rio" sem endereço completo
+        return True, ""
+
     def _initialize_dependencies(self, http_client=None, **kwargs):
         """Inicializa HTTP client, date validator e link validator.
 
@@ -177,6 +228,20 @@ class ValidationAgent(BaseAgent):
         auto_approved_events = []
 
         for event in events:
+            # FILTRO GEOGRÁFICO: Rejeitar eventos fora do Rio de Janeiro
+            is_valid_location, geo_reason = self._validate_geographic_location(event)
+            if not is_valid_location:
+                rejected_events.append({
+                    **event,
+                    "motivo_rejeicao": geo_reason,
+                    "confidence": 100,  # Alta confiança na rejeição geográfica
+                })
+                logger.warning(
+                    f"✗ Rejeitado (geo): {event.get('titulo', 'Sem título')} - {geo_reason}"
+                )
+                continue  # Pular para próximo evento
+
+            # Validação normal
             if self._needs_individual_validation(event):
                 events_to_validate.append(event)
             else:
