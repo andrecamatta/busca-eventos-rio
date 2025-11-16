@@ -191,9 +191,18 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
         data_str = event.get("data", "")
         horario_str = event.get("horario", "00:00")
 
+        # Tratar eventos com data "A confirmar" ou similar
+        if data_str.lower() in ["a confirmar", "a definir", "em breve", ""]:
+            # Usar data 30 dias no futuro como placeholder
+            from datetime import datetime, timedelta
+            future_date = datetime.now() + timedelta(days=30)
+            data_str = future_date.strftime("%d/%m/%Y")
+            logger.debug(f"Evento '{event.get('titulo', 'sem título')}' com data 'A confirmar', usando {data_str}")
+
         # Formato: DD/MM/YYYY
         data_parts = data_str.split("/")
         if len(data_parts) != 3:
+            logger.warning(f"Evento descartado por data inválida '{data_str}': {event.get('titulo', 'sem título')}")
             return None
 
         day, month, year = data_parts
@@ -211,30 +220,19 @@ def parse_event_to_fullcalendar(event: dict) -> dict:
             local = event.get("local", "")
             venue = extract_venue_from_local(local)
 
-        # Cores por categoria (granular)
-        color_map = {
-            "Jazz": "#3498db",  # Azul
-            "Música Clássica": "#9b59b6",  # Roxo
-            "Teatro": "#e67e22",  # Laranja
-            "Comédia": "#e74c3c",  # Vermelho
-            "Cinema": "#34495e",  # Cinza escuro
-            "Feira Gastronômica": "#f39c12",  # Amarelo/ouro
-            "Feira de Artesanato": "#16a085",  # Verde-azulado
-            "Outdoor/Parques": "#2ecc71",  # Verde
-            "Cursos de Café": "#795548",  # Marrom
-            "Geral": "#95a5a6",  # Cinza claro
-        }
+        # Buscar cor da categoria via CategoryRegistry (configurável no YAML)
+        from utils.category_registry import CategoryRegistry
 
-        # Prioridade: CATEGORIA primeiro, venue como fallback
-        if categoria and categoria in color_map:
-            color = color_map[categoria]  # Usar cor da categoria
+        if categoria:
+            color = CategoryRegistry.get_category_color(categoria)
         elif venue:
             color = "#7f8c8d"  # Cinza médio para venues sem categoria
         else:
             color = "#95a5a6"  # Cinza claro default
 
         # Validar link antes de incluir (não mostrar links 404 ou inválidos)
-        link_ingresso = event.get("link_ingresso")
+        # Prioridade: link_ingresso > link > link_referencia
+        link_ingresso = event.get("link_ingresso") or event.get("link") or event.get("link_referencia")
         link_valid = event.get("link_valid")
         link_status_code = event.get("link_status_code")
 
@@ -588,10 +586,10 @@ async def get_events(
     if venue:
         eventos = [e for e in eventos if e.get("venue") == venue]
 
-    # FILTRO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos 3 horas
+    # FILTRO TEMPORAL: Eventos de hoje só aparecem se faltam pelo menos 1 hora
     from datetime import datetime, timedelta
     now = datetime.now()
-    hora_minima = now + timedelta(hours=3)
+    hora_minima = now + timedelta(hours=1)
 
     eventos_filtrados = []
     for evento in eventos:
@@ -740,6 +738,37 @@ async def get_stats():
         "por_venue": venues,
         "ultima_atualizacao": datetime.now(timezone.utc).isoformat()
     })
+
+
+@app.get("/api/legend")
+async def get_legend():
+    """
+    Retorna legenda de categorias com cores para exibição na interface.
+
+    Retorna apenas as categorias que de fato existem nos eventos carregados,
+    usando cores configuradas no YAML (via CategoryRegistry).
+    """
+    from utils.category_registry import CategoryRegistry
+
+    eventos = load_latest_events()
+
+    # Obter categorias únicas dos eventos
+    categorias_unicas = set()
+    for evento in eventos:
+        cat = evento.get("categoria", "Geral")
+        if cat:
+            categorias_unicas.add(cat)
+
+    # Construir legenda apenas para categorias que existem, usando CategoryRegistry
+    legend = []
+    for categoria in sorted(categorias_unicas):
+        color = CategoryRegistry.get_category_color(categoria)
+        legend.append({
+            "name": categoria,
+            "color": color
+        })
+
+    return JSONResponse(content={"categories": legend})
 
 
 @app.get("/api/logs")

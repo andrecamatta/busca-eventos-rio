@@ -147,6 +147,8 @@ class EventimScraper:
                         "data": data,
                         "horario": horario,
                         "link": ticket_link or url,
+                        "local": "Sala Cecília Meireles - Largo da Lapa, 47 - Lapa, Rio de Janeiro",
+                        "venue": "Sala Cecília Meireles",
                     }
 
                     eventos.append(evento)
@@ -261,6 +263,8 @@ class EventimScraper:
                         "data": data,
                         "horario": horario,
                         "link": page_link or url,
+                        "local": "Blue Note Rio - Av. Atlântica, 1910 - Copacabana, Rio de Janeiro",
+                        "venue": "Blue Note Rio",
                     }
 
                     eventos.append(evento)
@@ -430,6 +434,8 @@ class EventimScraper:
                         "data": data,
                         "horario": horario,
                         "link": event_link,
+                        "local": "CCBB Rio - Centro Cultural Banco do Brasil - Rua Primeiro de Março, 66, Centro, Rio de Janeiro",
+                        "venue": "CCBB Rio - Centro Cultural Banco do Brasil",
                     }
 
                     eventos.append(evento)
@@ -579,6 +585,8 @@ class EventimScraper:
                             "data": data,
                             "horario": horario,
                             "link": session_link,
+                            "local": "CCBB Rio - Centro Cultural Banco do Brasil - Rua Primeiro de Março, 66, Centro, Rio de Janeiro",
+                            "venue": "CCBB Rio - Centro Cultural Banco do Brasil",
                         }
 
                         sessions.append(session_event)
@@ -674,6 +682,8 @@ class EventimScraper:
                                     "data": data_formatted,
                                     "horario": horario,
                                     "link": link,
+                                    "local": "Theatro Municipal do Rio de Janeiro - Praça Floriano, s/nº - Cinelândia, Rio de Janeiro",
+                                    "venue": "Theatro Municipal do Rio de Janeiro",
                                 }
 
                                 eventos.append(evento)

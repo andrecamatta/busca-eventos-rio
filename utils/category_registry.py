@@ -111,6 +111,46 @@ class CategoryRegistry:
         return cat_data.get("nome", category_id.replace("_", " ").title())
 
     @staticmethod
+    def get_category_color(category_display_name: str) -> str:
+        """
+        Get UI color for a category display name.
+
+        Args:
+            category_display_name: Category display name (e.g., 'Jazz', 'Atividades ao Ar Livre')
+
+        Returns:
+            Hex color from YAML 'color' field, or '#95a5a6' (gray) as fallback
+        """
+        instance = CategoryRegistry.get_instance()
+
+        # Find category by display name
+        for cat_id, cat_data in instance._categories.items():
+            if cat_data.get("nome") == category_display_name:
+                return cat_data.get("color", "#95a5a6")
+
+        # Fallback: gray
+        return "#95a5a6"
+
+    @staticmethod
+    def get_all_categories_with_colors() -> List[Dict[str, str]]:
+        """
+        Get all categories with their display names and colors.
+
+        Returns:
+            List of dicts: [{"name": "Jazz", "color": "#3498db"}, ...]
+        """
+        instance = CategoryRegistry.get_instance()
+        categories = []
+
+        for cat_id, cat_data in instance._categories.items():
+            categories.append({
+                "name": cat_data.get("nome", cat_id.replace("_", " ").title()),
+                "color": cat_data.get("color", "#95a5a6")
+            })
+
+        return categories
+
+    @staticmethod
     def get_category_data(category_id: str) -> Optional[Dict[str, Any]]:
         """
         Get full category configuration data.

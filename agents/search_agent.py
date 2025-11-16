@@ -15,6 +15,7 @@ from utils.deduplicator import deduplicate_events
 from utils.prompt_templates import PromptBuilder
 from utils.prompt_loader import get_prompt_loader
 from utils.date_helpers import DateParser
+from utils.category_registry import CategoryRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -534,6 +535,10 @@ ATENÇÃO ESPECIAL AO HORÁRIO:
 
         # Formato de retorno (diferente para categoria vs venue)
         if tipo_busca == "categoria":
+            # Obter categorias válidas do CategoryRegistry
+            categorias_validas = CategoryRegistry.get_all_display_names()
+            categorias_str = '", "'.join(categorias_validas)
+
             return_format = f"""
 FORMATO DE RETORNO:
 {{
@@ -551,6 +556,20 @@ FORMATO DE RETORNO:
     }}
   ]
 }}
+
+⚠️ REGRA CRÍTICA - CAMPO "categoria" (leia com atenção):
+
+O campo "categoria" DEVE ser EXATAMENTE um dos valores abaixo (cópia exata, case-sensitive):
+
+CATEGORIAS VÁLIDAS (escolher APENAS uma das opções abaixo):
+"{categorias_str}"
+
+IMPORTANTE sobre categorias:
+- O campo "categoria" já está definido como "{categoria}" para esta busca
+- SEMPRE use EXATAMENTE o valor "{categoria}" (não modifique, não invente categorias)
+- NÃO use nome de venue como categoria (ex: "CCBB", "Blue Note" NÃO são categorias)
+- NÃO use palavras genéricas como "Shows", "SHOWS", "Eventos" se a categoria específica for outra
+- Se incerto sobre qual categoria usar, SEMPRE use "{categoria}" conforme especificado neste prompt
 
 IMPORTANTE:
 - Busque o MÁXIMO de eventos possível (objetivo: pelo menos 3 eventos)
@@ -961,6 +980,19 @@ OBJETIVO:
             except Exception as e:
                 logger.debug(f"   Data inválida '{data_str}': {e}")
                 continue
+
+            # Normalize category using CategoryRegistry
+            raw_categoria = event.get("categoria", "Geral")
+            normalized = CategoryRegistry.normalize_category(raw_categoria)
+
+            if normalized:
+                # Use normalized category
+                event["categoria"] = normalized["nome"]
+                logger.debug(f"   Categoria normalizada: '{raw_categoria}' → '{normalized['nome']}'")
+            else:
+                # Invalid category - use "Geral" as fallback
+                logger.warning(f"   Categoria inválida '{raw_categoria}' não encontrada no CategoryRegistry, usando 'Geral'")
+                event["categoria"] = "Geral"
 
             # Event passed all filters
             filtered_events.append(event)

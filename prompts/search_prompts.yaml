@@ -82,6 +82,7 @@ categorias:
 
   shows:
     nome: Shows
+    color: "#e91e63"  # Pink
     tipo_busca: categoria
     descricao: Shows e concertos de música popular (rock, pop, MPB, samba, indie, etc)
     parallel_queries: 3  # Alta variabilidade em venues e estilos
@@ -158,6 +159,7 @@ categorias:
 
   teatro:
     nome: Teatro
+    color: "#e67e22"  # Laranja
     tipo_busca: categoria
     descricao: Peças teatrais e espetáculos dramáticos (exceto comédia stand-up)
     parallel_queries: 3  # Muitos teatros e espetáculos
@@ -220,6 +222,7 @@ categorias:
 
   gastronomia:
     nome: Gastronomia
+    color: "#f39c12"  # UI color
     tipo_busca: categoria
     descricao: Eventos gastronômicos, feiras de comida, festivais culinários e experiências gastronômicas
     parallel_queries: 2  # 2 queries Sonar (Perplexity indexing)
@@ -362,6 +365,7 @@ categorias:
 
   atividades_ar_livre:
     nome: Atividades ao Ar Livre
+    color: "#2ecc71"  # UI color
     tipo_busca: categoria
     descricao: Cinema ao ar livre, concertos em parques e feiras culturais aos fins de semana
     parallel_queries: 3  # Crítico - ganho 150%+, múltiplas feiras/parques
@@ -532,6 +536,7 @@ categorias:
 
   cinema:
     nome: Cinema
+    color: "#34495e"  # UI color
     tipo_busca: categoria
     descricao: Mostras de cinema, cineclubes e sessões especiais
     parallel_queries: 2  # Mostras diversas, cineclubes diferentes
@@ -595,6 +600,7 @@ categorias:
 
   exposicoes:
     nome: Exposições
+    color: "#00bcd4"  # UI color
     tipo_busca: categoria
     descricao: Exposições de arte, galerias e mostras visuais
     parallel_queries: 3  # Muitas galerias e espaços culturais
@@ -669,6 +675,7 @@ categorias:
 
   literatura:
     nome: Literatura
+    color: "#8bc34a"  # UI color
     tipo_busca: categoria
     descricao: Lançamentos de livros, encontros literários e eventos de literatura
     parallel_queries: 2  # Eventos distribuídos em livrarias e centros culturais
@@ -744,6 +751,7 @@ categorias:
 
   festas:
     nome: Festas
+    color: "#ff5722"  # UI color
     tipo_busca: categoria
     descricao: Festivais, celebrações e festas culturais
     parallel_queries: 3  # Alta variabilidade de festivais
@@ -823,6 +831,7 @@ categorias:
 
   jazz:
     nome: Jazz
+    color: "#3498db"  # UI color
     tipo_busca: categoria
     descricao: Shows de jazz no Rio de Janeiro (jazz tradicional, bebop, fusion, bossa nova)
     parallel_queries: 3  # Alta variabilidade em venues, múltiplas fontes
@@ -886,6 +895,7 @@ categorias:
 
   comedia:
     nome: Comédia
+    color: "#e74c3c"  # UI color
     tipo_busca: categoria
     descricao: Stand-up e peças de comédia no Rio (exceto infantil)
     parallel_queries: 2  # Bom ROI, teatros distribuídos
@@ -935,6 +945,7 @@ categorias:
 
   musica_classica:
     nome: Música Clássica
+    color: "#9b59b6"  # UI color
     tipo_busca: categoria
     descricao: Concertos de música clássica em locais alternativos (exceto venues tradicionais)
     parallel_queries: 1  # Menos variável, scrapers cobrem bem
@@ -1009,6 +1020,7 @@ categorias:
 
   artesanato:
     nome: Artesanato
+    color: "#16a085"  # UI color
     tipo_busca: categoria
     descricao: Feiras de artesanato, arte e design em fim de semana
     parallel_queries: 2  # Múltiplas feiras paralelas
@@ -1049,6 +1061,7 @@ categorias:
 
   cursos:
     nome: Cursos e Workshops
+    color: "#795548"  # UI color
     tipo_busca: categoria
     descricao: Cursos, workshops e oficinas (café, gastronomia, artes, etc)
     parallel_queries: 2  # Diversos venues e temas
